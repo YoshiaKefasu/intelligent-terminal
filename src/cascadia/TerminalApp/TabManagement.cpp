@@ -512,13 +512,17 @@ namespace winrt::TerminalApp::implementation
     }
 
     // Method Description:
-    // - Get the icon of the currently focused terminal control, and set its
-    //   tab's icon to that icon.
+    // - Set the tab icon from its source terminal, or its active content when
+    //   the tab has no terminal pane.
     // Arguments:
-    // - tab: the Tab to update the title for.
+    // - tab: the Tab to update the icon for.
     void TerminalPage::_UpdateTabIcon(Tab& tab)
     {
-        const auto sourcePane = _SourceTerminalPaneForTab(tab.get_strong());
+        auto sourcePane = _SourceTerminalPaneForTab(tab.get_strong());
+        if (!sourcePane)
+        {
+            sourcePane = tab.GetActivePane();
+        }
         if (!sourcePane)
         {
             return;

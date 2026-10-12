@@ -109,6 +109,9 @@ last active pane. Activating another pane in a zoomed tab exits zoom first.
 
 ## Sidebar presentation
 
+- Tab icons use the source terminal's icon when available; tabs without a
+  terminal pane, such as Settings, use their active content's icon. Both layouts
+  honor the theme's icon style and explicit tab icon visibility.
 - The toolbar heading is static **Tabs**, with no switch button, border, or swap
   icon. The display-options flyout has a **Show** section containing standard
   checkable **Agents only** and **Recent agent sessions** controls.

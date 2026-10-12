@@ -385,6 +385,7 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalTabRepeatedMovesPreserveCollections);
         TEST_METHOD(VerticalTabSelectionPreservesPresentation);
         TEST_METHOD(VerticalTabIconChangesUpdatePresentation);
+        TEST_METHOD(SettingsTabIconFollowsContentAndTheme);
         TEST_METHOD(RunningAgentIconOverridesProfileIcon);
         TEST_METHOD(NativeAgentCreationOwnsProviderBeforeHooks);
         TEST_METHOD(NativeAgentResumeSeedsProviderBeforeContent);
@@ -15172,6 +15173,89 @@ namespace TerminalAppLocalTests
             strip->SyncTabPresentation(display);
             VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
             VERIFY_ARE_EQUAL(0u, collectionChanges);
+        });
+    }
+
+    void TabTests::SettingsTabIconFollowsContentAndTheme()
+    {
+        auto page = _commonSetup(nullptr, nullptr, std::nullopt, true);
+        winrt::com_ptr<winrt::TerminalApp::implementation::Tab> settingsTab;
+        TestOnUIThread([&]() {
+            page->_CreateNewTabFromPane(std::make_shared<Pane>(winrt::make<TestSettingsPaneContent>()));
+            settingsTab = page->_GetFocusedTabImpl();
+            VERIFY_IS_NOT_NULL(settingsTab);
+            VERIFY_IS_NULL(page->_SourceTerminalPaneForTab(settingsTab));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE713" }, settingsTab->Icon());
+            page->UpdateLayout();
+        });
+        TestOnUIThread([&]() {
+            const CascadiaSettings themeSettings{ LR"({
+                "profiles": [{"name": "cmd", "commandline": "cmd.exe"}],
+                "themes": [
+                    {"name": "settings-icon-default", "tab": {"iconStyle": "default"}},
+                    {"name": "settings-icon-monochrome", "tab": {"iconStyle": "monochrome"}},
+                    {"name": "settings-icon-hidden", "tab": {"iconStyle": "hidden"}}
+                ]
+            })",
+                                                  {} };
+            const auto globals = page->_settings.GlobalSettings();
+            const auto previousTheme = globals.Theme();
+            const auto restoreTheme = wil::scope_exit([&]() { globals.Theme(previousTheme); });
+            for (const auto& entry : themeSettings.GlobalSettings().Themes())
+            {
+                globals.AddTheme(entry.Value());
+            }
+            const auto strip = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip);
+            const auto display = strip->DisplayItemForTab(settingsTab->TabViewItem());
+            const auto verifyIcon = [&]() {
+                page->UpdateLayout();
+                VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE713" }, settingsTab->Icon());
+                const auto source = settingsTab->TabViewItem().IconSource();
+                VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE713" }, source.as<winrt::MUX::Controls::FontIconSource>().Glyph());
+                VERIFY_IS_TRUE(display.IconSource() == source);
+                VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
+                const auto index = page->_GetTabIndex(*settingsTab).value();
+                const auto root = page->_tabStrip.ContainerFromIndex(index).as<ListViewItem>().ContentTemplateRoot().as<FrameworkElement>();
+                const auto presenter = root.FindName(L"TabIconPresenter").as<ContentPresenter>();
+                VERIFY_ARE_EQUAL(Visibility::Visible, presenter.Visibility());
+                VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE713" }, presenter.Content().as<FontIcon>().Glyph());
+            };
+            for (const auto style : { IconStyle::Default, IconStyle::Monochrome })
+            {
+                globals.Theme(ThemePair{ style == IconStyle::Default ? L"settings-icon-default" : L"settings-icon-monochrome" });
+                VERIFY_ARE_EQUAL(style, globals.CurrentTheme().Tab().IconStyle());
+                page->_UpdateTabIcon(*settingsTab);
+                verifyIcon();
+                const auto source = display.IconSource();
+                page->_UpdateTabIcon(*settingsTab);
+                VERIFY_IS_TRUE(display.IconSource() == source);
+            }
+            globals.Theme(ThemePair{ L"settings-icon-hidden" });
+            VERIFY_ARE_EQUAL(IconStyle::Hidden, globals.CurrentTheme().Tab().IconStyle());
+            page->_UpdateTabIcon(*settingsTab);
+            VERIFY_IS_TRUE(settingsTab->Icon().empty());
+            VERIFY_IS_NULL(settingsTab->TabViewItem().IconSource());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+
+            globals.Theme(ThemePair{ L"settings-icon-default" });
+            page->_UpdateTabIcon(*settingsTab);
+            verifyIcon();
+            settingsTab->HideIcon(true);
+            page->_UpdateTabIcon(*settingsTab);
+            VERIFY_IS_NULL(settingsTab->TabViewItem().IconSource());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            settingsTab->HideIcon(false);
+            verifyIcon();
+
+            page->_selectedTabItem(page->_GetTabImpl(page->_tabs.GetAt(0))->TabViewItem());
+            verifyIcon();
+            page->_selectedTabItem(settingsTab->TabViewItem());
+            VERIFY_IS_TRUE(display == strip->DisplayItemForTab(settingsTab->TabViewItem()));
+            verifyIcon();
+
+            VERIFY_IS_TRUE(page->_ApplyTabLayout(TabLayout::Horizontal));
+            page->_UpdateTabIcon(*settingsTab);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE713" }, settingsTab->TabViewItem().IconSource().as<winrt::MUX::Controls::FontIconSource>().Glyph());
         });
     }
 
