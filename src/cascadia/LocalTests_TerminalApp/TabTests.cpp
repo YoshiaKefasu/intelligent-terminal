@@ -365,6 +365,7 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalTabStripCollapsedItemsPreserveSelection);
         TEST_METHOD(VerticalTabKeyboardFocusPreservesSelection);
         TEST_METHOD(VerticalTabStripHostsPaneGroups);
+        TEST_METHOD(VerticalTabPaneSelectionTracksSelectedTab);
         TEST_METHOD(HorizontalTabProgressSurvivesAsyncVerticalTeardown);
         TEST_METHOD(HeaderProgressWrapperBindingPreservesRingState);
         TEST_METHOD(IndeterminateProgressUsesSharedResource);
@@ -11865,6 +11866,7 @@ namespace TerminalAppLocalTests
             MenuFlyout contextFlyout;
             tab.ContextFlyout(contextFlyout);
             strip.TabItems().Append(tab);
+            strip.SelectedItem(tab);
             strip.SetTabPresentation(tab, L"Split tab", L"\xE8A5");
 
             std::vector<winrt::TerminalApp::TabStripPaneItem> panes;
@@ -12094,6 +12096,107 @@ namespace TerminalAppLocalTests
 
             strip.TabItems().Clear();
             VERIFY_IS_TRUE(tab.Header() == header);
+        });
+    }
+
+    void TabTests::VerticalTabPaneSelectionTracksSelectedTab()
+    {
+        winrt::TerminalApp::TabStrip strip{ nullptr };
+        Grid host{ nullptr };
+        UIElement previousContent{ nullptr };
+        winrt::MUX::Controls::TabViewItem first{ nullptr };
+        winrt::MUX::Controls::TabViewItem second{ nullptr };
+        winrt::MUX::Controls::TabViewItem single{ nullptr };
+        const auto restoreContent = wil::scope_exit([&]() {
+            LOG_IF_FAILED(RunOnUIThread([&]() {
+                Window::Current().Content(previousContent);
+            }));
+        });
+        const auto setPanes = [&](const auto& tab, const bool firstActive) {
+            strip.SetPaneItems(tab, winrt::single_threaded_vector<winrt::TerminalApp::TabStripPaneItem>({
+                                        winrt::make<winrt::TerminalApp::implementation::TabStripPaneItem>(tab, 11, L"", L"First pane", firstActive),
+                                        winrt::make<winrt::TerminalApp::implementation::TabStripPaneItem>(tab, 12, L"", L"Second pane", !firstActive) }),
+                               true);
+        };
+        TestOnUIThread([&]() {
+            strip = winrt::TerminalApp::TabStrip{};
+            host = Grid{};
+            first = winrt::MUX::Controls::TabViewItem{};
+            second = winrt::MUX::Controls::TabViewItem{};
+            single = winrt::MUX::Controls::TabViewItem{};
+            previousContent = Window::Current().Content();
+            host.Width(240);
+            host.Height(500);
+            strip.Width(240);
+            strip.Height(500);
+            first.Header(winrt::box_value(L"First group"));
+            second.Header(winrt::box_value(L"Second group"));
+            single.Header(winrt::box_value(L"Single tab"));
+            strip.TabItems().Append(first);
+            strip.TabItems().Append(second);
+            strip.TabItems().Append(single);
+            strip.SelectedItem(first);
+
+            setPanes(first, false);
+            setPanes(second, true);
+            host.Children().Append(strip);
+            Window::Current().Content(host);
+            Window::Current().Activate();
+            host.UpdateLayout();
+        });
+
+        TestOnUIThread([&]() {
+            const auto impl = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip);
+            const auto firstDisplay = impl->DisplayItemForTab(first);
+            const auto secondDisplay = impl->DisplayItemForTab(second);
+            const auto firstActive = firstDisplay.PaneItems().GetAt(1);
+            const auto secondActive = secondDisplay.PaneItems().GetAt(0);
+            const auto verifySelection = [&](const auto& display, const int32_t selectedPane) {
+                host.UpdateLayout();
+                const auto container = strip.ContainerFromIndex(display == firstDisplay ? 0 : 1).as<ListViewItem>();
+                VERIFY_IS_NOT_NULL(container);
+                const auto root = container.ContentTemplateRoot().as<StackPanel>();
+                VERIFY_IS_NOT_NULL(root);
+                const auto paneList = root.Children().GetAt(1).as<ItemsControl>();
+                for (uint32_t index = 0; index < display.PaneItems().Size(); ++index)
+                {
+                    const auto expected = static_cast<int32_t>(index) == selectedPane ? Visibility::Visible : Visibility::Collapsed;
+                    VERIFY_ARE_EQUAL(expected, display.PaneItems().GetAt(index).ActiveIndicatorVisibility());
+                    const auto presenter = paneList.ContainerFromIndex(index).as<ContentPresenter>();
+                    VERIFY_IS_NOT_NULL(presenter);
+                    const auto paneRoot = Media::VisualTreeHelper::GetChild(presenter, 0).as<FrameworkElement>();
+                    VERIFY_ARE_EQUAL(expected, paneRoot.FindName(L"PaneActiveBackground").as<Border>().Visibility());
+                    VERIFY_ARE_EQUAL(expected, paneRoot.FindName(L"PaneActiveIndicator").as<Border>().Visibility());
+                }
+            };
+            verifySelection(firstDisplay, 1);
+            verifySelection(secondDisplay, -1);
+
+            strip.SelectedItem(single);
+            verifySelection(firstDisplay, -1);
+            verifySelection(secondDisplay, -1);
+            VERIFY_IS_TRUE(firstActive.IsActive());
+            VERIFY_IS_TRUE(secondActive.IsActive());
+
+            // Background updates must not restore selection chrome.
+            setPanes(first, false);
+            setPanes(second, false);
+            verifySelection(firstDisplay, -1);
+            verifySelection(secondDisplay, -1);
+            VERIFY_IS_TRUE(firstDisplay.PaneItems().GetAt(1) == firstActive);
+            VERIFY_IS_TRUE(secondDisplay.PaneItems().GetAt(0) == secondActive);
+
+            strip.SelectedItem(first);
+            verifySelection(firstDisplay, 1);
+            verifySelection(secondDisplay, -1);
+            strip.SelectedIndex(1);
+            verifySelection(firstDisplay, -1);
+            verifySelection(secondDisplay, 1);
+            setPanes(second, true);
+            verifySelection(secondDisplay, 0);
+            strip.SelectedItem(nullptr);
+            verifySelection(firstDisplay, -1);
+            verifySelection(secondDisplay, -1);
         });
     }
 

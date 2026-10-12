@@ -785,6 +785,14 @@ namespace winrt::TerminalApp::implementation
         _refreshDisplayItemVisuals(display);
     }
 
+    static void _updatePaneSelection(TerminalApp::TabStripDisplayItem const& display, const bool isSelected)
+    {
+        for (const auto& pane : display.PaneItems())
+        {
+            pane.ActiveIndicatorVisibility(isSelected && pane.IsActive() ? Visibility::Visible : Visibility::Collapsed);
+        }
+    }
+
     void TabStrip::SetPaneItems(IInspectable const& item,
                                 IVector<TerminalApp::TabStripPaneItem> const& panes,
                                 bool isGroup)
@@ -836,7 +844,6 @@ namespace winrt::TerminalApp::implementation
                 winrt::get_self<TabStripPaneItem>(existing)->SyncIcon(winrt::get_self<TabStripPaneItem>(pane)->IconPath());
                 existing.Title(pane.Title());
                 existing.IsActive(pane.IsActive());
-                existing.ActiveIndicatorVisibility(pane.ActiveIndicatorVisibility());
                 existing.MetadataText(pane.MetadataText());
                 existing.MetadataVisibility(pane.MetadataVisibility());
                 existing.AutomationName(pane.AutomationName());
@@ -859,6 +866,7 @@ namespace winrt::TerminalApp::implementation
         {
             pane.HighlightQuery(display.SearchText());
         }
+        _updatePaneSelection(display, SelectedItem() == display.Tab());
         display.IsGroup(isGroup);
         winrt::get_self<TabStripDisplayItem>(display)->HeaderProgressProjectedToPaneRows(headerProgressProjectedToPaneRows);
         winrt::get_self<TabStripDisplayItem>(display)->SyncTabPresentation(_isRailCollapsed, _isVerticalPresentation);
@@ -3228,6 +3236,7 @@ namespace winrt::TerminalApp::implementation
             if (const auto display = removed.try_as<TerminalApp::TabStripDisplayItem>())
             {
                 display.SelectionVisibility(Visibility::Collapsed);
+                _updatePaneSelection(display, false);
                 _refreshDisplayItemVisuals(display);
             }
         }
@@ -3240,6 +3249,7 @@ namespace winrt::TerminalApp::implementation
             if (const auto display = added.try_as<TerminalApp::TabStripDisplayItem>())
             {
                 display.SelectionVisibility(Visibility::Visible);
+                _updatePaneSelection(display, true);
                 _refreshDisplayItemVisuals(display);
             }
         }
