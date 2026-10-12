@@ -347,11 +347,28 @@ namespace winrt::TerminalApp::implementation
         IsPinned(status && status.IsPinned());
         IsMetadataVisible(!railCollapsed && !IsGroup() && !presentation.MetadataText().empty());
         ContextFlyout(_tab.ContextFlyout());
-        ToolTipText(WUX::Automation::AutomationProperties::GetHelpText(_tab));
-        AcceleratorKey(WUX::Automation::AutomationProperties::GetAcceleratorKey(_tab));
+        if (!verticalPresentation)
+        {
+            _sidebarHints.reset();
+        }
+        _publishHints(verticalPresentation);
         HeaderVisibility(railCollapsed ? Visibility::Collapsed : Visibility::Visible);
         CloseVisibility(!railCollapsed && _tab.IsClosable() ? Visibility::Visible : Visibility::Collapsed);
         UpdatePresentation(railCollapsed, verticalPresentation);
+    }
+
+    void TabStripDisplayItem::SetSidebarHints(std::optional<std::pair<hstring, hstring>> hints, bool verticalPresentation)
+    {
+        _sidebarHints = verticalPresentation ? std::move(hints) : std::nullopt;
+        _publishHints(verticalPresentation);
+    }
+
+    void TabStripDisplayItem::_publishHints(bool verticalPresentation)
+    {
+        AcceleratorKey(verticalPresentation && _sidebarHints ? _sidebarHints->first :
+                                                              WUX::Automation::AutomationProperties::GetAcceleratorKey(_tab));
+        ToolTipText(verticalPresentation && _sidebarHints ? _sidebarHints->second :
+                                                           WUX::Automation::AutomationProperties::GetHelpText(_tab));
     }
 
     void TabStripDisplayItem::SyncIcon(hstring const& iconPath)

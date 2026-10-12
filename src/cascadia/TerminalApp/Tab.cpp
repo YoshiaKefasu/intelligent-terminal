@@ -298,6 +298,22 @@ namespace winrt::TerminalApp::implementation
         _UpdateToolTip();
     }
 
+    winrt::hstring Tab::ToolTipTextForKeyChord(const winrt::hstring& keyChord)
+    {
+        std::wstring text{ _CreateToolTipTitle() };
+        if (_isVerticalTabLayout && !_richTabTooltipText.empty())
+        {
+            text.append(L"\n");
+            text.append(_richTabTooltipText);
+        }
+        if (!keyChord.empty())
+        {
+            text.append(L"\n");
+            text.append(keyChord);
+        }
+        return winrt::hstring{ text };
+    }
+
     // Method Description:
     // - Sets tab tool tip to a concatenation of title and key chord
     // Arguments:
@@ -307,7 +323,6 @@ namespace winrt::TerminalApp::implementation
     void Tab::_UpdateToolTip()
     {
         const auto title = _CreateToolTipTitle();
-        std::wstring tooltipText{ title };
 
         auto titleRun = WUX::Documents::Run();
         titleRun.Text(title);
@@ -327,8 +342,6 @@ namespace winrt::TerminalApp::implementation
 
         if (_isVerticalTabLayout && !_richTabTooltipText.empty())
         {
-            tooltipText.append(L"\n");
-            tooltipText.append(_richTabTooltipText);
             auto metadataRun = WUX::Documents::Run();
             metadataRun.Text(_richTabTooltipText);
             textBlock.Inlines().Append(WUX::Documents::LineBreak{});
@@ -337,8 +350,6 @@ namespace winrt::TerminalApp::implementation
 
         if (!_keyChord.empty())
         {
-            tooltipText.append(L"\n");
-            tooltipText.append(_keyChord);
             auto keyChordRun = WUX::Documents::Run();
             keyChordRun.Text(_keyChord);
             keyChordRun.FontStyle(winrt::Windows::UI::Text::FontStyle::Italic);
@@ -349,7 +360,7 @@ namespace winrt::TerminalApp::implementation
         WUX::Controls::ToolTip toolTip{};
         toolTip.Content(textBlock);
         WUX::Controls::ToolTipService::SetToolTip(TabViewItem(), toolTip);
-        Automation::AutomationProperties::SetHelpText(TabViewItem(), tooltipText);
+        Automation::AutomationProperties::SetHelpText(TabViewItem(), ToolTipTextForKeyChord(_keyChord));
         PropertyChanged.raise(*this, WUX::Data::PropertyChangedEventArgs{ L"ToolTip" });
     }
 
@@ -2482,10 +2493,10 @@ namespace winrt::TerminalApp::implementation
         _closeTabsAfterMenuItem.IsEnabled(!_tabListPositionOperationsRestricted && tabIndex < numOfTabs - 1);
 
         // enabled if not left-most tab
-        _moveLeftMenuItem.IsEnabled(!_tabListPositionOperationsRestricted && tabIndex > (IsPinned() ? 0u : _pinnedTabCount));
+        _moveLeftMenuItem.IsEnabled(!_tabMoveRestricted && (_visibleMoveTargets ? _visibleMoveTargets->first : tabIndex > (IsPinned() ? 0u : _pinnedTabCount)));
 
         // enabled if not last tab
-        _moveRightMenuItem.IsEnabled(!_tabListPositionOperationsRestricted && tabIndex + 1 < (IsPinned() ? _pinnedTabCount : numOfTabs));
+        _moveRightMenuItem.IsEnabled(!_tabMoveRestricted && (_visibleMoveTargets ? _visibleMoveTargets->second : tabIndex + 1 < (IsPinned() ? _pinnedTabCount : numOfTabs)));
     }
 
     void Tab::UpdateTabViewIndex(const uint32_t idx, const uint32_t numTabs, const uint32_t pinnedCount)

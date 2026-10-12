@@ -19,6 +19,34 @@ The live smoke proved separate hosts, package-local CLIs, and sidebar search
 invoke/filter/clear. It did not validate concurrent full suites or mark release
 checklist items complete.
 
+### Focused owning-tab movement container
+
+`Feature.CombinedAgentsSidebar.Tests.ps1` accepts the optional Pester container
+data switch `OwningTabMoveOnly`. It discovers only C427 (one case), retains its
+complete setup, history import, cleanup and movement/content/session oracles,
+including physical top-row Ctrl+Alt+1/2/9 from shell, helper and ItemsList focus
+before/after movement in All/Agents-only with search closed/open. These targets
+retain selected-filter navigation ordinals independently of the query; global
+search display does not renumber them. It omits only
+the unrelated eight helper seeds and 30-second startup survival
+observation. Default discovery remains 34 cases (C427 plus 33 existing cases); the existing
+`ITE2E_HISTORY_INDICATORS_ONLY` behavior is unchanged. A broad filter cannot run
+seed-dependent cases in the focused container.
+
+After pinning the explicitly selected package and exact build/ownership
+environment as required by the suite, run:
+
+```powershell
+$cfg = New-PesterConfiguration
+$cfg.Run.Container = New-PesterContainer -Path test\e2e\tests\Feature.CombinedAgentsSidebar.Tests.ps1 `
+    -Data @{ OwningTabMoveOnly = $true }
+$cfg.Filter.FullName = 'Feature: combined Agents sidebar.Agents view moves whole owning tabs without changing sessions'
+Invoke-Pester -Configuration $cfg
+```
+
+This focused run does not validate the other 33 cases or grant their checklist
+coverage. Use `Run.SkipRun = $true` for non-live discovery only.
+
 ## Release-checklist coverage
 
 ### Startup and failure ownership
@@ -56,7 +84,7 @@ authenticated ACP agents. Available suites (results depend on the selected packa
 | `Feature.SidebarSessionScroll.Tests.ps1` | Real shell hooks update the same visible Agents row through Idle/Active/Waiting for input/Idle without changing the search query or scrolling unchanged history order; status filters and genuine activity-time reordering still update. All three cases gate C374. Deterministic seeded rows, no model quota or test settings changes; teardown closes only recorded fixture pane GUIDs in the verified logical window after rechecking HWND/PID, never the shared process or unrelated windows/tabs. Original state is recovered only after the package is inactive, even on screenshot/settings failure; unrelated package activity or unconfirmed ownership/inactivity retains backups and fails explicitly. Changed, missing or unreadable settings and their recovery backup are retained and fail explicitly. Requires inactive Dev, Sidebar mode, completed FRE, and exact-build App/WTA hashes | 3 |
 | `Feature.PaneProgress.Tests.ps1` | PR #1043: one-shot OSC progress across real tab right-click moves/layout round trips, shared group-chevron/icon slot and aligned top-level titles, layout-specific Move submenu order/direction, and fixture-owned native hook identity/icon restoration with OSC3/OSC0; six-frame rendered ring evidence, no model quota | 4 checklist cases plus literal one-shot coverage (explicit Dev, exact-source `ITE2E_EXPECTED_APP_SHA256` / `ITE2E_EXPECTED_WTA_SHA256`, inactive package and interactive desktop required) |
 | `Feature.PinnedTabSelection.Tests.ps1` | PRs #1043/#1052: the primary two-pinned-plus-one-ordinary Horizontal/Sidebar round trip first verifies Alpha's active shell, exactly one selected Alpha Sidebar row, terminal focus, canonical order, shell identities and retained pin menus. A separate visual round trip verifies canonical accessibility labels and matched same-profile title-leading offsets; Beta unpin removes its extra Sidebar slot and keeps first-ordinary positioning. FontIcon peers are diagnostic only. A passing test credits C372's automated selection, identity, accessibility and geometry contracts. Full-header compositor crops and `acceptance.json` leave actual Sidebar glyph presence/Horizontal absence pending independent sign-off under the separate C373 MANUAL item **Pinned tab glyphs render only in Sidebar**, which has no automated coverage mapping | 1 (deterministic ACP fixture, no model quota; explicit Dev, exact-source `ITE2E_EXPECTED_APP_SHA256` / `ITE2E_EXPECTED_WTA_SHA256`, inactive package and interactive desktop required) |
-| `Feature.CombinedAgentsSidebar.Tests.ps1` | Updated Sidebar UX: static Tabs text; standard independent Agents only/Recent agent sessions toggles; four rendered scope combinations; global search; clear/close and collapse-preference restoration; toggle-during-search; UIA checked states and foreground-gated Ctrl+Shift+G/R. Only visible owned ItemsList descendants count. Existing native CLI resume (Recent preference On/Off), live/group actions, metadata, identity, retention, ownership, scroll, expansion events, focus, mutations and resize protections remain. C367/C381/C397/C408 retain their IDs; C382/C383 remain retired. Explicit feature-head Dev hashes and inactive package required; deterministic ACP history/provider-labelled cmd tabs, no model quota. Fresh hash-backed settings/state/runtime snapshots restore only after package inactivity. Authored, not live accepted | 33 |
+| `Feature.CombinedAgentsSidebar.Tests.ps1` | Updated Sidebar UX: static Tabs text; standard independent Agents only/Recent agent sessions toggles; four rendered scope combinations; global search; clear/close and collapse-preference restoration; toggle-during-search; UIA checked states and foreground-gated Ctrl+Shift+G/R. C427 adds physical owning-tab Move up/down in Agents-only scope to the nearest visible owner, exact canonical insertion order across hidden ordinary neighbors and visible group displacement, expanded/collapsed group and shell/helper identity preservation, visible-disabled Search Move and history negative controls, and physical top-row Ctrl+Alt+1/2/9 in the chosen All/Agents-only filter independently of search before/after movement from shell/helper/ItemsList focus. Search, including zero results, never renumbers navigation targets. Only visible owned ItemsList descendants count. Existing native CLI resume (Recent preference On/Off), live/group actions, metadata, identity, retention, ownership, scroll, expansion events, focus, mutations and resize protections remain. C367/C381/C397/C408 retain their IDs; C382/C383 remain retired. Explicit feature-head Dev hashes and inactive package required; deterministic ACP history/provider-labelled cmd tabs, no model quota. Fresh hash-backed settings/state/runtime snapshots restore only after package inactivity. Focused C427 live accepted at 64243d5c; the other 33 cases are not newly credited | 34 |
 | `Feature.AgentsModeActions.Tests.ps1` | Original plus opens the configured default profile across filters, search and layout; splits retain the source profile without view-specific delegation, assistant panes stay fixed, and explicit native-provider fixtures retain held-hook identity; exact Dev hashes, no provider prompts | 7 |
 | `Feature.SidebarRelativeTime.Tests.ps1` | PR #1070: six-unit English/Arabic compact ages, readable RTL geometry, and provider accessibility; deterministic history fixture | 2 |
 | `Feature.SidebarUpgrade.Tests.ps1` | Superseding PM/UX: persisted once-only Horizontal migration and later explicit Horizontal restart, independently pending introduction, absent flags/fresh FRE gate, real palette collapse deferral, exact-shell owned second-window suppression, actual rendered tip/restart suppression; real state.json sharing fault, visible warning, Horizontal memory/disk rollback and released-lock retry. No ACL/registry changes, provider quota or callback fault proxies; exact Dev hashes and inactive package required | 6 (authored, not live accepted) |
@@ -184,7 +212,27 @@ pwsh -NoProfile -File test\e2e\bootstrap.ps1 -Check
 
 For a focused Pester run, use `Filter.FullName` selectors
 `*Independent scope filters and global search*` and
-`*History Enter resumes an unbound native session*`. The report driver does not
+`*History Enter resumes an unbound native session*`. For the owning-tab regression,
+use `*Agents view moves whole owning tabs without changing sessions*` (C427).
+Its physical header route requires the existing owned-process/run-token receipt;
+`tab-move.jsonl` and before/after captures record canonical order and real
+visible displacement without provider prompts. The accepted focused Dev run
+passed this one case with 18 physical OS shortcut actions and four moves; full
+and incremental reports credit C427. This does not credit the other 33 cases.
+The native policy tests passed 12/12, and the primary core tests passed 12/12
+pure matching/order cases without XAML UI. These are separate from live
+acceptance. Existing hermetic Pester evidence is 95 passed with one private-sample
+skip, not an entirely green full-suite result. Syntax/discovery and synthetic
+full/incremental report checks alone do not establish live acceptance.
+`selftests\CombinedCliRecord.Unit.Tests.ps1` hermetically checks the native
+fixture's first-record readiness: incomplete JSONL waits for LF, the exact
+captured LF/CRLF record is parsed once, and completed malformed records or
+reader I/O failures fail explicitly. This does not credit live C427 acceptance.
+`selftests\CombinedInitialization.Unit.Tests.ps1` also extracts the actual
+filter setter and verifies supported TogglePattern actions only on mismatched
+named filters, idempotency, both directions, and retained final-state failures.
+These hermetic checks do not establish live C427 acceptance.
+The report driver does not
 accept `-FullNameFilter`; use its whole-suite `-Path` option for release results.
 
 Ordinary revised Sidebar fixtures explicitly pass `-State @{

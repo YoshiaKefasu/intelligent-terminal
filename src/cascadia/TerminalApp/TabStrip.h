@@ -210,6 +210,7 @@ namespace winrt::TerminalApp::implementation
 
     public:
         void SyncTabPresentation(bool railCollapsed, bool verticalPresentation);
+        void SetSidebarHints(std::optional<std::pair<winrt::hstring, winrt::hstring>> hints, bool verticalPresentation);
         void SyncIcon(winrt::hstring const& iconPath);
         void SyncIcon(winrt::hstring const& iconPath, winrt::Microsoft::UI::Xaml::Controls::IconSource const& source);
         void UpdatePresentation(bool railCollapsed, bool verticalPresentation);
@@ -224,6 +225,8 @@ namespace winrt::TerminalApp::implementation
         TerminalApp::TabHeaderPresentation _header{ nullptr };
         winrt::Microsoft::UI::Xaml::Controls::IconSource _iconSource{ nullptr };
         bool _headerProgressProjectedToPaneRows{ false };
+        std::optional<std::pair<winrt::hstring, winrt::hstring>> _sidebarHints;
+        void _publishHints(bool verticalPresentation);
         void _setIconSource(winrt::Windows::Foundation::IInspectable const& value, std::optional<winrt::hstring> iconPath);
     };
 
@@ -394,6 +397,7 @@ namespace winrt::TerminalApp::implementation
         void ProjectionControlsEnabled(bool value);
         void MoveTabItem(uint32_t from, uint32_t to);
         void SetVerticalPresentation(bool vertical);
+        bool IsVerticalPresentation() const noexcept { return _isVerticalPresentation; }
         void RestoreTabOrder(const std::vector<winrt::Windows::Foundation::IInspectable>& items);
         void SetTabPinned(const winrt::Microsoft::UI::Xaml::Controls::TabViewItem& item, bool pinned);
         bool RichTabRepositoryVisible() const noexcept { return _richTabRepositoryVisible; }

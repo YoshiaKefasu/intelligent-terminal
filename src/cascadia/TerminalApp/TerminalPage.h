@@ -11,6 +11,7 @@
 
 #include "TerminalPage.g.h"
 #include "Tab.h"
+#include "TabListViewModel.h"
 #include "AppKeyBindings.h"
 #include "AppCommandlineArgs.h"
 #include "RenameWindowRequestedArgs.g.h"
@@ -967,7 +968,13 @@ namespace winrt::TerminalApp::implementation
             const TerminalApp::Tab& changedTab = nullptr,
             bool refreshPaneItems = true,
             bool updateBookkeeping = true);
-        void _UpdateTabFilterStatus();
+        void _UpdateTabFilterStatus(const ::TerminalApp::TabListViewModel* list = nullptr);
+        ::TerminalApp::TabListViewModel::Criteria _ReadTabListCriteria() const;
+        ::TerminalApp::TabListViewModel::OwnerEntry _ReadTabListOwner(const Tab& tab, uint32_t index, const TerminalApp::TabStripDisplayItem& display = nullptr) const;
+        ::TerminalApp::TabListViewModel::OwnerState _TabListStateFor(const Tab* tab, const TerminalApp::TabStripDisplayItem& display = nullptr) const;
+        std::vector<::TerminalApp::TabListViewModel::OwnerEntry> _BuildTabListSnapshot() const;
+        static bool _IsPresentedTabSwitchChord(const Microsoft::Terminal::Control::KeyChord& chord, uint32_t index);
+        std::optional<::TerminalApp::TabListViewModel::Target> _EvaluateTabSwitchTarget(const Microsoft::Terminal::Control::KeyChord& chord, const ::TerminalApp::TabListViewModel* list = nullptr) const;
         void _AttachOrUpdateRichTabControl(const Microsoft::Terminal::Control::TermControl& control);
         void _DetachRichTabControl(const Microsoft::Terminal::Control::TermControl& control);
         void _NotifyRichTabControl(
@@ -1006,22 +1013,18 @@ namespace winrt::TerminalApp::implementation
         bool _MatchesPaneAgentScope(const Tab::VisiblePaneSnapshot& pane) const;
         bool _IsPaneRowProjectionEligible(const Tab::VisiblePaneSnapshot& pane) const;
         bool _TabHasCliAgent(const winrt::com_ptr<Tab>& tab) const;
-        bool _IsAgentScopeEffective() const noexcept
+        bool _TabHasCliAgent(const Tab& tab) const;
+        bool _IsAgentScopeEffective() const
         {
-            return _isVerticalLayout &&
-                   _tabSearchQuery.empty() &&
-                   _tabFilterMode != TerminalApp::TabStripFilterMode::AllTabs;
+            return ::TerminalApp::TabListViewModel{ std::span<const ::TerminalApp::TabListViewModel::OwnerEntry>{}, _ReadTabListCriteria() }.Policy().displayAgentScopeEffective;
         }
-        bool _IsTabSearchEffective() const noexcept
+        bool _IsTabSearchEffective() const
         {
-            return _isVerticalLayout &&
-                   _isVerticalRailVisible &&
-                   !_isVerticalRailCollapsed &&
-                   (_tabSearchActive || !_tabSearchQuery.empty());
+            return ::TerminalApp::TabListViewModel{ std::span<const ::TerminalApp::TabListViewModel::OwnerEntry>{}, _ReadTabListCriteria() }.Policy().searchEffective;
         }
-        bool _IsTabListProjectionActive() const noexcept
+        bool _IsTabListProjectionActive() const
         {
-            return _IsAgentScopeEffective() || _IsTabSearchEffective();
+            return ::TerminalApp::TabListViewModel{ std::span<const ::TerminalApp::TabListViewModel::OwnerEntry>{}, _ReadTabListCriteria() }.Policy().positionOperationsBlocked;
         }
         bool _AreRecentAgentSessionsVisible() const
         {
@@ -1029,7 +1032,7 @@ namespace winrt::TerminalApp::implementation
                    _tabStrip && _tabStrip.SidebarFilters().RecentAgentSessionsVisible();
         }
         void _UpdateRecentAgentSessionsVisibility();
-        bool _IsTabListPositionOperationBlocked() const noexcept
+        bool _IsTabListPositionOperationBlocked() const
         {
             return _IsTabListProjectionActive();
         }

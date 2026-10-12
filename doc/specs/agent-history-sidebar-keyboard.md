@@ -346,6 +346,34 @@ focus fallback first retains the current visible terminal or Agent input, then
 uses the existing source-shell fallback; this adds no saved focus field,
 selection cache, timer, repair callback or view-model clock.
 
+Sidebar shortcut hints belong to the existing display descriptor, not the
+shared header presentation or canonical horizontal tab. Effective corresponding
+Ctrl+Alt+1..8 bindings use navigation ordinals in the selected All/Agents-only
+filter; Ctrl+Alt+9 targets its last owning tab. Search never renumbers these
+targets, including when a query displays ordinary tabs outside Agents-only scope
+or produces no results. Custom or differently remapped bindings keep their
+canonical meaning. Recognized filter navigation with no eligible owner is
+consumed as a no-op, preserving selection and content without forwarding the
+chord to the shell. An empty query result is not an empty navigation scope.
+Hints use the same effective-binding target evaluator as execution, and advertise a
+chord only for its actual owner. The descriptor retains only resolved tooltip
+and accelerator strings across ordinary presentation sync; projection, tooltip
+changes and settings reload refresh them. Horizontal presentation clears that
+override and retains canonical tab hints and independently owned controls.
+
+`TerminalPage` supplies raw layout, rail, selected-filter and search criteria
+plus a canonical-order snapshot of owner identity, pin/agent state, titles and
+visible metadata/child fields to the data-only `TabListViewModel`. The view model
+derives navigation scope independently of query-dependent display scope,
+ordinary search-field matching, move targets and hint choice; it owns no XAML
+controls. A nonempty global query matches ordinary titles and visible metadata,
+including visible child fields, without changing the selected filter's navigation
+ordinals. Active search, whether empty or nonempty, keeps Move up/down visible
+but disabled. With search closed, Agents-only movement skips hidden ordinary
+neighbors and inserts the whole owner before/after the nearest eligible owner.
+Pin boundaries, canonical public indices, replay, custom remaps and horizontal
+behavior remain unchanged.
+
 Pin state remains shared model data. `TabHeaderControl.ShowPinnedIcon` is an
 appended, view-local property, defaulting to true: the canonical horizontal
 header sets it to false, while newly created sidebar headers retain the default.

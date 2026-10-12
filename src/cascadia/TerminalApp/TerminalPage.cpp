@@ -11117,7 +11117,8 @@ namespace winrt::TerminalApp::implementation
         }
 
         const auto action = cmd.ActionAndArgs();
-        const auto handled = action.Action() == ShortcutAction::ToggleSidebar ?
+        const auto handled = (action.Action() == ShortcutAction::ToggleSidebar ||
+                              action.Action() == ShortcutAction::SwitchToTab) ?
                                  _actionDispatch->DoAction(chord, action) :
                                  _actionDispatch->DoAction(action);
         if (!handled)
@@ -12314,6 +12315,10 @@ namespace winrt::TerminalApp::implementation
                     {
                         strip->SetTabPresentation(display, tab->Title(), tab->Icon(), true);
                     }
+                    if (propertyName == L"ToolTip")
+                    {
+                        page->_ApplyTabListProjection(*tab, false, false);
+                    }
                 }
                 else if (propertyName == L"Content")
                 {
@@ -13148,17 +13153,33 @@ namespace winrt::TerminalApp::implementation
         }
 
         const auto direction = args.Direction();
-        if (direction != MoveTabDirection::None && !_IsTabListPositionOperationBlocked())
+        if (direction != MoveTabDirection::None)
         {
-            // Use the requested tab, if provided. Otherwise, use the currently
-            // focused tab.
-            const auto tabIndex = til::coalesce(_GetTabIndex(*tab),
-                                                _GetFocusedTabIndex());
-            if (tabIndex)
+            if (_rearranging || _mutatingTabCollections)
             {
-                const auto currentTabIndex = tabIndex.value();
-                const auto delta = direction == MoveTabDirection::Forward ? 1 : -1;
-                _TryMoveTab(currentTabIndex, gsl::narrow_cast<int32_t>(currentTabIndex) + delta);
+                return false;
+            }
+            const auto criteria = _ReadTabListCriteria();
+            const auto owners = _BuildTabListSnapshot();
+            const ::TerminalApp::TabListViewModel list{ owners, criteria };
+            if (!list.Policy().searchEffective)
+            {
+                const auto state = list.StateFor(tab.get());
+                if (!state || !state->navigationOrdinal)
+                {
+                    return false;
+                }
+            }
+            const auto target = list.MoveTarget(tab.get(), direction == MoveTabDirection::Forward ? ::TerminalApp::TabListViewModel::MoveDirection::Next : ::TerminalApp::TabListViewModel::MoveDirection::Previous);
+            if (target)
+            {
+                const auto current = _GetTabIndex(*tab);
+                if (!current || target->canonicalIndex >= _tabs.Size() ||
+                    _GetTabImpl(_tabs.GetAt(target->canonicalIndex)).get() != target->identity)
+                {
+                    return false;
+                }
+                _TryMoveTab(*current, gsl::narrow_cast<int32_t>(target->canonicalIndex));
             }
         }
 
@@ -15451,6 +15472,8 @@ namespace winrt::TerminalApp::implementation
             auto tabImpl{ winrt::get_self<Tab>(tab) };
             tabImpl->SetActionMap(_settings.ActionMap());
         }
+
+        _ApplyTabListProjection(nullptr, false);
 
         if (const auto focusedTab{ _GetFocusedTabImpl() })
         {
