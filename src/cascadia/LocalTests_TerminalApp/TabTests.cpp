@@ -376,6 +376,7 @@ namespace TerminalAppLocalTests
         TEST_METHOD(NativeTabReorderReleasesHeaderOwnership);
         TEST_METHOD(SidebarTemplatesOwnHeaderVisuals);
         TEST_METHOD(SidebarHeaderRenameUsesRealizedView);
+        TEST_METHOD(SidebarHeaderRenamerStaysAtTitlePosition);
         TEST_METHOD(VerticalTabStripCompatibilitySetPaneItemsPreservesHeaderProgress);
         TEST_METHOD(VerticalSinglePaneProgressKeepsProfileIcon);
         TEST_METHOD(PaneProgressSurvivesTabLayoutLifecycle);
@@ -14160,6 +14161,55 @@ namespace TerminalAppLocalTests
             VERIFY_IS_TRUE(firstPaneImage.Source() == secondPaneImage.Source());
             VERIFY_IS_TRUE(firstPaneImage.Source() == firstImage.Source());
             VERIFY_ARE_EQUAL(16.0, firstPaneImage.Width());
+        });
+    }
+
+    void TabTests::SidebarHeaderRenamerStaysAtTitlePosition()
+    {
+        const auto page = _commonSetup(nullptr, nullptr, std::nullopt, true);
+        TestOnUIThread([&]() {
+            page->Width(1200);
+            page->Height(600);
+            const auto tab = page->_GetFocusedTabImpl();
+            tab->SetTabText(L"PowerShell");
+            const auto strip = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip);
+            for (const auto showBell : { false, true })
+            {
+                tab->_tabStatus.BellIndicator(showBell);
+                page->_verticalRailWidth = 500;
+                page->_SetVerticalRailVisibility(true);
+                page->UpdateLayout();
+                const auto header = strip->HeaderForTab(tab->TabViewItem(), true).as<winrt::TerminalApp::TabHeaderControl>();
+                header.RenamerMaxWidth(200);
+                page->UpdateLayout();
+                const auto title = header.FindName(L"HeaderTextBlock").as<FrameworkElement>();
+                const auto renamer = header.FindName(L"HeaderRenamerTextBox").as<TextBox>();
+                const auto titleLeft = title.TransformToVisual(header).TransformPoint({ 0, 0 }).X;
+                VERIFY_IS_TRUE(header.ActualWidth() > header.RenamerMaxWidth());
+                header.BeginRename();
+                for (const auto width : { 500.0, 320.0, 240.0 })
+                {
+                    page->_verticalRailWidth = width;
+                    page->_SetVerticalRailVisibility(true);
+                    for (const auto text : { L"PowerShell", L"", L"A much longer title that exceeds the available rename width" })
+                    {
+                        renamer.Text(text);
+                        page->UpdateLayout();
+                        const auto left = renamer.TransformToVisual(header).TransformPoint({ 0, 0 }).X;
+                        VERIFY_IS_TRUE(std::abs(left - titleLeft) <= 0.5f);
+                        VERIFY_IS_TRUE(left + renamer.ActualWidth() <= header.ActualWidth() + 0.5);
+                        VERIFY_IS_TRUE(renamer.ActualWidth() <= header.RenamerMaxWidth() + 0.5);
+                        VERIFY_IS_TRUE(renamer.ActualWidth() > 0);
+                        VERIFY_IS_TRUE(header.InRename());
+                        VERIFY_ARE_EQUAL(winrt::hstring{ L"PowerShell" }, tab->Title());
+                        VERIFY_IS_TRUE(header == strip->HeaderForTab(tab->TabViewItem()).as<winrt::TerminalApp::TabHeaderControl>());
+                    }
+                }
+                tab->CancelTabRename();
+                VERIFY_IS_FALSE(header.InRename());
+                VERIFY_ARE_EQUAL(Visibility::Visible, title.Visibility());
+                VERIFY_ARE_EQUAL(winrt::hstring{ L"PowerShell" }, tab->Title());
+            }
         });
     }
 

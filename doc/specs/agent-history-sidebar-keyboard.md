@@ -437,6 +437,10 @@ Interactive requests reveal the actual row by expanding a collapsed rail through
 the existing view commands, without hiding recent sessions. Filter-hidden rows remain
 unavailable; no invisible native-header fallback is used.
 
+The inline renamer stays at the title's leading edge, including while typing or
+resizing the sidebar. Its maximum width limits the input's size without centering
+it in the wider title column; status icons retain their existing title offset.
+
 Existing WinRT methods retain their ordering and signatures. New members are
 appended. `TabStripDisplayItem.Header` retains its `Object` getter/setter slots,
 but now returns `TabHeaderPresentation`, never a visual; its setter accepts
