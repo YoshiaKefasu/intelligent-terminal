@@ -1025,18 +1025,10 @@ namespace winrt::TerminalApp::implementation
         const auto isCurrent = item && item.IsCurrent();
         const auto external = item && item.Status() == L"InUse";
         const auto externalTip = external ? RS_(L"VerticalTabsHistoryInUseToolTip") : winrt::hstring{};
-        ToolTipService::SetToolTip(root, external ? box_value(externalTip) : nullptr);
-        if (const auto cwd = root.FindName(L"HistoryCwdText").try_as<Control>())
+        if (const auto text = root.FindName(L"HistoryInUseTooltipText").try_as<TextBlock>())
         {
-            const auto tip = external ? externalTip : item ? item.Cwd() :
-                                                             winrt::hstring{};
-            ToolTipService::SetToolTip(cwd, tip.empty() ? nullptr : box_value(tip));
-        }
-        if (const auto icon = root.FindName(L"HistoryProviderIcon").try_as<Control>())
-        {
-            const auto tip = external ? externalTip : item ? item.ProviderDisplayName() :
-                                                             winrt::hstring{};
-            ToolTipService::SetToolTip(icon, tip.empty() ? nullptr : box_value(tip));
+            text.Text(externalTip);
+            text.Visibility(external ? Visibility::Visible : Visibility::Collapsed);
         }
         const auto foreground = isCurrent ? item.CurrentForeground() : nullptr;
         const auto palette = root.FindName(L"HistorySelectionPalette").try_as<Control>();
@@ -1284,7 +1276,7 @@ namespace winrt::TerminalApp::implementation
     {
         if (const auto root = sender.try_as<FrameworkElement>())
         {
-            _updateTabHeaderToolTipPlacement(root);
+            _updateSidebarRowToolTipPlacement(root);
             if (const auto display = root.DataContext().try_as<TerminalApp::TabStripDisplayItem>())
             {
                 _updateDisplayItemVisuals(root, display);
@@ -1297,38 +1289,38 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
-    void TabStrip::OnTabHeaderSizeChanged(IInspectable const& sender, SizeChangedEventArgs const&)
+    void TabStrip::OnSidebarRowSizeChanged(IInspectable const& sender, SizeChangedEventArgs const&)
     {
         if (const auto root = sender.try_as<FrameworkElement>())
         {
-            _updateTabHeaderToolTipPlacement(root);
+            _updateSidebarRowToolTipPlacement(root);
         }
     }
 
-    void TabStrip::OnTabHeaderPointerEntered(IInspectable const& sender, Input::PointerRoutedEventArgs const&)
+    void TabStrip::OnSidebarRowPointerEntered(IInspectable const& sender, Input::PointerRoutedEventArgs const&)
     {
-        _updateTabHeaderToolTipPlacement(sender.as<FrameworkElement>());
+        _updateSidebarRowToolTipPlacement(sender.as<FrameworkElement>());
     }
 
-    void TabStrip::OnTabHeaderGotFocus(IInspectable const& sender, RoutedEventArgs const&)
+    void TabStrip::OnSidebarRowGotFocus(IInspectable const& sender, RoutedEventArgs const&)
     {
-        _updateTabHeaderToolTipPlacement(sender.as<FrameworkElement>());
+        _updateSidebarRowToolTipPlacement(sender.as<FrameworkElement>());
     }
 
-    void TabStrip::_updateTabHeaderToolTipPlacement(FrameworkElement const& header)
+    void TabStrip::_updateSidebarRowToolTipPlacement(FrameworkElement const& row)
     {
-        const auto xamlRoot = header.XamlRoot();
+        const auto xamlRoot = row.XamlRoot();
         if (!xamlRoot)
         {
             return;
         }
         const auto target = xamlRoot.Content();
-        if (const auto tooltip = ToolTipService::GetToolTip(header).try_as<ToolTip>())
+        if (const auto tooltip = ToolTipService::GetToolTip(row).try_as<ToolTip>())
         {
-            tooltip.Placement(header.FlowDirection() == FlowDirection::RightToLeft ? Primitives::PlacementMode::Left : Primitives::PlacementMode::Right);
-            ToolTipService::SetPlacementTarget(header, target);
-            tooltip.PlacementRect(header.TransformToVisual(target).TransformBounds(
-                Rect{ 0, 0, static_cast<float>(header.ActualWidth()), static_cast<float>(header.ActualHeight()) }));
+            tooltip.Placement(row.FlowDirection() == FlowDirection::RightToLeft ? Primitives::PlacementMode::Left : Primitives::PlacementMode::Right);
+            ToolTipService::SetPlacementTarget(row, target);
+            tooltip.PlacementRect(row.TransformToVisual(target).TransformBounds(
+                Rect{ 0, 0, static_cast<float>(row.ActualWidth()), static_cast<float>(row.ActualHeight()) }));
         }
     }
 
@@ -2256,13 +2248,17 @@ namespace winrt::TerminalApp::implementation
     void TabStrip::OnHistoryRowLoaded(IInspectable const& sender, RoutedEventArgs const&)
     {
         const auto root = sender.as<FrameworkElement>();
+        _updateSidebarRowToolTipPlacement(root);
         const auto item = root.DataContext().try_as<TerminalApp::TabStripHistoryItem>();
         if (const auto icon = root.FindName(L"HistoryKeepRunningIcon").try_as<FontIcon>())
         {
             const auto help = RS_(L"KeepTabRunningToolTip");
             WUX::Automation::AutomationProperties::SetName(icon, RS_(L"KeepTabRunningText"));
             WUX::Automation::AutomationProperties::SetHelpText(icon, help);
-            ToolTipService::SetToolTip(icon, box_value(help));
+        }
+        if (const auto text = root.FindName(L"HistoryKeepRunningTooltipText").try_as<TextBlock>())
+        {
+            text.Text(RS_(L"KeepTabRunningToolTip"));
         }
         _applyHistoryRowForeground(root, item);
     }
