@@ -32,7 +32,7 @@ wt-agent-hooks/
 │   └── wt-agent-hooks/hooks/hooks.json     # native hook commands
 ├── opencode/                                # copied to OpenCode's global plugins dir
 │   ├── plugin.json                          # managed bundle version
-│   └── wt-agent-hooks.js                    # OpenCode V1 plugin
+│   └── wt-agent-hooks.js                    # OpenCode V1/V2 plugin
 └── hook-debug/                             # dev utility, not part of the install bundle
     └── state-logger.ps1
 ```
@@ -205,11 +205,11 @@ hook, so the CLI blocks on it. Turn-level Working is unaffected because
 `UserPromptSubmit` already maps to `ToolStarting`; what is given up is the
 tool's name in the session row, not its status.
 
-OpenCode uses its V1 plugin API rather than a hook manifest. The plugin maps
-`session.created/updated`, `chat.message`, `tool.execute.before`,
-`permission.*`, `question.*`, `session.idle/error/deleted`, and `dispose` to
-the same WTA topics. Child sessions with `parentID` are ignored so OpenCode's
-internal subagents do not create extra rows.
+OpenCode uses a plugin definition with a V1 `server()` entrypoint and a V2
+`setup()` entrypoint rather than a hook manifest. Both forward prompt, tool,
+session lifecycle, and permission/question events to the same WTA topics.
+Child sessions with `parentID` are ignored so OpenCode's internal subagents
+do not create extra rows.
 
 OpenCode's `question` tool is recognized as a user-input tool by both the native
 hook bridge and WTA. Its `agent.tool.starting` event and the `agent.notification`

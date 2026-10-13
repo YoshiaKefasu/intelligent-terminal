@@ -2223,7 +2223,7 @@ fn copilot_uses_native_plugin_layout() {
 /// here even when only one bundle's content changed.
 #[test]
 fn native_hook_bundle_versions_stay_in_sync() {
-    const BUNDLE_VERSION: &str = "0.1.6";
+    const BUNDLE_VERSION: &str = "0.1.7";
     let manifests = [
         CLAUDE_PLUGIN_JSON,
         COPILOT_PLUGIN_JSON,
