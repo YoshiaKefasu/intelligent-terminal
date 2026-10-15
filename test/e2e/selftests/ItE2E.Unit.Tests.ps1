@@ -458,7 +458,7 @@ permission_ui: current permission snapshot={"session_id":"old-session","tool_cal
 }
 
 Describe 'Agent settings cleanup' -Tag 'Unit' {
-    It 'removes showTokenUsageAndCost while preserving profiles' {
+    It 'removes agent display preferences while preserving profiles and other keys' {
         $settingsPath = Join-Path $TestDrive 'settings.json'
         @{
             defaultProfile = '{6239a42c-1111-49a3-80bd-e8fdd045185c}'
@@ -468,6 +468,8 @@ Describe 'Agent settings cleanup' -Tag 'Unit' {
             })
             acpAgent = 'copilot'
             showTokenUsageAndCost = $true
+            renderAgentMarkdown = $false
+            renderAgentMarkdownOther = 'keep'
         } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $settingsPath -Encoding utf8
         $app = [pscustomobject]@{ SettingsPath = $settingsPath }
 
@@ -475,6 +477,8 @@ Describe 'Agent settings cleanup' -Tag 'Unit' {
 
         $settings = Get-WtSettingsObject -App $app
         $settings.PSObject.Properties.Name | Should -Not -Contain 'showTokenUsageAndCost'
+        $settings.PSObject.Properties.Name | Should -Not -Contain 'renderAgentMarkdown'
+        $settings.renderAgentMarkdownOther | Should -Be 'keep'
         $settings.PSObject.Properties.Name | Should -Not -Contain 'acpAgent'
         $settings.profiles[0].name | Should -Be 'p0'
     }
@@ -558,6 +562,73 @@ Describe 'Configuration backup and restore' -Tag 'Unit' {
         '{}' | Set-Content -LiteralPath $app.SettingsPath -Encoding utf8
         Restore-WtConfig -App $app
         Get-Content -LiteralPath $app.SettingsPath -Raw | Should -Match '"original":"settings"'
+    }
+}
+
+Describe 'Nested startup state verification' -Tag 'Unit' {
+    BeforeEach {
+        InModuleScope ItE2E -Parameters @{ Root = (Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))) } {
+            param($Root)
+            $script:stateFixtureApp = [pscustomobject]@{
+                Package = 'fixture-package'
+                Version = '0.0.0.0'
+                WtcliPath = 'unused-wtcli.exe'
+                InstallLocation = Join-Path $Root 'install'
+                LocalStateDir = $Root
+                SettingsPath = Join-Path $Root 'settings.json'
+                StatePath = Join-Path $Root 'state.json'
+                LogStartOffset = @{}
+            }
+            $script:stateFixtureExpected = @(
+                @{
+                    tabLayout = @(
+                        @{ action = 'newTab'; commandline = 'cmd.exe' }
+                        @{ action = 'splitPane'; type = 'agent'; commandline = 'wta --initial-load-session-id "saved-fixture"' }
+                    )
+                }
+            )
+            $script:stateFixtureActual = $null
+            Mock Resolve-ItApp { $script:stateFixtureApp }
+            Mock Get-WtProcessesForApp { @() }
+            Mock Initialize-LogOffsets {}
+            Mock Write-ItLog {}
+            Mock Start-ItCreatedDevTerminal {
+                $script:stateFixtureActual = Get-WtStateObject -App $script:stateFixtureApp
+                throw 'State verified; stop before activation'
+            }
+        }
+    }
+
+    It 'verifies a persisted layout structurally and preserves its array shape' {
+        InModuleScope ItE2E {
+            {
+                Start-Terminal -Package Dev -PassFre $false -CleanSettings $false -State @{
+                    persistedWindowLayouts = $script:stateFixtureExpected
+                }
+            } | Should -Throw '*State verified; stop before activation*'
+            Should -Invoke Start-ItCreatedDevTerminal -Times 1
+            @($script:stateFixtureActual.persistedWindowLayouts) | Should -HaveCount 1
+            @($script:stateFixtureActual.persistedWindowLayouts[0].tabLayout) | Should -HaveCount 2
+            $script:stateFixtureActual.persistedWindowLayouts[0].tabLayout[1].type | Should -Be 'agent'
+            Test-Path -LiteralPath $script:stateFixtureApp.StatePath | Should -BeFalse
+            Test-Path -LiteralPath "$($script:stateFixtureApp.StatePath).e2ebak.missing" | Should -BeFalse
+        }
+    }
+
+    It 'rejects a changed nested value before attempting activation' {
+        InModuleScope ItE2E {
+            Mock Get-WtStateObject {
+                [pscustomobject]@{
+                    persistedWindowLayouts = @(@{ tabLayout = @(@{ action = 'newTab'; commandline = 'wrong' }) })
+                }
+            }
+            {
+                Start-Terminal -Package Dev -PassFre $false -CleanSettings $false -State @{
+                    persistedWindowLayouts = $script:stateFixtureExpected
+                }
+            } | Should -Throw '*Startup state did not persist: persistedWindowLayouts*'
+            Should -Invoke Start-ItCreatedDevTerminal -Times 0
+        }
     }
 }
 

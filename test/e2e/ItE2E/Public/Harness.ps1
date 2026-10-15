@@ -154,7 +154,7 @@ function Clear-WtConfig {
         launch deterministic and provider-pure.
 
         We REMOVE every agent/AI top-level key (acp*, delegate*, agentPane*, autoFix*,
-        showToken*, aiIntegration*) while PRESERVING the rest of the file (profiles, theme, keybindings). A
+        showToken*, renderAgentMarkdown, aiIntegration*) while PRESERVING the rest of the file (profiles, theme, keybindings). A
         full schema-only wipe is deliberately NOT used: WindowsTerminal rejects a settings.json
         with no usable profile and pops a "Failed to load settings" dialog that would destabilize
         UI tests. When called via Start-Terminal (the normal path) the user's real settings are
@@ -165,7 +165,9 @@ function Clear-WtConfig {
     [CmdletBinding()] param([Parameter(Mandatory)]$App)
     $obj = Get-WtSettingsObject -App $App
     if (-not $obj) { Write-ItLog -Level INFO -Message "Clear-WtConfig: no parseable settings.json to clean"; return }
-    $agentKeys = @($obj.PSObject.Properties.Name | Where-Object { $_ -match '^(acp|delegate|agentPane|autoFix|showToken|aiIntegration)' })
+    $agentKeys = @($obj.PSObject.Properties.Name | Where-Object {
+        $_ -eq 'renderAgentMarkdown' -or $_ -match '^(acp|delegate|agentPane|autoFix|showToken|aiIntegration)'
+    })
     foreach ($k in $agentKeys) { $obj.PSObject.Properties.Remove($k) }
     ($obj | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $App.SettingsPath -Encoding utf8
     $preserved = if (Test-Path "$($App.SettingsPath).e2ebak") { "; original preserved in .e2ebak" } else { "" }
@@ -665,7 +667,10 @@ function Start-Terminal {
         foreach ($key in $State.Keys) {
             Set-WtState -App $app -Key $key -Value $State[$key] | Out-Null
             $actual = Get-WtStateObject -App $app
-            if ($actual.PSObject.Properties.Name -notcontains $key -or $actual.$key -cne $State[$key]) {
+            $expectedJson = ConvertTo-Json -InputObject $State[$key] -Depth 64 -Compress
+            $actualJson = ConvertTo-Json -InputObject $actual.$key -Depth 64 -Compress
+            if ($actual.PSObject.Properties.Name -notcontains $key -or
+                -not [string]::Equals($actualJson, $expectedJson, [StringComparison]::Ordinal)) {
                 throw "Startup state did not persist: $key"
             }
         }

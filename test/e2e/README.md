@@ -112,6 +112,7 @@ authenticated ACP agents. Available suites (results depend on the selected packa
 | `Feature.AgentPaneInteraction.Tests.ps1` | open/hide/focus, input/rendering, slash, Copilot chat | 14 |
 | `Feature.AgentHotkeys.Tests.ps1` | Physical WT-window accelerators for agent pane/delegation; History navigation preserves search-off state and exact shell/Agent input focus, while explicit shared-search entry retains search-focus baselines and existing on-state/query. Sidebar hotkeys preserve drafts and tab-search focus, including keyboard focus on the titlebar rail toggle. The public palette action retains visibility toggling; mixed pointer sessions, horizontal suppression, and effective Expand/Collapse hints remain covered | 14 |
 | `Feature.AgentProtocolExperience.Tests.ps1` | PRs #599/#601/#606/#610/#611/#612/#616/#634/#683: intent-based terminal actions (including empty workspaces and configured delegation), ACP tool/transcript rendering, clarification input, session configuration, model title, and replacement cleanup across the deployed helper/master boundary | 8 |
+| `Feature.SimplifiedMarkdown.Tests.ps1` | Raw streaming followed by stopped-reply Markdown, cancellation/error/agent transport exit, raw startup, selected-text/queued-request independence, synthetic saved-history replay, and shared live FRE/Settings preference with unchanged host/master/helper/session identities | 8 (exact-source Dev hashes and inactive package required; deterministic ACP fixture, no provider prompts; clipboard access required for selection/copy) |
 | `Feature.AcpAuthentication.Tests.ps1` | Cold-user normal-pane sign-in, advertised method and same-process session creation, long authorization waiting, cancellation, stale completion, retry and SDK-delivered manual browser link; deterministic ACP fixture, zero provider tokens. The fallback case uses an invalid client ID and may open a browser error page; never authorize that fixture URL | 3 |
 | `Feature.PromptQueue.Tests.ps1` | C095, C410-C421: gated local ACP fixture covering startup Autofix, idempotent diagnostics, independently held FIFO turns and pinned counts during scrolling, attachments, disabled queue controls, retained stop/failure pauses, typed `/fix` snapshots, source-pane priority, and redraw versus command invalidation (no LLM) | 14 |
 | `Feature.AgentImageAttachmentEditing.Tests.ps1` | PR #536: inline image tokens move and delete atomically while preserving adjacent prompt text | 1 |
@@ -808,12 +809,21 @@ input line cannot satisfy the output assertion.
 `Feature.PromptQueue.Tests.ps1` uses `fixtures/Mock-AcpQueueAgent.ps1`, not an
 authenticated agent or an LLM. Every case crosses the deployed WT/ConPTY →
 helper → master → ACP boundary. The fixture records ordered prompt/completion
-JSON under `artifacts/prompt-queue-fixtures/<run-id>/`; its ten
+JSON under `artifacts/prompt-queue-fixtures/<run-id>/`; its
 hermetic cases in `selftests/ItE2E.QueueFixture.Tests.ps1` cover gate polling,
 cancellation settlement, same-session overlap rejection, and recovery. The
 fixture advertises image input and records ACP image metadata (MIME type, decoded
 byte count, and signature), never raw image data or MCP credentials. Attachment
 preservation is checked through the received PNG payload, not only a rendered token.
+
+The same fixture supplies Markdown regressions without a second agent harness.
+A held marker can have a UTF-8 `<marker>.reply.txt` in its control directory;
+the exact text streams before its normal release/failure/cancellation gate.
+`<marker>.disconnect` closes only that fixture process's transport. An optional
+`history.json` maps synthetic session IDs to raw `prompt`/`reply` strings and
+enables ACP `session/load`. Without these files, existing queue behavior and
+capabilities remain unchanged. The fixture self-tests cover exact Unicode and
+line endings, transport exit, raw history preservation, and missing history.
 
 | Exact checklist/test title | Trigger and deterministic oracle | Negative control / existing protection |
 |---|---|---|
