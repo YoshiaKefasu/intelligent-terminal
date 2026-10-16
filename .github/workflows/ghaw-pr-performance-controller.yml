@@ -1,0 +1,337 @@
+name: Performance Review
+run-name: 'Performance Review for PR #${{ github.event.pull_request.number }}'
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  actions: write
+  checks: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ghaw-pr-performance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  performance-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    outputs:
+      worker_run_id: ${{ steps.worker.outputs.run_id }}
+      comparison_base_sha: ${{ steps.gate.outputs.comparison_base_sha }}
+    steps:
+      - name: Checkout trusted base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify and resolve immutable scope
+        id: gate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          remote_ref="refs/remotes/origin/performance-pr-${PR_NUMBER}"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            fetch --no-tags origin "refs/pull/${PR_NUMBER}/head:${remote_ref}"
+          fetched_head="$(git rev-parse "$remote_ref")"
+          test "$fetched_head" = "$HEAD_SHA"
+          comparison_base="$(git merge-base "$BASE_SHA" "$fetched_head")"
+          node .github/workflows/ghaw-pr-performance/scripts/performance-review.mjs prepare \
+            --output-dir "$RUNNER_TEMP/performance-scope" \
+            --pr "$PR_NUMBER" --base "$comparison_base" --head "$HEAD_SHA"
+          applicable="$(node -e "const s=require(process.argv[1]);process.stdout.write(String(s.applicable))" "$RUNNER_TEMP/performance-scope/performance-scope.json")"
+          echo "applicable=$applicable" >> "$GITHUB_OUTPUT"
+          echo "comparison_base_sha=$comparison_base" >> "$GITHUB_OUTPUT"
+          if [ "$applicable" != "true" ]; then
+            {
+              echo "## Performance review"
+              echo
+              echo "No performance-sensitive product source changed; agent inference skipped."
+              echo
+              echo "- AI Credits: **0**"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Dispatch and wait for isolated worker
+        id: worker
+        if: steps.gate.outputs.applicable == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          COMPARISON_BASE_SHA: ${{ steps.gate.outputs.comparison_base_sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.id == github.repository_id }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const runAttempt = process.env.GITHUB_RUN_ATTEMPT;
+            if (!/^[1-9][0-9]*$/.test(runAttempt ?? "")) throw new Error("Missing valid controller run attempt.");
+            const sameRepo = process.env.SAME_REPO === "true";
+            const worker = sameRepo
+              ? "ghaw-pr-performance.lock.yml"
+              : "ghaw-pr-performance-fork-guidance.lock.yml";
+            const dispatchId =
+              `ghaw-pr-performance-${pr.number}-${process.env.EXPECTED_HEAD_SHA}-${context.runId}-${runAttempt}`;
+            const inputs = {
+              dispatch_id: dispatchId,
+              pr_number: String(pr.number),
+              repo: `${context.repo.owner}/${context.repo.repo}`,
+              expected_head_sha: process.env.EXPECTED_HEAD_SHA,
+              expected_base_sha: process.env.EXPECTED_BASE_SHA,
+              comparison_base_sha: process.env.COMPARISON_BASE_SHA,
+              head_ref: process.env.HEAD_REF,
+              base_ref: process.env.BASE_REF,
+              head_repo: process.env.HEAD_REPO,
+              same_repo: String(sameRepo),
+              aw_context: JSON.stringify(sameRepo ? {
+                run_id: String(context.runId),
+                workflow_id: "ghaw-pr-performance-controller",
+                item_type: "pull_request",
+                item_number: pr.number,
+                repo: `${context.repo.owner}/${context.repo.repo}`,
+                event_type: "pull_request",
+                head_sha: process.env.EXPECTED_HEAD_SHA,
+                base_sha: process.env.EXPECTED_BASE_SHA,
+                comparison_base_sha: process.env.COMPARISON_BASE_SHA
+              } : {
+                run_id: String(context.runId),
+                workflow_id: "ghaw-pr-performance-controller",
+                event_type: "workflow_dispatch",
+                source_pr_number: pr.number,
+                head_sha: process.env.EXPECTED_HEAD_SHA
+              })
+            };
+            const startedAt = Date.now() - 5000;
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: worker,
+              ref: process.env.BASE_REF,
+              inputs
+            });
+            let run;
+            for (let attempt = 0; attempt < 20 && !run; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: worker,
+                event: "workflow_dispatch",
+                branch: process.env.BASE_REF,
+                per_page: 50
+              });
+              run = runs.data.workflow_runs.find(candidate =>
+                Date.parse(candidate.created_at) >= startedAt &&
+                candidate.display_title.includes(dispatchId));
+            }
+            if (!run) throw new Error(`Could not correlate ${worker} for ${dispatchId}.`);
+            core.setOutput("run_id", String(run.id));
+            core.setOutput("run_url", run.html_url ||
+              `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${context.repo.owner}/${context.repo.repo}/actions/runs/${run.id}`);
+            const deadline = Date.now() + 150 * 60 * 1000;
+            const phaseTimeoutMinutes = { activation: 5, conclusion: 3 };
+            const cancelWorker = async () => {
+              const target = { owner: context.repo.owner, repo: context.repo.repo, run_id: run.id };
+              await github.rest.actions.cancelWorkflowRun(target);
+              for (let attempt = 0; attempt < 2; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                const stopped = (await github.rest.actions.getWorkflowRun(target)).data;
+                if (stopped.status === "completed") return;
+              }
+              await github.request("POST /repos/{owner}/{repo}/actions/runs/{run_id}/force-cancel", target);
+            };
+            while (Date.now() < deadline) {
+              run = (await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              })).data;
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id,
+                per_page: 100
+              });
+              for (const job of jobs) {
+                const limit = phaseTimeoutMinutes[job.name];
+                if (!limit || job.status !== "in_progress") continue;
+                const phaseStarted = Date.parse(job.started_at);
+                if (!Number.isFinite(phaseStarted)) {
+                  await cancelWorker();
+                  throw new Error(`Worker ${job.name} has no valid start time.`);
+                }
+                if (Date.now() - phaseStarted > limit * 60 * 1000) {
+                  await cancelWorker();
+                  throw new Error(`Worker ${job.name} exceeded its ${limit}-minute controller phase deadline.`);
+                }
+              }
+              if (run.status === "completed") {
+                core.setOutput("run_id", String(run.id));
+                core.setOutput("run_url", run.html_url);
+                core.setOutput("conclusion", run.conclusion || "failure");
+                if (run.conclusion !== "success") {
+                  throw new Error(`${worker} run ${run.id} concluded ${run.conclusion}.`);
+                }
+                const agentJob = jobs.find(job => job.name === "agent");
+                if (agentJob?.conclusion !== "success" ||
+                    !agentJob.steps?.some(step =>
+                      step.name === "Execute GitHub Copilot CLI" && step.conclusion === "success")) {
+                  throw new Error(`Worker ${run.id} did not complete the agent execution step.`);
+                }
+                return;
+              }
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+            await cancelWorker();
+            throw new Error(`${worker} run ${run.id} exceeded 150 minutes.`);
+
+      - name: Publish linked PR run report
+        if: always() && steps.gate.outputs.applicable == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_OUTCOME: ${{ job.status }}
+          REVIEWED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CONTROLLER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKER_RUN_URL: ${{ steps.worker.outputs.run_url }}
+          WORKER_CONCLUSION: ${{ steps.worker.outputs.conclusion }}
+          WORKER_RUN_ID: ${{ steps.worker.outputs.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const fs = require("fs");
+            const runAttempt = process.env.GITHUB_RUN_ATTEMPT;
+            if (!/^[1-9][0-9]*$/.test(runAttempt ?? "")) throw new Error("Missing valid controller run attempt.");
+            const path = require("path");
+            const { pathToFileURL } = require("url");
+            const { readReviewSummary } = await import(pathToFileURL(
+              path.join(process.env.GITHUB_WORKSPACE, ".github/workflows/ghaw-pr-performance/scripts/performance-review.mjs")).href);
+            let reviewSummary = "Review summary missing; see worker run";
+            let summaryDelivered = false;
+            let head = process.env.REVIEWED_HEAD_SHA;
+            if (process.env.WORKER_RUN_ID) {
+              try {
+                const { execFileSync } = require("child_process");
+                const directory = path.join(process.env.RUNNER_TEMP, "performance-check-summary");
+                fs.mkdirSync(directory);
+                execFileSync("gh", ["run", "download", process.env.WORKER_RUN_ID,
+                  "--repo", `${context.repo.owner}/${context.repo.repo}`,
+                  "--name", `performance-summary-${process.env.PR_NUMBER}-${process.env.REVIEWED_HEAD_SHA}`,
+                  "--dir", directory], {
+                    env: process.env, timeout: 30000, stdio: "pipe"
+                  });
+                reviewSummary = readReviewSummary(directory);
+                const recordedHead = fs.readFileSync(path.join(directory, "review-head.txt"), "utf8").trim();
+                if (!/^[0-9a-f]{40}$/.test(recordedHead)) throw new Error("Worker report head is malformed.");
+                if (process.env.RUN_OUTCOME === "success") head = recordedHead;
+                summaryDelivered = true;
+              } catch (error) {
+                core.warning(`Review summary missing or unreadable: ${error.message}; see worker run`);
+              }
+            } else {
+              core.warning("Review summary missing: no correlated worker run; see controller run");
+            }
+            let conclusion = process.env.RUN_OUTCOME === "success" && !summaryDelivered
+              ? "action_required" : process.env.RUN_OUTCOME;
+            const summary = [
+              `Run outcome: **${process.env.RUN_OUTCOME}** (workflow execution, not build/test validation)`,
+              `Summary delivery: **${summaryDelivered ? "completed" : "missing or unreadable; action required"}**`,
+              `Reviewed head: \`${process.env.REVIEWED_HEAD_SHA}\``,
+              `[Controller run report](${process.env.CONTROLLER_RUN_URL})`,
+              process.env.WORKER_RUN_URL
+                ? `[Agentic worker report](${process.env.WORKER_RUN_URL}) — ${process.env.WORKER_CONCLUSION}`
+                : "Agentic worker was not started or could not be correlated.",
+              "### Agent-written review",
+              reviewSummary
+            ].filter(Boolean).join("\n\n");
+            const marker = "<!-- ghaw-pr-performance-report -->";
+            const runMarker = `<!-- ghaw-pr-performance-run:${context.runId}:${runAttempt} -->`;
+            const reportVersion = comment => {
+              const recorded = /^<!-- ghaw-pr-performance-report -->\r?\n<!-- ghaw-pr-performance-run:([1-9][0-9]*):([1-9][0-9]*) -->/.exec(comment?.body ?? "");
+              return recorded ? [BigInt(recorded[1]), BigInt(recorded[2])] : [0n, 0n];
+            };
+            const readExistingReport = async () => {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                ...context.repo, issue_number: Number(process.env.PR_NUMBER), per_page: 100
+              });
+              return comments.filter(comment =>
+                comment.user?.login === "github-actions[bot]" && comment.body?.startsWith(marker))
+                .reduce((latest, comment) => {
+                  if (!latest) return comment;
+                  const [run, attempt] = reportVersion(comment);
+                  const [latestRun, latestAttempt] = reportVersion(latest);
+                  return run > latestRun || (run === latestRun && attempt > latestAttempt) ||
+                    (run === latestRun && attempt === latestAttempt && comment.id > latest.id) ? comment : latest;
+                }, undefined);
+            };
+            const newerReport = comment => {
+              const [run, attempt] = reportVersion(comment);
+              return run > BigInt(context.runId) || (run === BigInt(context.runId) && attempt > BigInt(runAttempt));
+            };
+            if (newerReport(await readExistingReport())) {
+              core.warning("Older controller result skipped: a newer run already owns the Conversation report.");
+              await core.summary.addRaw(`${summary}\n\nConversation delivery: **superseded by newer run**`).write();
+              return;
+            }
+            const { data: check } = await github.rest.checks.create({
+              ...context.repo,
+              name: "Performance review",
+              head_sha: head,
+              status: "completed",
+              conclusion: conclusion === "success" ? "action_required" : conclusion,
+              details_url: process.env.CONTROLLER_RUN_URL,
+              external_id: `${context.runId}-${runAttempt}`,
+              output: { title: "Performance review run report", summary: `${summary}\n\nConversation delivery: **pending**` }
+            });
+            await core.summary.addRaw(summary).write();
+            let currentPr;
+            for (let attempt = 0; attempt < 6; attempt++) {
+              ({ data: currentPr } = await github.rest.pulls.get({
+                ...context.repo, pull_number: Number(process.env.PR_NUMBER)
+              }));
+              if (currentPr.head.sha === head || head === process.env.REVIEWED_HEAD_SHA ||
+                  currentPr.head.sha !== process.env.REVIEWED_HEAD_SHA || attempt === 5) break;
+              await require("timers/promises").setTimeout(2000);
+            }
+            let conversationDelivery = "completed";
+            const existing = await readExistingReport();
+            if (newerReport(existing)) {
+              conversationDelivery = "superseded by newer run";
+              conclusion = "cancelled";
+              core.warning("Older controller result skipped after final Conversation freshness read.");
+            } else if (currentPr.head.sha !== head) {
+              core.warning(`Conversation report skipped: reviewed result ${head} is no longer the PR head.`);
+              conversationDelivery = "skipped: expected head not observed; action required";
+              if (conclusion === "success") conclusion = "action_required";
+            } else {
+              const body = `${marker}\n${runMarker}\n## Performance review\n\n${summary.replaceAll("@", "@\u200b")}`;
+              if (body.length > 65536) throw new Error("Performance Conversation report exceeds GitHub's comment limit.");
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  ...context.repo, comment_id: existing.id, body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: Number(process.env.PR_NUMBER), body
+                });
+              }
+            }
+            await github.rest.checks.update({
+              ...context.repo, check_run_id: check.id, conclusion,
+              output: { title: "Performance review run report", summary: `Conversation delivery: **${conversationDelivery}**\n\n${summary}` }
+            });
+            if (conclusion === "action_required") throw new Error("Performance report delivery requires action.");
