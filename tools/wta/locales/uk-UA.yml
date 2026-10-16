@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Увійдіть через агента та ви
 setup.auth.select_method: "Виберіть спосіб входу, щоб продовжити тут."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Щоб змінити агента, перейдіть до Інтелектуальний Термінал Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Не вдалося запустити %{agent}."
+setup.subtitle.acp_missing: "Сервер ACP для %{agent} не встановлено. Його буде встановлено автоматично."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Я увійшов — спробувати підкл�
 setup.option.retry_connection: "Спробувати підключитися знову"
 setup.status.installing: "Встановлення..."
 setup.status.installing_copilot_cli: "Інсталяція GitHub Copilot CLI"
+setup.status.installing_acp: "Інсталяція ACP для %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Підключення до %{agent}"
 setup.status.install_failed: "Помилка встановлення: "
 setup.status.installing_winget: " Встановлення через winget..."
@@ -133,6 +135,7 @@ agent.install.launch_failed: "Не вдалося запустити winget: %{e
 agent.install.winget_exited: "winget завершився несподівано: %{error}"
 agent.install.winget_failed_code: "Встановлення winget не вдалося (код завершення %{code})"
 agent.install.unsupported: "Автоматичне встановлення не підтримується для %{agent}"
+agent.install.acp_failed: "Не вдалося встановити сервер ACP для %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Переконайтеся, що %{name} встановлено та є в PATH."  # {Locked="PATH"}
 
 # ── Перегляд агентів (src/ui/agents_view.rs) ─────────────────────────────────────

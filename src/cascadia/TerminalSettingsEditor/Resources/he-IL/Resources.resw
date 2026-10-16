@@ -3089,4 +3089,16 @@ Alt+Shift+/ הזן הנחיה; Alt+Shift+B הפעל ללא הנחיה התחלת
     <value>עיצוב תשובות הסוכן לאחר סיום ההזרמה, כולל תשובות בהיסטוריה השמורה.</value>
     <comment>Description of the reply-formatting toggle, shared by Settings and first-run setup. Only AI agent replies are formatted; live text stays literal. Stopped replies include completed, canceled, or failed responses. History means saved conversations, not shell command history.</comment>
   </data>
+  <data name="AIAgents_AcpPreparing.Text" xml:space="preserve">
+    <value>מתקין את שרת ה-ACP של הסוכן...</value>
+    <comment>Progress shown in AI Agents Settings while preparing a separately distributed Agent Client Protocol server. This does not install the ordinary agent CLI or sign in. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_AcpPreparationFailed.Text" xml:space="preserve">
+    <value>לא ניתן היה להתקין את שרת ה-ACP של הסוכן. בדוק את הרשת ואת ההתקנה ולאחר מכן נסה שוב.</value>
+    <comment>Error shown in AI Agents Settings when the separate Agent Client Protocol server cannot be prepared. The adjacent button retries installation. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_RetryAcpPreparation.Content" xml:space="preserve">
+    <value>נסה שוב</value>
+    <comment>Button in AI Agents Settings that retries preparation of the separately distributed ACP server after installation failed.</comment>
+  </data>
 </root>

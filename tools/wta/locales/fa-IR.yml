@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "لطفاً از طریق عامل هوش مصنو�
 setup.auth.select_method: "برای ادامه در اینجا، یک روش ورود انتخاب کنید."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "برای تغییر عامل‌های هوش مصنوعی، به پایانه هوشمند Settings > Agent بروید."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "نتوانستیم %{agent} را راه‌اندازی کنیم."
+setup.subtitle.acp_missing: "سرور ACP برای %{agent} نصب نشده است. به‌طور خودکار نصب خواهد شد."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "وارد شدم — دوباره اتصال را ام�
 setup.option.retry_connection: "دوباره برای اتصال تلاش کنید"
 setup.status.installing: "در حال نصب..."
 setup.status.installing_copilot_cli: "در حال نصب GitHub Copilot CLI"
+setup.status.installing_acp: "در حال نصب ACP برای %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "در حال اتصال به %{agent}"
 setup.status.install_failed: "نصب ناموفق بود: "
 setup.status.installing_winget: " در حال نصب از طریق winget..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "راه‌اندازی winget ناموفق بود: 
 agent.install.winget_exited: "winget به طور غیرمنتظره خارج شد: %{error}"
 agent.install.winget_failed_code: "نصب winget ناموفق بود (کد خروج %{code})"
 agent.install.unsupported: "نصب خودکار برای %{agent} پشتیبانی نمی‌شود"
+agent.install.acp_failed: "نصب سرور ACP برای %{agent} ممکن نشد: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "مطمئن شوید که %{name} نصب شده و در PATH شما قرار دارد."  # {Locked="PATH"}
 
 # ── نمای عامل‌های هوش مصنوعی (src/ui/agents_view.rs) ─────────────────────────────────────

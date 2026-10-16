@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Conectați-vă prin agent, apoi selectați \"M-am 
 setup.auth.select_method: "Selectați o metodă de conectare pentru a continua aici."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Pentru a schimba agentul, accesați Terminal Inteligent Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Nu am putut porni %{agent}."
+setup.subtitle.acp_missing: "Serverul ACP pentru %{agent} nu este instalat. Va fi instalat automat."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "M-am conectat — reîncercați conectarea"
 setup.option.retry_connection: "Încercați să vă conectați din nou"
 setup.status.installing: "Se instalează..."
 setup.status.installing_copilot_cli: "Se instalează GitHub Copilot CLI"
+setup.status.installing_acp: "Se instalează ACP pentru %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Se conectează la %{agent}"
 setup.status.install_failed: "Instalarea a eșuat: "
 setup.status.installing_winget: " Se instalează prin winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Failed to launch winget: %{error}"
 agent.install.winget_exited: "winget exited unexpectedly: %{error}"
 agent.install.winget_failed_code: "winget install failed (exit code %{code})"
 agent.install.unsupported: "Automatic install not supported for %{agent}"
+agent.install.acp_failed: "Nu s-a putut instala serverul ACP pentru %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Asigurați-vă că %{name} este instalat și în PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

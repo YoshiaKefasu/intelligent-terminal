@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "براہ کرم ایجنٹ کے ذریعے سائ�
 setup.auth.select_method: "یہاں جاری رکھنے کے لیے سائن ان کا طریقہ منتخب کریں۔"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "ایجنٹ تبدیل کرنے کے لیے ذہین ٹرمینل Settings > Agent پر جائیں۔"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "ہم %{agent} کو شروع نہیں کر سکے۔"
+setup.subtitle.acp_missing: "%{agent} کے لیے ACP سرور انسٹال نہیں ہے۔ یہ خودکار طور پر انسٹال ہو جائے گا۔"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "میں نے سائن ان کر لیا — دوبارہ
 setup.option.retry_connection: "دوبارہ جوڑنے کی کوشش کریں"
 setup.status.installing: "انسٹال ہو رہا ہے..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI انسٹال ہو رہا ہے"
+setup.status.installing_acp: "%{agent} کے لیے ACP انسٹال ہو رہا ہے"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} سے منسلک ہو رہا ہے"
 setup.status.install_failed: "انسٹال ناکام: "
 setup.status.installing_winget: " winget کے ذریعے انسٹال ہو رہا ہے..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget شروع کرنے میں ناکامی: %{er
 agent.install.winget_exited: "winget غیر متوقع طور پر بند ہو گیا: %{error}"
 agent.install.winget_failed_code: "winget انسٹال ناکام (ایگزٹ کوڈ %{code})"
 agent.install.unsupported: "%{agent} کے لیے خودکار انسٹال معاونت نہیں ہے"
+agent.install.acp_failed: "%{agent} کے لیے ACP سرور انسٹال نہیں ہو سکا: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "یقینی بنائیں کہ %{name} انسٹال ہے اور آپ کے PATH میں ہے۔"  # {Locked="PATH"}
 
 # ── ایجنٹ منظر (src/ui/agents_view.rs) ─────────────────────────────────────

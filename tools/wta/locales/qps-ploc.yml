@@ -15,6 +15,7 @@ setup.auth.external_sign_in: "[Ṗĺéåśé śïğñ ïñ ṽïå ţĥé åğé
 setup.auth.select_method: "[Ŝéĺéçţ å śïğñ-ïñ ḿéţĥöď ţö çöñţïñûé ĥéŕé.!!!! !!!!]"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "[Ţö śŵïţçĥ åğéñţś, ğö ţö Intelligent Terminal Settings > Agent.!!!! !!!!]"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "[Ŵé çöûĺďñ'ţ śţåŕţ %{agent}.!!!!]"
+setup.subtitle.acp_missing: "[Ţĥé ACP śéŕṽéŕ ƒöŕ %{agent} ïś ñöţ ïñśţåĺĺéď. Ïţ ŵïĺĺ ƀé ïñśţåĺĺéď åûţöḿåţïçåĺĺÿ.!!!! !!!! !!!! !!!!]"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked="Intelligent Terminal"}, {Locked="Settings"}
 
@@ -26,6 +27,7 @@ setup.option.retry_auth: "[Ï'ṽé śïğñéð ïñ — ţŕÿ çöññéçţ�
 setup.option.retry_connection: "[Ţŕÿ çöññéçţïñğ åğåïñ!!!!]"
 setup.status.installing: "[Îñśţåĺĺïñğ...!!]"
 setup.status.installing_copilot_cli: "[Îñśţåĺĺïñğ GitHub Copilot CLI!!!!]"
+setup.status.installing_acp: "[Îñśţåĺĺïñğ %{agent} ACP!!!!]"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "[Çöññéçţïñğ %{agent}!!!!]"
 setup.status.install_failed: "[Îñśţåĺĺ ƒåïĺéď: !!]"
 setup.status.installing_winget: "[ Îñśţåĺĺïñğ ṽïå winget...!!!! !!!!]"
@@ -126,6 +128,7 @@ agent.install.launch_failed: "[Ƒåïĺéď ţö ĺåûñçĥ winget: %{error}!!
 agent.install.winget_exited: "[winget éxïţéď ûñéxṗéçţéďĺÿ: %{error}!!!! !!!! !!!!]"
 agent.install.winget_failed_code: "[winget ïñśţåĺĺ ƒåïĺéď (éxïţ çöďé %{code})!!!! !!!! !!!!]"
 agent.install.unsupported: "[Àûţöḿåţïç ïñśţåĺĺ ñöţ śûṗṗöŕţéď ƒöŕ %{agent}!!!! !!!! !!!!]"
+agent.install.acp_failed: "[Çöûĺď ñöţ ïñśţåĺĺ ţĥé ACP śéŕṽéŕ ƒöŕ %{agent}: %{error}!!!! !!!! !!!!]"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "[Ḿåķé śûŕé %{name} ïś ïñśţåĺĺéď åñď öñ ÿöûŕ PATH.!!!! !!!! !!!!]"  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

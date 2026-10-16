@@ -1803,6 +1803,11 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         const auto cmdline = _ResolveEffectiveAcpAgentCmdline();
         if (agentId.empty() || cmdline.empty())
         {
+            ++_acpProbeGeneration;
+            _acpProbing = false;
+            _acpPreparing = false;
+            _acpPreparationFailed = false;
+            _NotifyChanges(L"IsAcpPreparing", L"AcpPreparationFailed");
             return;
         }
 
@@ -1811,6 +1816,10 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         // the generation check.
         ++_acpProbeGeneration;
         _acpProbing = true;
+        _acpPreparing = ::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(
+            std::wstring_view{ agentId }, L"antigravity");
+        _acpPreparationFailed = false;
+        _NotifyChanges(L"IsAcpPreparing", L"AcpPreparationFailed");
         _RebuildAcpModelListFromCache();
         const auto cacheRevision = Model::AcpRuntimeState::Current().Revision(agentId);
         const auto telemetryAgentId = _StartsWithCustom(agentId) ? winrt::hstring{ L"custom" } : agentId;
@@ -1837,6 +1846,32 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         co_await winrt::resume_background();
 
         const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
+        if (::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(
+                std::wstring_view{ agentId }, L"antigravity"))
+        {
+            ::Microsoft::Terminal::WtaProcess::CaptureResult preparation;
+            if (!wtaPath.empty())
+            {
+                preparation = ::Microsoft::Terminal::WtaProcess::RunWtaCapture(
+                    wtaPath, L"install-acp --agent-id antigravity", 600'000);
+            }
+            co_await wil::resume_foreground(dispatcher);
+            if (generation != _acpProbeGeneration)
+            {
+                co_return;
+            }
+            _acpPreparing = false;
+            _acpPreparationFailed = !preparation.completed || preparation.exitCode != 0;
+            _NotifyChanges(L"IsAcpPreparing", L"AcpPreparationFailed");
+            if (_acpPreparationFailed)
+            {
+                _acpProbing = false;
+                LOG_HR_MSG(E_FAIL, "Antigravity ACP preparation failed (completed=%d, exit=%lu)", preparation.completed, preparation.exitCode);
+                _RebuildAcpModelListFromCache();
+                co_return;
+            }
+            co_await winrt::resume_background();
+        }
         std::string stdoutText;
         if (!wtaPath.empty())
         {
@@ -1846,7 +1881,14 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
             {
                 escaped.replace(pos, 1, L"\"\"");
             }
-            const std::wstring args = L"probe-models --agent \"" + escaped + L"\"";
+            const auto canonicalProbeId =
+                ::Microsoft::Terminal::Settings::Model::AgentRegistry::CanonicalNativeAgentProviderId(
+                    std::wstring_view{ agentId });
+            const auto probeAgentId = canonicalProbeId.empty() || canonicalProbeId.starts_with(L"custom:") ?
+                                          std::wstring_view{ L"custom" } :
+                                          canonicalProbeId;
+            const std::wstring args = L"probe-models --agent \"" + escaped + L"\" --agent-id \"" +
+                                      std::wstring{ probeAgentId } + L"\"";
             // WTA owns the shared three-attempt policy. The ceiling covers
             // three cold npx attempts (25s initialize + 10s session each)
             // plus retry delays and process startup slack.

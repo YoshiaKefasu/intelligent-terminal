@@ -3082,4 +3082,16 @@ Alt+Shift+/ 프롬프트 입력; Alt+Shift+B 초기 프롬프트 없이 실행</
     <value>스트리밍이 종료되면 에이전트 응답에 서식을 적용합니다. 저장된 기록의 응답에도 적용됩니다.</value>
     <comment>Description of the reply-formatting toggle, shared by Settings and first-run setup. Only AI agent replies are formatted; live text stays literal. Stopped replies include completed, canceled, or failed responses. History means saved conversations, not shell command history.</comment>
   </data>
+  <data name="AIAgents_AcpPreparing.Text" xml:space="preserve">
+    <value>에이전트의 ACP 서버 설치 중...</value>
+    <comment>Progress shown in AI Agents Settings while preparing a separately distributed Agent Client Protocol server. This does not install the ordinary agent CLI or sign in. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_AcpPreparationFailed.Text" xml:space="preserve">
+    <value>에이전트의 ACP 서버를 설치하지 못했습니다. 네트워크 및 설치 상태를 확인한 후 다시 시도하세요.</value>
+    <comment>Error shown in AI Agents Settings when the separate Agent Client Protocol server cannot be prepared. The adjacent button retries installation. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_RetryAcpPreparation.Content" xml:space="preserve">
+    <value>다시 시도</value>
+    <comment>Button in AI Agents Settings that retries preparation of the separately distributed ACP server after installation failed.</comment>
+  </data>
 </root>

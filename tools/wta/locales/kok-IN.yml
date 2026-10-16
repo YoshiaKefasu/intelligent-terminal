@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "उपकार करून एजेंट व�
 setup.auth.select_method: "हांगा फुडें वचपाक साइन इन करपाची पद्दत वेंचात."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "एजेंट बदलपाक इंटेलिजंट टर्मिनल Settings > Agent कडेन वचात."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} सुरू करपाक आमकां जमलें ना."
+setup.subtitle.acp_missing: "%{agent} खातीर ACP सर्व्हर इन्स्टॉल जावंक ना. तो आपशींच इन्स्टॉल जातलो."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "म्हणें सायन इन केलां
 setup.option.retry_connection: "परत जोडपाक यत्न करात"
 setup.status.installing: "इन्स्टॉल जाता..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI इन्स्टॉल जाता"
+setup.status.installing_acp: "%{agent} खातीर ACP इन्स्टॉल जाता"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} कडेन जोडटा"
 setup.status.install_failed: "इन्स्टॉल अपेशी: "
 setup.status.installing_winget: " winget वरवीं इन्स्टॉल जाता..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget सुरू करपाक अपेश�
 agent.install.winget_exited: "winget अनपेक्षित रितीन बंद जालें: %{error}"
 agent.install.winget_failed_code: "winget इन्स्टॉल अपेशी (एक्झिट कोड %{code})"
 agent.install.unsupported: "%{agent} खातीर आपशीं इन्स्टॉल समर्थित ना"
+agent.install.acp_failed: "%{agent} खातीर ACP सर्व्हर इन्स्टॉल करपाक जमलें ना: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} इन्स्टॉल आसा आनी तुमच्या PATH चेर आसा हें खात्री करात."  # {Locked="PATH"}
 
 # ── एजेंट दृश्य (src/ui/agents_view.rs) ─────────────────────────────────────

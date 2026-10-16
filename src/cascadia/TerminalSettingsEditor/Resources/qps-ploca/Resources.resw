@@ -3039,4 +3039,16 @@ Alt+Shift+/ enter a prompt; Alt+Shift+B launch without an initial prompt.</value
     <value>[!!_Ｆｏｒｍａｔ ａｇｅｎｔ ｒｅｐｌｉｅｓ ａｆｔｅｒ ｓｔｒｅａｍｉｎｇ ｓｔｏｐｓ， ｉｎｃｌｕｄｉｎｇ ｒｅｐｌｉｅｓ ｉｎ ｓａｖｅｄ ｈｉｓｔｏｒｙ．_!!]</value>
     <comment>Description of the reply-formatting toggle, shared by Settings and first-run setup. Only AI agent replies are formatted; live text stays literal. Stopped replies include completed, canceled, or failed responses. History means saved conversations, not shell command history.</comment>
   </data>
+  <data name="AIAgents_AcpPreparing.Text" xml:space="preserve">
+    <value>[!!_Ｉｎｓｔａｌｌｉｎｇ ｔｈｅ ａｇｅｎｔ＇ｓ ACP ｓｅｒｖｅｒ．．．_!!]</value>
+    <comment>Progress shown in AI Agents Settings while preparing a separately distributed Agent Client Protocol server. This does not install the ordinary agent CLI or sign in. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_AcpPreparationFailed.Text" xml:space="preserve">
+    <value>[!!_Ｔｈｅ ａｇｅｎｔ＇ｓ ACP ｓｅｒｖｅｒ ｃｏｕｌｄ ｎｏｔ ｂｅ ｉｎｓｔａｌｌｅｄ． Ｃｈｅｃｋ ｙｏｕｒ ｎｅｔｗｏｒｋ ａｎｄ ｉｎｓｔａｌｌａｔｉｏｎ， ｔｈｅｎ ｔｒｙ ａｇａｉｎ．_!!]</value>
+    <comment>Error shown in AI Agents Settings when the separate Agent Client Protocol server cannot be prepared. The adjacent button retries installation. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_RetryAcpPreparation.Content" xml:space="preserve">
+    <value>[!!_Ｔｒｙ ａｇａｉｎ_!!]</value>
+    <comment>Button in AI Agents Settings that retries preparation of the separately distributed ACP server after installation failed.</comment>
+  </data>
 </root>

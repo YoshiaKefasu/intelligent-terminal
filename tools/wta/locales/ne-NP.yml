@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "कृपया एजेन्टमार्फ�
 setup.auth.select_method: "यहाँ जारी राख्न साइन इन गर्ने विधि चयन गर्नुहोस्।"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "एजेन्ट बदल्न इन्टेलिजेन्ट टर्मिनल Settings > Agent मा जानुहोस्।"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "हामीले %{agent} सुरु गर्न सकेनौँ।"
+setup.subtitle.acp_missing: "%{agent} का लागि ACP सर्भर स्थापना भएको छैन। यो स्वचालित रूपमा स्थापना हुनेछ।"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "मैले साइन इन गरें — प�
 setup.option.retry_connection: "पुनः जडान गर्ने प्रयास गर्नुहोस्"
 setup.status.installing: "स्थापना हुँदैछ..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI स्थापना हुँदैछ"
+setup.status.installing_acp: "%{agent} का लागि ACP स्थापना हुँदैछ"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}सँग जडान हुँदैछ"
 setup.status.install_failed: "स्थापना विफल: "
 setup.status.installing_winget: " winget मार्फत स्थापना हुँदैछ..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget सुरु गर्न विफल: %{e
 agent.install.winget_exited: "winget अप्रत्याशित रूपमा बन्द भयो: %{error}"
 agent.install.winget_failed_code: "winget स्थापना विफल (एग्जिट कोड %{code})"
 agent.install.unsupported: "%{agent} को लागि स्वचालित स्थापना समर्थित छैन"
+agent.install.acp_failed: "%{agent} का लागि ACP सर्भर स्थापना गर्न सकिएन: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} स्थापित छ र तपाईँको PATH मा छ भनी सुनिश्चित गर्नुहोस्।"  # {Locked="PATH"}
 
 # ── एजेन्ट दृश्य (src/ui/agents_view.rs) ─────────────────────────────────────

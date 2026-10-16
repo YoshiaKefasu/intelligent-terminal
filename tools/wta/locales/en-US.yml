@@ -19,6 +19,7 @@ setup.auth.external_sign_in: "Please sign in via the agent, then select \"I've s
 setup.auth.select_method: "Select a sign-in method to continue here."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "To switch agents, go to Intelligent Terminal Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "We couldn't start %{agent}."  # Connection failure shown for an AI agent; %{agent} is its display name.
+setup.subtitle.acp_missing: "The ACP server for %{agent} is not installed. It will be installed automatically."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # Button label on setup screen — install the selected agent via winget
 setup.option.install: "Install %{agent}"
@@ -30,6 +31,7 @@ setup.option.retry_auth: "I've signed in — try connecting again"
 setup.option.retry_connection: "Try connecting again"  # Button label that retries a failed AI-agent connection.
 setup.status.installing: "Installing..."
 setup.status.installing_copilot_cli: "Installing GitHub Copilot CLI"  # Busy status shown during installation. {Locked="GitHub Copilot","CLI"}
+setup.status.installing_acp: "Installing %{agent} ACP"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Connecting %{agent}"  # Busy status shown while connecting to an AI agent. Keep the %{agent} placeholder.
 setup.status.install_failed: "Install failed: "
 setup.status.installing_winget: " Installing via winget..."
@@ -195,6 +197,7 @@ agent.install.launch_failed: "Failed to launch winget: %{error}"
 agent.install.winget_exited: "winget exited unexpectedly: %{error}"
 agent.install.winget_failed_code: "winget install failed (exit code %{code})"
 agent.install.unsupported: "Automatic install not supported for %{agent}"
+agent.install.acp_failed: "Could not install the ACP server for %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Make sure %{name} is installed and on your PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

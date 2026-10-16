@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "ദയവായി ഏജന്റ് വഴി �
 setup.auth.select_method: "ഇവിടെ തുടരാൻ സൈൻ ഇൻ രീതി തിരഞ്ഞെടുക്കുക."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "ഏജന്റ് മാറ്റാന്‍ ഇന്റലിജന്റ് ടെർമിനൽ Settings > Agent-ലേക്ക് പോകുക."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} ആരംഭിക്കാനായില്ല."
+setup.subtitle.acp_missing: "%{agent}-നുള്ള ACP സെർവർ ഇൻസ്റ്റാൾ ചെയ്തിട്ടില്ല. അത് സ്വയമേവ ഇൻസ്റ്റാൾ ചെയ്യും."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "ഞാൻ സൈൻ ഇൻ ചെയ്‌തു — �
 setup.option.retry_connection: "വീണ്ടും കണക്ട് ചെയ്യാൻ ശ്രമിക്കുക"
 setup.status.installing: "ഇന്‍സ്റ്റാള്‍ ചെയ്യുന്നു..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ഇൻസ്റ്റാൾ ചെയ്യുന്നു"
+setup.status.installing_acp: "%{agent}-നുള്ള ACP ഇൻസ്റ്റാൾ ചെയ്യുന്നു"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}-ലേക്ക് കണക്ട് ചെയ്യുന്നു"
 setup.status.install_failed: "ഇന്‍സ്റ്റാള്‍ പരാജയപ്പെട്ടു: "
 setup.status.installing_winget: " winget വഴി ഇന്‍സ്റ്റാള്‍ ചെയ്യുന്നു..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget ലോഞ്ച് ചെയ്യുന്
 agent.install.winget_exited: "winget അപ്രതീക്ഷിതമായി നിലച്ചു: %{error}"
 agent.install.winget_failed_code: "winget ഇന്‍സ്റ്റാള്‍ പരാജയപ്പെട്ടു (എക്സിറ്റ് കോഡ് %{code})"
 agent.install.unsupported: "%{agent}-ന് ഓട്ടോമാറ്റിക് ഇന്‍സ്റ്റാള്‍ പിന്തുണയ്ക്കുന്നില്ല"
+agent.install.acp_failed: "%{agent}-നുള്ള ACP സെർവർ ഇൻസ്റ്റാൾ ചെയ്യാനായില്ല: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} ഇന്‍സ്റ്റാള്‍ ചെയ്തിട്ടുണ്ടെന്നും നിങ്ങളുടെ PATH-ല്‍ ഉണ്ടെന്നും ഉറപ്പാക്കുക."  # {Locked="PATH"}
 
 # ── ഏജന്റുകളുടെ വ്യൂ (src/ui/agents_view.rs) ─────────────────────────────────────

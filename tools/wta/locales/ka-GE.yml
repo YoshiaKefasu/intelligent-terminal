@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "შედით აგენტით და შ�
 setup.auth.select_method: "აქ გასაგრძელებლად აირჩიეთ შესვლის მეთოდი."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "აგენტის შესაცვლელად გადადით ჭკვიანი ტერმინალი Settings > Agent-ში."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent}-ის გაშვება ვერ მოხერხდა."
+setup.subtitle.acp_missing: "%{agent}-ის ACP სერვერი არ არის დაინსტალირებული. ის ავტომატურად დაინსტალირდება."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "შევედი — კავშირის ხე
 setup.option.retry_connection: "კავშირის ხელახლა ცდა"
 setup.status.installing: "ინსტალაცია..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI პროგრამის ინსტალაცია"
+setup.status.installing_acp: "%{agent}-ის ACP-ის ინსტალაცია"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}-თან დაკავშირება"
 setup.status.install_failed: "ინსტალაცია ვერ მოხერხდა: "
 setup.status.installing_winget: " winget-ით ინსტალაცია..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget-ის გაშვება ვერ მ�
 agent.install.winget_exited: "winget მოულოდნელად შეწყდა: %{error}"
 agent.install.winget_failed_code: "winget ინსტალაცია ვერ მოხერხდა (გასვლის კოდი %{code})"
 agent.install.unsupported: "ავტომატური ინსტალაცია არ არის მხარდაჭერილი %{agent}-ისთვის"
+agent.install.acp_failed: "%{agent}-ის ACP სერვერის დაინსტალირება ვერ მოხერხდა: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "დარწმუნდით, რომ %{name} დაინსტალირებულია და თქვენს PATH-ზეა."  # {Locked="PATH"}
 
 # ── აგენტების ხედი (src/ui/agents_view.rs) ─────────────────────────────────

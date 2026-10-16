@@ -3046,4 +3046,16 @@ Alt+Shift+/ einen Prompt eingeben; Alt+Shift+B ohne anfänglichen Prompt starten
     <value>Antworten von KI-Agenten nach dem Ende der Übertragung formatieren, einschließlich Antworten im gespeicherten Verlauf.</value>
     <comment>Description of the reply-formatting toggle, shared by Settings and first-run setup. Only AI agent replies are formatted; live text stays literal. Stopped replies include completed, canceled, or failed responses. History means saved conversations, not shell command history.</comment>
   </data>
+  <data name="AIAgents_AcpPreparing.Text" xml:space="preserve">
+    <value>ACP-Server des Agenten wird installiert...</value>
+    <comment>Progress shown in AI Agents Settings while preparing a separately distributed Agent Client Protocol server. This does not install the ordinary agent CLI or sign in. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_AcpPreparationFailed.Text" xml:space="preserve">
+    <value>Der ACP-Server des Agenten konnte nicht installiert werden. Überprüfen Sie Ihr Netzwerk und die Installation und versuchen Sie es dann erneut.</value>
+    <comment>Error shown in AI Agents Settings when the separate Agent Client Protocol server cannot be prepared. The adjacent button retries installation. {Locked="ACP"}</comment>
+  </data>
+  <data name="AIAgents_RetryAcpPreparation.Content" xml:space="preserve">
+    <value>Erneut versuchen</value>
+    <comment>Button in AI Agents Settings that retries preparation of the separately distributed ACP server after installation failed.</comment>
+  </data>
 </root>

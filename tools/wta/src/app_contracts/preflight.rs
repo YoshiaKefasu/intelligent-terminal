@@ -11,6 +11,7 @@ pub enum CheckStatus {
 #[derive(Debug, Clone)]
 pub struct PreflightResult {
     pub agent_id: String,
+    pub acp_bootstrap_available: bool,
     pub display_name: String,
     pub cli_status: CheckStatus,
     pub cli_path: Option<String>,
@@ -35,6 +36,7 @@ impl PreflightResult {
             .unwrap_or_else(|| canonical_id.to_string());
         Self {
             agent_id: canonical_id.to_string(),
+            acp_bootstrap_available: false,
             display_name,
             cli_status: CheckStatus::Passed,
             cli_path: None,

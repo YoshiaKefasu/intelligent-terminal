@@ -37,7 +37,15 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         SetupPhase::Installing => {
             lines.push(Line::from(vec![
                 Span::styled(
-                    t!("setup.status.installing_copilot_cli").into_owned(),
+                    if setup.preflight.agent_id == crate::agent_registry::ANTIGRAVITY_AGENT_ID {
+                        t!(
+                            "setup.status.installing_acp",
+                            agent = &setup.preflight.display_name
+                        )
+                        .into_owned()
+                    } else {
+                        t!("setup.status.installing_copilot_cli").into_owned()
+                    },
                     Style::new().fg(Color::Reset),
                 ),
                 Span::raw("  "),

@@ -1,16 +1,41 @@
 use anyhow::{Context, Result};
 
+pub(crate) async fn run_install_acp(agent_id: &str, wsl_distro: Option<&str>) -> Result<()> {
+    anyhow::ensure!(
+        agent_id.eq_ignore_ascii_case(crate::agent_registry::ANTIGRAVITY_AGENT_ID),
+        "this agent has no separately installable ACP dependency"
+    );
+    let server = match wsl_distro {
+        Some(distro) => crate::antigravity_acp::ensure_wsl(distro).await?,
+        None => crate::antigravity_acp::ensure_host()
+            .await?
+            .to_string_lossy()
+            .into_owned(),
+    };
+    println!(
+        "{}",
+        serde_json::json!({
+            "agent_id": crate::agent_registry::ANTIGRAVITY_AGENT_ID,
+            "server": server,
+            "dependency_present": true
+        })
+    );
+    Ok(())
+}
+
 /// Drive [`crate::protocol::acp::probe::probe_models`] on a tokio `LocalSet`
 /// (the ACP client connection is `!Send`), serialize the result to
 /// stdout, force-exit. See exit notes below.
-pub(crate) async fn run_models(agent: &str) -> Result<()> {
+pub(crate) async fn run_models(agent: &str, agent_id: Option<&str>) -> Result<()> {
     // Logging is initialized in `main()` (file, not stderr — the Settings UI
     // captures our stdout for the JSON payload and stderr would pollute it).
     tracing::info!("probe-models start: agent={}", agent);
 
     let local = tokio::task::LocalSet::new();
     let result = match local
-        .run_until(crate::protocol::acp::probe::probe_models(agent))
+        .run_until(crate::protocol::acp::probe::probe_models_for_agent(
+            agent, agent_id,
+        ))
         .await
     {
         Ok(r) => r,
@@ -72,6 +97,7 @@ struct HostAgentAvailabilityEntry {
     native_cli_found: bool,
     launch_ready: bool,
     requires_npx: bool,
+    acp_bootstrap_available: bool,
 }
 
 pub(crate) fn run_host_agents() -> Result<()> {
@@ -86,12 +112,13 @@ pub(crate) fn run_host_agents() -> Result<()> {
                 native_cli_found: status.native_cli_found,
                 launch_ready: status.launch_ready,
                 requires_npx: status.requires_npx,
+                acp_bootstrap_available: status.acp_bootstrap_available,
             }
         })
         .collect();
     let agents = availability
         .iter()
-        .filter(|status| status.launch_ready)
+        .filter(|status| status.launch_ready || status.acp_bootstrap_available)
         .map(|status| AgentSourceProbeEntry {
             id: status.id,
             display_name: status.display_name,
@@ -185,6 +212,7 @@ pub(crate) async fn run_host_sessions(agent: &str) -> Result<()> {
     use std::time::Duration;
 
     tracing::info!("probe-host-sessions start: agent={}", agent);
+    crate::antigravity_acp::prepare(agent, None, &crate::agent_source::AgentSource::Host).await?;
 
     // Resolve the CliSource from the agent command so the probe labels and
     // classifies rows the way production seeding does (which uses the real
@@ -282,6 +310,7 @@ mod tests {
                     native_cli_found: true,
                     launch_ready: true,
                     requires_npx: false,
+                    acp_bootstrap_available: false,
                 },
                 HostAgentAvailabilityEntry {
                     id: "claude",
@@ -289,6 +318,7 @@ mod tests {
                     native_cli_found: true,
                     launch_ready: false,
                     requires_npx: true,
+                    acp_bootstrap_available: false,
                 },
             ],
             npx_found: false,
@@ -308,5 +338,21 @@ mod tests {
         assert_eq!(availability[1]["launch_ready"], false);
         assert_eq!(availability[1]["requires_npx"], true);
         assert_eq!(payload["npx_found"], false);
+    }
+
+    #[test]
+    fn antigravity_bootstrap_metadata_does_not_claim_acp_readiness() {
+        let payload = serde_json::to_value(HostAgentAvailabilityEntry {
+            id: "antigravity",
+            display_name: "Google Antigravity",
+            native_cli_found: false,
+            launch_ready: false,
+            requires_npx: false,
+            acp_bootstrap_available: true,
+        })
+        .unwrap();
+        assert_eq!(payload["acp_bootstrap_available"], true);
+        assert_eq!(payload["launch_ready"], false);
+        assert_eq!(payload["native_cli_found"], false);
     }
 }

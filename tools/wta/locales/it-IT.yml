@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Accedi tramite l'agente, quindi seleziona \"Ho eff
 setup.auth.select_method: "Seleziona un metodo di accesso per continuare qui."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Per cambiare agente, vai a Terminale Intelligente Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Non è stato possibile avviare %{agent}."
+setup.subtitle.acp_missing: "Il server ACP di %{agent} non è installato. Verrà installato automaticamente."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Ho effettuato l'accesso — riprova a connetterti"
 setup.option.retry_connection: "Riprova a connetterti"
 setup.status.installing: "Installazione in corso..."
 setup.status.installing_copilot_cli: "Installazione di GitHub Copilot CLI"
+setup.status.installing_acp: "Installazione di ACP per %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Connessione a %{agent}"
 setup.status.install_failed: "Installazione non riuscita: "
 setup.status.installing_winget: " Installazione tramite winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Impossibile avviare winget: %{error}"
 agent.install.winget_exited: "winget terminato in modo imprevisto: %{error}"
 agent.install.winget_failed_code: "Installazione winget non riuscita (codice di uscita %{code})"
 agent.install.unsupported: "L'installazione automatica non è supportata per %{agent}"
+agent.install.acp_failed: "Impossibile installare il server ACP di %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Assicurati che %{name} sia installato e nel PATH."  # {Locked="PATH"}
 
 # ── Vista agenti (src/ui/agents_view.rs) ─────────────────────────────────────

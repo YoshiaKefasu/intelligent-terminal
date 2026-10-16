@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Prihláste sa cez agenta a potom vyberte nižšie 
 setup.auth.select_method: "Vyberte spôsob prihlásenia a pokračujte tu."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Ak chcete zmeniť agenta, prejdite do Inteligentný Terminál Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Nepodarilo sa spustiť agenta %{agent}."
+setup.subtitle.acp_missing: "Server ACP pre agenta %{agent} nie je nainštalovaný. Nainštaluje sa automaticky."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Prihlásil/a som sa — skúsiť sa znova pripojiť"
 setup.option.retry_connection: "Skúsiť sa znova pripojiť"
 setup.status.installing: "Inštalácia..."
 setup.status.installing_copilot_cli: "Inštalácia GitHub Copilot CLI"
+setup.status.installing_acp: "Inštalácia ACP pre agenta %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Pripájanie k %{agent}"
 setup.status.install_failed: "Inštalácia zlyhala: "
 setup.status.installing_winget: " Inštalácia cez winget..."
@@ -133,6 +135,7 @@ agent.install.launch_failed: "Failed to launch winget: %{error}"
 agent.install.winget_exited: "winget exited unexpectedly: %{error}"
 agent.install.winget_failed_code: "winget install failed (exit code %{code})"
 agent.install.unsupported: "Automatic install not supported for %{agent}"
+agent.install.acp_failed: "Nepodarilo sa nainštalovať server ACP pre agenta %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Uistite sa, že %{name} je nainštalovaný a je v PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

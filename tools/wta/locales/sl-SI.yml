@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Prijavite se prek agenta in nato spodaj izberite \
 setup.auth.select_method: "Izberite način prijave, da nadaljujete tukaj."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Za zamenjavo agenta pojdite v Inteligentni Terminal Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Agenta %{agent} ni bilo mogoče zagnati."
+setup.subtitle.acp_missing: "Strežnik ACP za agenta %{agent} ni nameščen. Nameščen bo samodejno."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Prijavil/a sem se — poskusite se znova povezati"
 setup.option.retry_connection: "Poskusite se znova povezati"
 setup.status.installing: "Nameščanje..."
 setup.status.installing_copilot_cli: "Nameščanje GitHub Copilot CLI"
+setup.status.installing_acp: "Nameščanje ACP za agenta %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Povezovanje s storitvijo %{agent}"
 setup.status.install_failed: "Namestitev ni uspela: "
 setup.status.installing_winget: " Nameščanje prek winget..."
@@ -133,6 +135,7 @@ agent.install.launch_failed: "Failed to launch winget: %{error}"
 agent.install.winget_exited: "winget exited unexpectedly: %{error}"
 agent.install.winget_failed_code: "winget install failed (exit code %{code})"
 agent.install.unsupported: "Automatic install not supported for %{agent}"
+agent.install.acp_failed: "Strežnika ACP za agenta %{agent} ni bilo mogoče namestiti: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Prepričajte se, da je %{name} nameščen in v PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

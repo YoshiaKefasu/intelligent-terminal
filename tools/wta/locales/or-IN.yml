@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "ଦୟାକରି ଏଜେଣ୍ଟ ମାଧ୍
 setup.auth.select_method: "ଏଠାରେ ଜାରି ରଖିବାକୁ ସାଇନ୍ ଇନ୍ ପଦ୍ଧତି ବାଛନ୍ତୁ।"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "ଏଜେଣ୍ଟ ବଦଳାଇବା ପାଇଁ ଇଣ୍ଟେଲିଜେଣ୍ଟ ଟର୍ମିନାଲ Settings > Agent କୁ ଯାଆନ୍ତୁ।"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "ଆମେ %{agent} ଆରମ୍ଭ କରିପାରିଲୁ ନାହିଁ।"
+setup.subtitle.acp_missing: "%{agent} ପାଇଁ ACP ସର୍ଭର ଇନ୍‌ଷ୍ଟଲ୍ ହୋଇନାହିଁ। ଏହା ସ୍ୱୟଂଚାଳିତ ଭାବରେ ଇନ୍‌ଷ୍ଟଲ୍ ହେବ।"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "ମୁଁ ସାଇନ୍ ଇନ୍ କରିଛି �
 setup.option.retry_connection: "ପୁନଃ ସଂଯୋଗ କରିବାକୁ ଚେଷ୍ଟା କରନ୍ତୁ"
 setup.status.installing: "ଇନ୍‌ଷ୍ଟଲ୍ ହେଉଛି..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ଇନ୍‌ଷ୍ଟଲ୍ ହେଉଛି"
+setup.status.installing_acp: "%{agent} ପାଇଁ ACP ଇନ୍‌ଷ୍ଟଲ୍ ହେଉଛି"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} ସହିତ ସଂଯୋଗ ହେଉଛି"
 setup.status.install_failed: "ଇନ୍‌ଷ୍ଟଲ୍ ବିଫଳ: "
 setup.status.installing_winget: " winget ମାଧ୍ୟମରେ ଇନ୍‌ଷ୍ଟଲ୍ ହେଉଛି..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget ଆରମ୍ଭ କରିବାରେ ବ�
 agent.install.winget_exited: "winget ଅପ୍ରତ୍ୟାଶିତ ଭାବେ ବନ୍ଦ ହେଲା: %{error}"
 agent.install.winget_failed_code: "winget ଇନ୍‌ଷ୍ଟଲ୍ ବିଫଳ (ଏକ୍ସିଟ୍ କୋଡ୍ %{code})"
 agent.install.unsupported: "%{agent} ପାଇଁ ସ୍ୱୟଂଚାଳିତ ଇନ୍‌ଷ୍ଟଲ୍ ସମର୍ଥିତ ନୁହେଁ"
+agent.install.acp_failed: "%{agent} ପାଇଁ ACP ସର୍ଭର ଇନ୍‌ଷ୍ଟଲ୍ କରାଯାଇପାରିଲା ନାହିଁ: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} ଇନ୍‌ଷ୍ଟଲ୍ ଅଛି ଏବଂ ଆପଣଙ୍କ PATH ରେ ଅଛି ବୋಲି ନିଶ୍ଚିତ କରନ୍ତୁ।"  # {Locked="PATH"}
 
 # ── ଏଜେଣ୍ଟ ଦୃଶ୍ୟ (src/ui/agents_view.rs) ─────────────────────────────────────

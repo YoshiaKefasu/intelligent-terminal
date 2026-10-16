@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "অনুগ্ৰহ কৰি এজেণ্ট
 setup.auth.select_method: "ইয়াত আগবাঢ়িবলৈ এটা চাইন ইন পদ্ধতি নিৰ্বাচন কৰক।"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "এজেণ্ট সলনি কৰিবলৈ ইন্টেলিজেন্ট টাৰ্মিনেল Settings > Agent লৈ যাওক।"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "আমি %{agent} আৰম্ভ কৰিব নোৱাৰিলোঁ।"
+setup.subtitle.acp_missing: "%{agent}-ৰ বাবে ACP ছাৰ্ভাৰ ইনষ্টল কৰা হোৱা নাই। ইয়াক স্বয়ংক্ৰিয়ভাৱে ইনষ্টল কৰা হ'ব।"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "মই চাইন ইন কৰিলোঁ — প�
 setup.option.retry_connection: "পুনৰ সংযোগ কৰিবলৈ চেষ্টা কৰক"
 setup.status.installing: "ইনষ্টল হৈ আছে..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ইনষ্টল হৈ আছে"
+setup.status.installing_acp: "%{agent}-ৰ ACP ইনষ্টল হৈ আছে"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}ৰ সৈতে সংযোগ হৈ আছে"
 setup.status.install_failed: "ইনষ্টল বিফল: "
 setup.status.installing_winget: " winget ৰ জৰিয়তে ইনষ্টল হৈ আছে..."
@@ -138,6 +140,7 @@ agent.install.launch_failed: "winget আৰম্ভ কৰাত বিফল: 
 agent.install.winget_exited: "winget অপ্ৰত্যাশিতভাৱে বন্ধ হ'ল: %{error}"
 agent.install.winget_failed_code: "winget ইনষ্টল বিফল (এক্সিট ক'ড %{code})"
 agent.install.unsupported: "%{agent} ৰ বাবে স্বয়ংক্ৰিয় ইনষ্টল সমৰ্থিত নহয়"
+agent.install.acp_failed: "%{agent}-ৰ বাবে ACP ছাৰ্ভাৰ ইনষ্টল কৰিব পৰা নগ'ল: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} ইনষ্টল কৰা হৈছে আৰু আপোনাৰ PATH ত আছে বুলি নিশ্চিত কৰক।"  # {Locked="PATH"}
 
 # ── এজেণ্ট দৃশ্য (src/ui/agents_view.rs) ─────────────────────────────────────

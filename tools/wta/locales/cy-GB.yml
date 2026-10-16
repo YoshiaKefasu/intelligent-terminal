@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Mewngofnodwch drwy'r asiant, yna dewiswch \"Rwyf w
 setup.auth.select_method: "Dewiswch ddull mewngofnodi i barhau yma."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "I newid asiantau, ewch i Terfynell Ddeallus Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Nid oedd modd cychwyn %{agent}."
+setup.subtitle.acp_missing: "Nid yw'r gweinydd ACP ar gyfer %{agent} wedi'i osod. Caiff ei osod yn awtomatig."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Rwyf wedi mewngofnodi — ceisiwch gysylltu eto"
 setup.option.retry_connection: "Ceisiwch gysylltu eto"
 setup.status.installing: "Yn gosod..."
 setup.status.installing_copilot_cli: "Yn gosod GitHub Copilot CLI"
+setup.status.installing_acp: "Yn gosod ACP ar gyfer %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Yn cysylltu â %{agent}"
 setup.status.install_failed: "Methodd y gosodiad: "
 setup.status.installing_winget: " Yn gosod drwy winget..."
@@ -125,6 +127,7 @@ agent.install.launch_failed: "Methwyd â lansio winget: %{error}"
 agent.install.winget_exited: "Gadawodd winget yn annisgwyl: %{error}"
 agent.install.winget_failed_code: "Methwyd â gosod winget (cod ymadael %{code})"
 agent.install.unsupported: "Ni chefnogir gosodiad awtomatig ar gyfer %{agent}"
+agent.install.acp_failed: "Nid oedd modd gosod y gweinydd ACP ar gyfer %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Gwnewch yn siŵr fod %{name} wedi'i osod ac ar eich PATH."  # {Locked="PATH"}
 
 # ── Golwg asiantau (src/ui/agents_view.rs) ─────────────────────────────────

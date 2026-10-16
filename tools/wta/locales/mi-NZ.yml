@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Takiuru mā te agent, kātahi ka kōwhiria \"Kua t
 setup.auth.select_method: "Kōwhiria he tikanga takiuru hei haere tonu i konei."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Ki te huri agent, haere ki Iho Atamai Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Kāore i taea te tīmata i a %{agent}."
+setup.subtitle.acp_missing: "Kāore anō kia tāutatia te tūmau ACP mō %{agent}. Ka tāutatia aunoatia."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Kua takiuru au — ngana anō ki te hono"
 setup.option.retry_connection: "Ngana anō ki te hono"
 setup.status.installing: "E tauta ana..."
 setup.status.installing_copilot_cli: "Kei te tāuta i a GitHub Copilot CLI"
+setup.status.installing_acp: "Kei te tāuta i te ACP mō %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Kei te hono ki %{agent}"
 setup.status.install_failed: "I rahua te tauta: "
 setup.status.installing_winget: " E tauta ana ma winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "I rahua te whakarewa i a winget: %{error}"
 agent.install.winget_exited: "I puta ohorere a winget: %{error}"
 agent.install.winget_failed_code: "I rahua te tauta winget (waehere putanga %{code})"
 agent.install.unsupported: "Kaore e tautokohia te tauta aunoa mo %{agent}"
+agent.install.acp_failed: "Kāore i taea te tāuta i te tūmau ACP mō %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Kia mohio kua tautahia a %{name} a kei runga i to PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

@@ -13,6 +13,7 @@ setup.auth.external_sign_in: "エージェントからサインインし、下�
 setup.auth.select_method: "ここで続行するには、サインイン方法を選択してください。"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "エージェントを切り替えるにはインテリジェント ターミナル Settings > Agent に移動してください。"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} を起動できませんでした。"
+setup.subtitle.acp_missing: "%{agent} の ACP サーバーがインストールされていません。自動的にインストールされます。"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 setup.option.install: "%{agent} をインストール"
 setup.option.install_hint: "（自動的にインストールされます）"
@@ -22,6 +23,7 @@ setup.option.retry_auth: "サインイン済み — 再接続を試行"
 setup.option.retry_connection: "もう一度接続を試す"
 setup.status.installing: "インストール中..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI をインストールしています"
+setup.status.installing_acp: "%{agent} の ACP をインストールしています"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} に接続しています"
 setup.status.install_failed: "インストール失敗: "
 setup.status.installing_winget: " winget 経由でインストール中..."
@@ -120,6 +122,7 @@ agent.install.launch_failed: "winget を起動できませんでした: %{error}
 agent.install.winget_exited: "winget が予期せず終了しました: %{error}"
 agent.install.winget_failed_code: "winget のインストールに失敗しました (終了コード %{code})"
 agent.install.unsupported: "%{agent} の自動インストールはサポートされていません"
+agent.install.acp_failed: "%{agent} の ACP サーバーをインストールできませんでした: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} がインストールされ、PATH 上にあることを確認してください。"  # {Locked="PATH"}
 
 # ── エージェント ビュー (src/ui/agents_view.rs) ─────────────────────────────────────

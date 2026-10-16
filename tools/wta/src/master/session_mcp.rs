@@ -19,7 +19,7 @@ use crate::agent_tools::session_mcp::{
     SERVER_NAME_PREFIX,
 };
 use crate::agent_tools::user_input::{UserInputRequest, UserInputResponse};
-use crate::protocol::acp::conn;
+use crate::protocol::acp::{conn, spawn::AgentStderrLog};
 
 const ENDPOINT_PATH: &str = "/mcp";
 const MAX_HEADER_BYTES: usize = 32 * 1024;
@@ -602,48 +602,46 @@ async fn start_wsl_relay(
     upstream_port: &str,
     listen_port: u16,
 ) -> Result<WslRelay> {
-    let mut command = tokio::process::Command::new("wsl.exe");
-    command
-        .arg("-d")
-        .arg(distro)
-        .arg("--")
-        .arg("python3")
-        .arg("-u")
-        .arg("-c")
-        .arg(WSL_RELAY_SCRIPT)
-        .arg(upstream_host)
-        .arg(upstream_port)
-        .arg(listen_port.to_string())
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .kill_on_drop(true);
-    #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
-
+    let python = resolve_wsl_relay_python(distro).await?;
+    let mut command = wsl_relay_command(distro, &python, upstream_host, upstream_port, listen_port);
     let mut child = command
         .spawn()
         .with_context(|| format!("start session MCP relay in WSL distro {distro}"))?;
+    let stderr_log = AgentStderrLog::new(format!("session MCP relay ({distro})"));
+    let stderr_task = child.stderr.take().map(|stderr| stderr_log.drain(stderr));
     let stdout = child
         .stdout
         .take()
         .context("WSL session MCP relay has no stdout")?;
     let mut stdout = tokio::io::BufReader::new(stdout);
-    let mut port = String::new();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        tokio::io::AsyncBufReadExt::read_line(&mut stdout, &mut port),
-    )
-    .await
-    .with_context(|| format!("timed out starting session MCP relay in {distro}"))?
-    .with_context(|| format!("read session MCP relay port from {distro}"))?;
-    let port = port
-        .trim()
-        .parse::<u16>()
-        .with_context(|| format!("invalid session MCP relay port from {distro}"))?;
-    if child.try_wait()?.is_some() {
-        anyhow::bail!("session MCP relay exited during startup in {distro}");
+    let startup: Result<u16> = async {
+        let port = read_wsl_relay_port(&mut stdout, distro).await?;
+        anyhow::ensure!(
+            child.try_wait()?.is_none(),
+            "session MCP relay exited during startup in {distro}"
+        );
+        Ok(port)
     }
+    .await;
+    let port = match startup {
+        Ok(port) => {
+            stderr_log.mark_initialized();
+            port
+        }
+        Err(error) => {
+            let details = stderr_log
+                .finish_failed_startup(&mut child, stderr_task)
+                .await;
+            return if details.is_empty() {
+                Err(error)
+            } else {
+                Err(error).context(format!(
+                    "WSL session MCP relay startup: {}",
+                    details.join("\n")
+                ))
+            };
+        }
+    };
     let endpoint = format!("http://127.0.0.1:{port}{ENDPOINT_PATH}");
     tracing::info!(
         target: "session_mcp",
@@ -656,6 +654,100 @@ async fn start_wsl_relay(
         port,
         child,
     })
+}
+
+fn native_wsl_relay_python_path(distro: &str, text: &str) -> Result<String> {
+    let path = text.trim();
+    anyhow::ensure!(
+        path.starts_with('/') && !path.starts_with("/mnt/") && !path.contains(['\0', '\r', '\n']),
+        "session MCP in WSL distro {distro} requires a native Linux Python 3 executable"
+    );
+    Ok(path.to_string())
+}
+
+async fn resolve_wsl_relay_python(distro: &str) -> Result<String> {
+    let python = crate::agent_check::find_wsl_exe(distro, "python3")
+        .await
+        .with_context(|| {
+            format!("session MCP in WSL distro {distro} requires native Python 3 in the default user's login environment")
+        })?;
+    let python = native_wsl_relay_python_path(distro, &python)?;
+    let mut command = tokio::process::Command::new("wsl.exe");
+    command
+        .args(["-d", distro, "--exec", "readlink", "-f", "--", &python])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = tokio::time::timeout(Duration::from_secs(10), command.output())
+        .await
+        .with_context(|| format!("resolve native session MCP Python timed out in {distro}"))?
+        .with_context(|| format!("resolve native session MCP Python in {distro}"))?;
+    anyhow::ensure!(
+        output.status.success(),
+        "could not resolve native session MCP Python in {distro}: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    let path =
+        String::from_utf8(output.stdout).context("native session MCP Python path was not UTF-8")?;
+    native_wsl_relay_python_path(distro, &path)
+}
+
+fn wsl_relay_command(
+    distro: &str,
+    python: &str,
+    upstream_host: &str,
+    upstream_port: &str,
+    listen_port: u16,
+) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new("wsl.exe");
+    command
+        .arg("-d")
+        .arg(distro)
+        .arg("--exec")
+        .arg(python)
+        .arg("-u")
+        .arg("-c")
+        .arg(WSL_RELAY_SCRIPT)
+        .arg(upstream_host)
+        .arg(upstream_port)
+        .arg(listen_port.to_string())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+async fn read_wsl_relay_port(
+    stdout: &mut (impl tokio::io::AsyncBufRead + Unpin),
+    distro: &str,
+) -> Result<u16> {
+    let mut port = String::new();
+    let bytes = tokio::time::timeout(
+        Duration::from_secs(10),
+        tokio::io::AsyncBufReadExt::read_line(stdout, &mut port),
+    )
+    .await
+    .with_context(|| format!("timed out starting session MCP relay in {distro}"))?
+    .with_context(|| format!("read session MCP relay port from {distro}"))?;
+    anyhow::ensure!(
+        bytes != 0,
+        "session MCP relay exited before reporting a listening port in {distro}"
+    );
+    let port = port
+        .trim()
+        .parse::<u16>()
+        .with_context(|| format!("invalid session MCP relay port from {distro}"))?;
+    anyhow::ensure!(
+        port != 0,
+        "session MCP relay reported an invalid zero port in {distro}"
+    );
+    Ok(port)
 }
 
 fn spawn_wsl_relay_supervisor(
@@ -1803,10 +1895,87 @@ mod tests {
     }
 
     #[test]
+    fn wsl_relay_python_path_rejects_missing_relative_and_windows_interop() {
+        for path in [
+            "",
+            "python3",
+            "/mnt/c/Python/python.exe",
+            "/usr/bin/python3\nnoise",
+            "/usr/bin/python3\0",
+        ] {
+            assert!(
+                native_wsl_relay_python_path("Debian", path).is_err(),
+                "{path:?}"
+            );
+        }
+        for path in [
+            "/usr/bin/python3",
+            "/home/Example User/.local/bin/python3\n",
+        ] {
+            assert_eq!(
+                native_wsl_relay_python_path("Debian", path).unwrap(),
+                path.trim()
+            );
+        }
+    }
+
+    #[test]
+    fn wsl_relay_launch_uses_the_selected_native_python() {
+        for python in ["/usr/bin/python3", "/home/Example User/.local/bin/python3"] {
+            let command = wsl_relay_command("Debian", python, "127.0.0.1", "43210", 0);
+            assert_eq!(
+                command
+                    .as_std()
+                    .get_args()
+                    .map(|arg| arg.to_str().unwrap())
+                    .collect::<Vec<_>>(),
+                [
+                    "-d",
+                    "Debian",
+                    "--exec",
+                    python,
+                    "-u",
+                    "-c",
+                    WSL_RELAY_SCRIPT,
+                    "127.0.0.1",
+                    "43210",
+                    "0",
+                ],
+                "relay startup must not lose the selected user's native login-shell Python"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn wsl_relay_readiness_rejects_eof() {
+        let mut input = &b""[..];
+        let error = read_wsl_relay_port(&mut input, "Debian").await.unwrap_err();
+        assert!(
+            format!("{error:#}").contains("exited before reporting"),
+            "an exited relay needs an explicit startup failure, not an empty-port parse error"
+        );
+    }
+
+    #[tokio::test]
+    async fn wsl_relay_readiness_rejects_zero_port() {
+        let mut input = &b"0\n"[..];
+        assert!(read_wsl_relay_port(&mut input, "Debian").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn wsl_relay_readiness_accepts_a_valid_port() {
+        let mut input = &b"43210\n"[..];
+        assert_eq!(
+            read_wsl_relay_port(&mut input, "Debian").await.unwrap(),
+            43210
+        );
+    }
+
+    #[test]
     fn wsl_relay_script_survives_wsl_interop_argument_expansion() {
         assert!(
             !WSL_RELAY_SCRIPT.contains('$'),
-            "wsl.exe expands dollar expressions before Python receives -c"
+            "the encoded PowerShell bridge must not depend on shell expansion"
         );
         assert!(WSL_RELAY_SCRIPT.contains("chr(36)"));
         assert!(WSL_RELAY_SCRIPT.contains("-EncodedCommand"));

@@ -440,6 +440,16 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: SessionsAction,
     },
+    /// Prepare a built-in agent's separately distributed ACP dependency.
+    /// Existing complete user installations are preserved without an update.
+    InstallAcp {
+        /// Built-in agent whose separate ACP dependency should be prepared.
+        #[arg(long)]
+        agent_id: String,
+        /// Install only in this explicitly selected distro's default-user source.
+        #[arg(long)]
+        wsl_distro: Option<String>,
+    },
     /// One-shot ACP handshake to read an agent's advertised model list.
     /// Spawned by the Settings UI when the user picks a new ACP agent so
     /// the model dropdown can populate before any real agent pane is
@@ -454,6 +464,9 @@ pub(crate) enum Command {
         /// "copilot --acp --stdio" or "npx -y @agentclientprotocol/claude-agent-acp").
         #[arg(long)]
         agent: String,
+        /// Authoritative built-in/custom identity supplied by the Settings caller.
+        #[arg(long)]
+        agent_id: Option<String>,
     },
     /// List built-in ACP agents installed inside one WSL distro.
     /// Used by the per-profile Settings picker.

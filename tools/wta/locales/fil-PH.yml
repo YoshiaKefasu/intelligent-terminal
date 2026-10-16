@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Mangyaring mag-sign in sa pamamagitan ng agent, pa
 setup.auth.select_method: "Pumili ng paraan ng pag-sign in para magpatuloy dito."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Para magpalit ng agent, pumunta sa Matalinong Terminal Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Hindi namin masimulan ang %{agent}."
+setup.subtitle.acp_missing: "Hindi pa naka-install ang ACP server para sa %{agent}. Awtomatiko itong mai-install."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Naka-sign in na ako — subukang kumonekta muli"
 setup.option.retry_connection: "Subukang kumonekta muli"
 setup.status.installing: "Ini-install..."
 setup.status.installing_copilot_cli: "Ini-install ang GitHub Copilot CLI"
+setup.status.installing_acp: "Ini-install ang ACP para sa %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Kumokonekta sa %{agent}"
 setup.status.install_failed: "Nabigo ang pag-install: "
 setup.status.installing_winget: " Ini-install sa pamamagitan ng winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Hindi mailunsad ang winget: %{error}"
 agent.install.winget_exited: "Hindi inaasahang lumabas ang winget: %{error}"
 agent.install.winget_failed_code: "Nabigo ang winget install (exit code %{code})"
 agent.install.unsupported: "Hindi suportado ang awtomatikong pag-install para sa %{agent}"
+agent.install.acp_failed: "Hindi ma-install ang ACP server para sa %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Tiyaking naka-install ang %{name} at nasa iyong PATH."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

@@ -19,6 +19,7 @@ namespace TerminalAppUnitTests
 
         TEST_METHOD(MapsAgentIdsToAcpCommands);
         TEST_METHOD(AntigravityUsesStandaloneAcpWithProtocolModels);
+        TEST_METHOD(AntigravityCliOnlyIsBootstrapCandidate);
         TEST_METHOD(AppendsSupportedModelFlags);
         TEST_METHOD(SuppressesCustomSelectionModelFlags);
         TEST_METHOD(CustomProvidersSupportOnlyChatCompletionsAgents);
@@ -32,6 +33,45 @@ namespace TerminalAppUnitTests
         TEST_METHOD(CustomCatalogSerializationIsCredentialFree);
         TEST_METHOD(LargeCustomCatalogDoesNotExpandHelperBootstrap);
     };
+
+    void AcpModelUtilsTests::AntigravityCliOnlyIsBootstrapCandidate()
+    {
+        namespace Registry = Microsoft::Terminal::Settings::Model::AgentRegistry;
+        namespace Availability = Microsoft::Terminal::AgentAvailability;
+        Json::Value payload{ Json::objectValue };
+        payload["npx_found"] = false;
+        payload["availability"] = Json::Value{ Json::arrayValue };
+        for (const auto& agent : Registry::BuiltinAcpAgents)
+        {
+            Json::Value entry{ Json::objectValue };
+            entry["id"] = winrt::to_string(agent.id);
+            entry["native_cli_found"] = false;
+            entry["launch_ready"] = false;
+            entry["requires_npx"] = false;
+            entry["acp_bootstrap_available"] = agent.id == L"antigravity";
+            payload["availability"].append(std::move(entry));
+        }
+        const auto snapshot = Availability::ParseHostAgentSnapshot(
+            Json::writeString(Json::StreamWriterBuilder{}, payload));
+        VERIFY_IS_TRUE(snapshot.has_value());
+        const auto& status = snapshot->availability.at(L"antigravity");
+        VERIFY_IS_FALSE(status.nativeCliFound);
+        VERIFY_IS_FALSE(status.launchReady);
+        VERIFY_IS_TRUE(status.acpBootstrapAvailable);
+        VERIFY_IS_FALSE(Availability::NeedsFreNodeBootstrap(snapshot, L"antigravity"));
+        const std::vector<Registry::BuiltinAgent> allowed{
+            Registry::BuiltinAcpAgents.begin(), Registry::BuiltinAcpAgents.end()
+        };
+        const auto choices = Availability::BuildFreAgentCandidates(allowed, snapshot, {}, {});
+        VERIFY_ARE_EQUAL(size_t{ 2 }, choices.size());
+        VERIFY_ARE_EQUAL(std::wstring{ L"antigravity" }, std::wstring{ choices.back().id });
+        const std::vector<Registry::BuiltinAgent> policyAllowed{ Registry::BuiltinAcpAgents.front() };
+        VERIFY_ARE_EQUAL(size_t{ 1 }, Availability::BuildFreAgentCandidates(policyAllowed, snapshot, {}, {}).size());
+        payload["availability"][0]["acp_bootstrap_available"] = true;
+        VERIFY_IS_FALSE(Availability::ParseHostAgentSnapshot(
+                            Json::writeString(Json::StreamWriterBuilder{}, payload))
+                            .has_value());
+    }
 
     void AcpModelUtilsTests::MapsAgentIdsToAcpCommands()
     {

@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "অনুগ্রহ করে এজেন্ট
 setup.auth.select_method: "এখানে চালিয়ে যেতে একটি সাইন ইন পদ্ধতি নির্বাচন করুন।"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "এজেন্ট পরিবর্তন করতে ইন্টেলিজেন্ট টার্মিনাল Settings > Agent-এ যান।"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "আমরা %{agent} শুরু করতে পারিনি।"
+setup.subtitle.acp_missing: "%{agent}-এর ACP সার্ভার ইনস্টল করা নেই। এটি স্বয়ংক্রিয়ভাবে ইনস্টল হবে।"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "আমি সাইন ইন করেছি — আ�
 setup.option.retry_connection: "আবার সংযোগ করার চেষ্টা করুন"
 setup.status.installing: "ইনস্টল হচ্ছে..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ইনস্টল করা হচ্ছে"
+setup.status.installing_acp: "%{agent}-এর ACP ইনস্টল করা হচ্ছে"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}-এর সাথে সংযোগ করা হচ্ছে"
 setup.status.install_failed: "ইনস্টল ব্যর্থ: "
 setup.status.installing_winget: " winget-এর মাধ্যমে ইনস্টল হচ্ছে..."
@@ -138,6 +140,7 @@ agent.install.launch_failed: "winget চালু করতে ব্যর্�
 agent.install.winget_exited: "winget অপ্রত্যাশিতভাবে বন্ধ হয়েছে: %{error}"
 agent.install.winget_failed_code: "winget ইনস্টল ব্যর্থ (এক্সিট কোড %{code})"
 agent.install.unsupported: "%{agent}-এর জন্য স্বয়ংক্রিয় ইনস্টল সমর্থিত নয়"
+agent.install.acp_failed: "%{agent}-এর ACP সার্ভার ইনস্টল করা যায়নি: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "নিশ্চিত করুন যে %{name} ইনস্টল আছে এবং আপনার PATH-এ আছে।"  # {Locked="PATH"}
 
 # ── এজেন্ট দৃশ্য (src/ui/agents_view.rs) ─────────────────────────────────────

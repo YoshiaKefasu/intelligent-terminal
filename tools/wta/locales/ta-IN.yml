@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "முகவர் மூலம் உள்நு
 setup.auth.select_method: "இங்கே தொடர உள்நுழையும் முறையைத் தேர்ந்தெடுக்கவும்."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "முகவரை மாற்ற அறிவாண் முனையம் Settings > Agent-க்குச் செல்லுங்கள்."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent}-ஐத் தொடங்க முடியவில்லை."
+setup.subtitle.acp_missing: "%{agent}-க்கான ACP சேவையகம் நிறுவப்படவில்லை. அது தானாக நிறுவப்படும்."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "நான் உள்நுழைந்துவி�
 setup.option.retry_connection: "மீண்டும் இணைக்க முயற்சிக்கவும்"
 setup.status.installing: "நிறுவப்படுகிறது..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI நிறுவப்படுகிறது"
+setup.status.installing_acp: "%{agent}-க்கான ACP நிறுவப்படுகிறது"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} உடன் இணைக்கப்படுகிறது"
 setup.status.install_failed: "நிறுவல் தோல்வி: "
 setup.status.installing_winget: " winget வழியாக நிறுவப்படுகிறது..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget தொடங்குவதில் தோ
 agent.install.winget_exited: "winget எதிர்பாராதவிதமாக வெளியேறியது: %{error}"
 agent.install.winget_failed_code: "winget நிறுவல் தோல்வி (வெளியேற்றக் குறியீடு %{code})"
 agent.install.unsupported: "%{agent}-க்கு தானியங்கி நிறுவல் ஆதரிக்கப்படவில்லை"
+agent.install.acp_failed: "%{agent}-க்கான ACP சேவையகத்தை நிறுவ முடியவில்லை: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} நிறுவப்பட்டுள்ளதையும் உங்கள் PATH-ல் இருப்பதையும் உறுதிசெய்யவும்."  # {Locked="PATH"}
 
 # ── ஏஜெண்ட்கள் காட்சி (src/ui/agents_view.rs) ─────────────────────────────────────

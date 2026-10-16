@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Jelentkezzen be az ügynökön keresztül, majd v�
 setup.auth.select_method: "Válasszon bejelentkezési módot az itteni folytatáshoz."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Az ügynök váltásához lépjen az Intelligens Terminál Settings > Agent oldalra."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "A(z) %{agent} nem indult el."
+setup.subtitle.acp_missing: "A(z) %{agent} ügynök ACP-kiszolgálója nincs telepítve. A telepítés automatikusan megtörténik."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Bejelentkeztem — próbálja újra csatlakozni"
 setup.option.retry_connection: "Próbáljon újra csatlakozni"
 setup.status.installing: "Telepítés..."
 setup.status.installing_copilot_cli: "A GitHub Copilot CLI telepítése"
+setup.status.installing_acp: "A(z) %{agent} ügynök ACP-kiszolgálójának telepítése"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Csatlakozás a következőhöz: %{agent}"
 setup.status.install_failed: "A telepítés sikertelen: "
 setup.status.installing_winget: " Telepítés a winget segítségével..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Failed to launch winget: %{error}"
 agent.install.winget_exited: "winget exited unexpectedly: %{error}"
 agent.install.winget_failed_code: "winget install failed (exit code %{code})"
 agent.install.unsupported: "Automatic install not supported for %{agent}"
+agent.install.acp_failed: "Nem sikerült telepíteni a(z) %{agent} ügynök ACP-kiszolgálóját: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Győződjön meg róla, hogy a(z) %{name} telepítve van és elérhető a PATH-ban."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

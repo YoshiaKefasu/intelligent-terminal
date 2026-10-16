@@ -165,7 +165,13 @@ pub(crate) async fn run(command: Command, json_mode: bool) -> Result<()> {
             HooksAction::Status => hooks::run_status(json_mode),
             HooksAction::Uninstall { cli } => hooks::run_uninstall(cli, json_mode),
         },
-        Command::ProbeModels { agent } => probes::run_models(&agent).await,
+        Command::InstallAcp {
+            agent_id,
+            wsl_distro,
+        } => probes::run_install_acp(&agent_id, wsl_distro.as_deref()).await,
+        Command::ProbeModels { agent, agent_id } => {
+            probes::run_models(&agent, agent_id.as_deref()).await
+        }
         Command::ProbeAgentSources { wsl_distro } => probes::run_agent_sources(&wsl_distro).await,
         Command::ProbeHostAgents => probes::run_host_agents(),
         Command::ProbeProfileAgents => native_agent::probe(),

@@ -578,6 +578,7 @@ if it were canonical for the whole group.
 - **atomic-waker** v1.1.2 -- [https://github.com/smol-rs/atomic-waker](https://github.com/smol-rs/atomic-waker) -- `Apache-2.0 OR MIT`
 - **base62** v2.2.4 -- [https://github.com/fbernier/base62](https://github.com/fbernier/base62) -- `MIT`
 - **base64** v0.22.1 -- [https://github.com/marshallpierce/rust-base64](https://github.com/marshallpierce/rust-base64) -- `Apache-2.0 OR MIT`
+- **base64** v0.23.1 -- [https://github.com/marshallpierce/rust-base64](https://github.com/marshallpierce/rust-base64) -- `Apache-2.0 OR MIT`
 - **bit-set** v0.5.3 -- [https://github.com/contain-rs/bit-set](https://github.com/contain-rs/bit-set) -- `Apache-2.0 OR MIT`
 - **bit-vec** v0.6.3 -- [https://github.com/contain-rs/bit-vec](https://github.com/contain-rs/bit-vec) -- `Apache-2.0 OR MIT`
 - **bitflags** v1.3.2 -- [https://github.com/bitflags/bitflags](https://github.com/bitflags/bitflags) -- `Apache-2.0 OR MIT`
@@ -591,6 +592,7 @@ if it were canonical for the whole group.
 - **bytes** v1.11.1 -- [https://github.com/tokio-rs/bytes](https://github.com/tokio-rs/bytes) -- `MIT`
 - **castaway** v0.2.4 -- [https://github.com/sagebind/castaway](https://github.com/sagebind/castaway) -- `MIT`
 - **cfg-if** v1.0.4 -- [https://github.com/rust-lang/cfg-if](https://github.com/rust-lang/cfg-if) -- `Apache-2.0 OR MIT`
+- **chacha20** v0.10.2 -- [https://github.com/RustCrypto/stream-ciphers](https://github.com/RustCrypto/stream-ciphers) -- `Apache-2.0 OR MIT`
 - **chrono** v0.4.45 -- [https://github.com/chronotope/chrono](https://github.com/chronotope/chrono) -- `Apache-2.0 OR MIT`
 - **clap** v4.5.60 -- [https://github.com/clap-rs/clap](https://github.com/clap-rs/clap) -- `Apache-2.0 OR MIT`
 - **clap_builder** v4.5.60 -- [https://github.com/clap-rs/clap](https://github.com/clap-rs/clap) -- `Apache-2.0 OR MIT`
@@ -601,6 +603,7 @@ if it were canonical for the whole group.
 - **concurrent-queue** v2.5.0 -- [https://github.com/smol-rs/concurrent-queue](https://github.com/smol-rs/concurrent-queue) -- `Apache-2.0 OR MIT`
 - **convert_case** v0.10.0 -- [https://github.com/rutrum/convert-case](https://github.com/rutrum/convert-case) -- `MIT`
 - **cpufeatures** v0.2.17 -- [https://github.com/RustCrypto/utils](https://github.com/RustCrypto/utils) -- `Apache-2.0 OR MIT`
+- **cpufeatures** v0.3.1 -- [https://github.com/RustCrypto/utils](https://github.com/RustCrypto/utils) -- `Apache-2.0 OR MIT`
 - **crc32fast** v1.5.0 -- [https://github.com/srijs/rust-crc32fast](https://github.com/srijs/rust-crc32fast) -- `Apache-2.0 OR MIT`
 - **crossbeam-channel** v0.5.15 -- [https://github.com/crossbeam-rs/crossbeam](https://github.com/crossbeam-rs/crossbeam) -- `Apache-2.0 OR MIT`
 - **crossbeam-deque** v0.8.6 -- [https://github.com/crossbeam-rs/crossbeam](https://github.com/crossbeam-rs/crossbeam) -- `Apache-2.0 OR MIT`
@@ -618,6 +621,7 @@ if it were canonical for the whole group.
 - **derive_more** v2.1.1 -- [https://github.com/JelteF/derive_more](https://github.com/JelteF/derive_more) -- `MIT`
 - **derive_more-impl** v2.1.1 -- [https://github.com/JelteF/derive_more](https://github.com/JelteF/derive_more) -- `MIT`
 - **digest** v0.10.7 -- [https://github.com/RustCrypto/traits](https://github.com/RustCrypto/traits) -- `Apache-2.0 OR MIT`
+- **displaydoc** v0.2.7 -- [https://github.com/yaahc/displaydoc](https://github.com/yaahc/displaydoc) -- `Apache-2.0 OR MIT`
 - **document-features** v0.2.12 -- [https://github.com/slint-ui/document-features](https://github.com/slint-ui/document-features) -- `Apache-2.0 OR MIT`
 - **dyn-clone** v1.0.20 -- [https://github.com/dtolnay/dyn-clone](https://github.com/dtolnay/dyn-clone) -- `Apache-2.0 OR MIT`
 - **either** v1.15.0 -- [https://github.com/rayon-rs/either](https://github.com/rayon-rs/either) -- `Apache-2.0 OR MIT`
@@ -638,6 +642,7 @@ if it were canonical for the whole group.
 - **flate2** v1.1.9 -- [https://github.com/rust-lang/flate2-rs](https://github.com/rust-lang/flate2-rs) -- `Apache-2.0 OR MIT`
 - **fnv** v1.0.7 -- [https://github.com/servo/rust-fnv](https://github.com/servo/rust-fnv) -- `Apache-2.0 OR MIT`
 - **foldhash** v0.2.0 -- [https://github.com/orlp/foldhash](https://github.com/orlp/foldhash) -- `Zlib`
+- **form_urlencoded** v1.2.2 -- [https://github.com/servo/rust-url](https://github.com/servo/rust-url) -- `Apache-2.0 OR MIT`
 - **futures** v0.3.32 -- [https://github.com/rust-lang/futures-rs](https://github.com/rust-lang/futures-rs) -- `Apache-2.0 OR MIT`
 - **futures-channel** v0.3.32 -- [https://github.com/rust-lang/futures-rs](https://github.com/rust-lang/futures-rs) -- `Apache-2.0 OR MIT`
 - **futures-concurrency** v7.7.1 -- [https://github.com/yoshuawuyts/futures-concurrency](https://github.com/yoshuawuyts/futures-concurrency) -- `Apache-2.0 OR MIT`
@@ -651,6 +656,7 @@ if it were canonical for the whole group.
 - **futures-util** v0.3.32 -- [https://github.com/rust-lang/futures-rs](https://github.com/rust-lang/futures-rs) -- `Apache-2.0 OR MIT`
 - **generic-array** v0.14.7 -- [https://github.com/fizyk20/generic-array.git](https://github.com/fizyk20/generic-array.git) -- `MIT`
 - **getopts** v0.2.24 -- [https://github.com/rust-lang/getopts](https://github.com/rust-lang/getopts) -- `Apache-2.0 OR MIT`
+- **getrandom** v0.2.17 -- [https://github.com/rust-random/getrandom](https://github.com/rust-random/getrandom) -- `Apache-2.0 OR MIT`
 - **getrandom** v0.3.4 -- [https://github.com/rust-random/getrandom](https://github.com/rust-random/getrandom) -- `Apache-2.0 OR MIT`
 - **getrandom** v0.4.2 -- [https://github.com/rust-random/getrandom](https://github.com/rust-random/getrandom) -- `Apache-2.0 OR MIT`
 - **glob** v0.3.3 -- [https://github.com/rust-lang/glob](https://github.com/rust-lang/glob) -- `Apache-2.0 OR MIT`
@@ -660,13 +666,30 @@ if it were canonical for the whole group.
 - **hashbrown** v0.16.1 -- [https://github.com/rust-lang/hashbrown](https://github.com/rust-lang/hashbrown) -- `Apache-2.0 OR MIT`
 - **heck** v0.5.0 -- [https://github.com/withoutboats/heck](https://github.com/withoutboats/heck) -- `Apache-2.0 OR MIT`
 - **hex** v0.4.3 -- [https://github.com/KokaKiwi/rust-hex](https://github.com/KokaKiwi/rust-hex) -- `Apache-2.0 OR MIT`
+- **http** v1.5.0 -- [https://github.com/hyperium/http](https://github.com/hyperium/http) -- `Apache-2.0 OR MIT`
+- **http-body** v1.1.0 -- [https://github.com/hyperium/http-body](https://github.com/hyperium/http-body) -- `MIT`
+- **http-body-util** v0.1.5 -- [https://github.com/hyperium/http-body](https://github.com/hyperium/http-body) -- `MIT`
+- **httparse** v1.10.1 -- [https://github.com/seanmonstar/httparse](https://github.com/seanmonstar/httparse) -- `Apache-2.0 OR MIT`
+- **hyper** v1.12.0 -- [https://github.com/hyperium/hyper](https://github.com/hyperium/hyper) -- `MIT`
+- **hyper-rustls** v0.27.10 -- [https://github.com/rustls/hyper-rustls](https://github.com/rustls/hyper-rustls) -- `Apache-2.0 OR ISC OR MIT`
+- **hyper-util** v0.1.21 -- [https://github.com/hyperium/hyper-util](https://github.com/hyperium/hyper-util) -- `MIT`
+- **icu_collections** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_locale_core** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_normalizer** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_normalizer_data** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_properties** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_properties_data** v2.3.0 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **icu_provider** v2.3.1 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
 - **ident_case** v1.0.1 -- [https://github.com/TedDriggs/ident_case](https://github.com/TedDriggs/ident_case) -- `Apache-2.0 OR MIT`
+- **idna** v1.1.0 -- [https://github.com/servo/rust-url/](https://github.com/servo/rust-url/) -- `Apache-2.0 OR MIT`
+- **idna_adapter** v1.2.2 -- [https://github.com/hsivonen/idna_adapter](https://github.com/hsivonen/idna_adapter) -- `Apache-2.0 OR MIT`
 - **ignore** v0.4.25 -- [https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore](https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore) -- `MIT OR Unlicense`
 - **image** v0.25.10 -- [https://github.com/image-rs/image](https://github.com/image-rs/image) -- `Apache-2.0 OR MIT`
 - **indexmap** v1.9.3 -- [https://github.com/bluss/indexmap](https://github.com/bluss/indexmap) -- `Apache-2.0 OR MIT`
 - **indexmap** v2.13.0 -- [https://github.com/indexmap-rs/indexmap](https://github.com/indexmap-rs/indexmap) -- `Apache-2.0 OR MIT`
 - **indoc** v2.0.7 -- [https://github.com/dtolnay/indoc](https://github.com/dtolnay/indoc) -- `Apache-2.0 OR MIT`
 - **instability** v0.3.11 -- [https://github.com/ratatui/instability](https://github.com/ratatui/instability) -- `MIT`
+- **ipnet** v2.12.2 -- [https://github.com/krisprice/ipnet](https://github.com/krisprice/ipnet) -- `Apache-2.0 OR MIT`
 - **is_terminal_polyfill** v1.70.2 -- [https://github.com/polyfill-rs/is_terminal_polyfill](https://github.com/polyfill-rs/is_terminal_polyfill) -- `Apache-2.0 OR MIT`
 - **itertools** v0.11.0 -- [https://github.com/rust-itertools/itertools](https://github.com/rust-itertools/itertools) -- `Apache-2.0 OR MIT`
 - **itertools** v0.14.0 -- [https://github.com/rust-itertools/itertools](https://github.com/rust-itertools/itertools) -- `Apache-2.0 OR MIT`
@@ -677,10 +700,12 @@ if it were canonical for the whole group.
 - **lazy_static** v1.5.0 -- [https://github.com/rust-lang-nursery/lazy-static.rs](https://github.com/rust-lang-nursery/lazy-static.rs) -- `Apache-2.0 OR MIT`
 - **libc** v0.2.183 -- [https://github.com/rust-lang/libc](https://github.com/rust-lang/libc) -- `Apache-2.0 OR MIT`
 - **line-clipping** v0.3.5 -- [https://github.com/joshka/line-clipping](https://github.com/joshka/line-clipping) -- `Apache-2.0 OR MIT`
+- **litemap** v0.8.3 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
 - **litrs** v1.0.0 -- [https://github.com/LukasKalbertodt/litrs](https://github.com/LukasKalbertodt/litrs) -- `Apache-2.0 OR MIT`
 - **lock_api** v0.4.14 -- [https://github.com/Amanieu/parking_lot](https://github.com/Amanieu/parking_lot) -- `Apache-2.0 OR MIT`
 - **log** v0.4.29 -- [https://github.com/rust-lang/log](https://github.com/rust-lang/log) -- `Apache-2.0 OR MIT`
 - **lru** v0.16.3 -- [https://github.com/jeromefroe/lru-rs.git](https://github.com/jeromefroe/lru-rs.git) -- `MIT`
+- **lru-slab** v0.1.3 -- [https://github.com/Ralith/lru-slab](https://github.com/Ralith/lru-slab) -- `Apache-2.0 OR MIT OR Zlib`
 - **mac_address** v1.1.8 -- [https://github.com/rep-nop/mac_address](https://github.com/rep-nop/mac_address) -- `Apache-2.0 OR MIT`
 - **matchers** v0.2.0 -- [https://github.com/hawkw/matchers](https://github.com/hawkw/matchers) -- `MIT`
 - **memchr** v2.8.0 -- [https://github.com/BurntSushi/memchr](https://github.com/BurntSushi/memchr) -- `MIT OR Unlicense`
@@ -702,6 +727,7 @@ if it were canonical for the whole group.
 - **parking** v2.2.1 -- [https://github.com/smol-rs/parking](https://github.com/smol-rs/parking) -- `Apache-2.0 OR MIT`
 - **parking_lot** v0.12.5 -- [https://github.com/Amanieu/parking_lot](https://github.com/Amanieu/parking_lot) -- `Apache-2.0 OR MIT`
 - **parking_lot_core** v0.9.12 -- [https://github.com/Amanieu/parking_lot](https://github.com/Amanieu/parking_lot) -- `Apache-2.0 OR MIT`
+- **percent-encoding** v2.3.2 -- [https://github.com/servo/rust-url/](https://github.com/servo/rust-url/) -- `Apache-2.0 OR MIT`
 - **pest** v2.8.6 -- [https://github.com/pest-parser/pest](https://github.com/pest-parser/pest) -- `Apache-2.0 OR MIT`
 - **pest_derive** v2.8.6 -- [https://github.com/pest-parser/pest](https://github.com/pest-parser/pest) -- `Apache-2.0 OR MIT`
 - **pest_generator** v2.8.6 -- [https://github.com/pest-parser/pest](https://github.com/pest-parser/pest) -- `Apache-2.0 OR MIT`
@@ -717,14 +743,21 @@ if it were canonical for the whole group.
 - **png** v0.18.1 -- [https://github.com/image-rs/image-png](https://github.com/image-rs/image-png) -- `Apache-2.0 OR MIT`
 - **polling** v3.11.0 -- [https://github.com/smol-rs/polling](https://github.com/smol-rs/polling) -- `Apache-2.0 OR MIT`
 - **portable-atomic** v1.13.1 -- [https://github.com/taiki-e/portable-atomic](https://github.com/taiki-e/portable-atomic) -- `Apache-2.0 OR MIT`
+- **potential_utf** v0.1.6 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
 - **powerfmt** v0.2.0 -- [https://github.com/jhpratt/powerfmt](https://github.com/jhpratt/powerfmt) -- `Apache-2.0 OR MIT`
 - **proc-macro2** v1.0.106 -- [https://github.com/dtolnay/proc-macro2](https://github.com/dtolnay/proc-macro2) -- `Apache-2.0 OR MIT`
 - **pulldown-cmark** v0.13.4 -- [https://github.com/raphlinus/pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) -- `MIT`
 - **pulldown-cmark-escape** v0.11.0 -- [https://github.com/raphlinus/pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) -- `MIT`
 - **pxfm** v0.1.29 -- [https://github.com/awxkee/pxfm](https://github.com/awxkee/pxfm) -- `Apache-2.0 OR BSD-3-Clause`
+- **quinn** v0.11.12 -- [https://github.com/quinn-rs/quinn](https://github.com/quinn-rs/quinn) -- `Apache-2.0 OR MIT`
+- **quinn-proto** v0.11.19 -- [https://github.com/quinn-rs/quinn](https://github.com/quinn-rs/quinn) -- `Apache-2.0 OR MIT`
+- **quinn-udp** v0.5.16 -- [https://github.com/quinn-rs/quinn](https://github.com/quinn-rs/quinn) -- `Apache-2.0 OR MIT`
 - **quote** v1.0.45 -- [https://github.com/dtolnay/quote](https://github.com/dtolnay/quote) -- `Apache-2.0 OR MIT`
+- **rand** v0.10.3 -- [https://github.com/rust-random/rand](https://github.com/rust-random/rand) -- `Apache-2.0 OR MIT`
 - **rand** v0.8.5 -- [https://github.com/rust-random/rand](https://github.com/rust-random/rand) -- `Apache-2.0 OR MIT`
+- **rand_core** v0.10.1 -- [https://github.com/rust-random/rand_core](https://github.com/rust-random/rand_core) -- `Apache-2.0 OR MIT`
 - **rand_core** v0.6.4 -- [https://github.com/rust-random/rand](https://github.com/rust-random/rand) -- `Apache-2.0 OR MIT`
+- **rand_pcg** v0.10.2 -- [https://github.com/rust-random/rngs](https://github.com/rust-random/rngs) -- `Apache-2.0 OR MIT`
 - **ratatui** v0.30.0 -- [https://github.com/ratatui/ratatui](https://github.com/ratatui/ratatui) -- `MIT`
 - **ratatui-core** v0.1.0 -- [https://github.com/ratatui/ratatui](https://github.com/ratatui/ratatui) -- `MIT`
 - **ratatui-crossterm** v0.1.0 -- [https://github.com/ratatui/ratatui](https://github.com/ratatui/ratatui) -- `MIT`
@@ -736,14 +769,21 @@ if it were canonical for the whole group.
 - **regex** v1.12.3 -- [https://github.com/rust-lang/regex](https://github.com/rust-lang/regex) -- `Apache-2.0 OR MIT`
 - **regex-automata** v0.4.14 -- [https://github.com/rust-lang/regex](https://github.com/rust-lang/regex) -- `Apache-2.0 OR MIT`
 - **regex-syntax** v0.8.10 -- [https://github.com/rust-lang/regex](https://github.com/rust-lang/regex) -- `Apache-2.0 OR MIT`
+- **reqwest** v0.12.28 -- [https://github.com/seanmonstar/reqwest](https://github.com/seanmonstar/reqwest) -- `Apache-2.0 OR MIT`
+- **ring** v0.17.14 -- [https://github.com/briansmith/ring](https://github.com/briansmith/ring) -- `Apache-2.0 AND ISC`
 - **rust-i18n** v3.1.5 -- [https://github.com/longbridge/rust-i18n](https://github.com/longbridge/rust-i18n) -- `MIT`
 - **rust-i18n-macro** v3.1.5 -- [https://github.com/longbridge/rust-i18n](https://github.com/longbridge/rust-i18n) -- `MIT`
 - **rust-i18n-support** v3.1.5 -- [https://github.com/longbridge/rust-i18n](https://github.com/longbridge/rust-i18n) -- `MIT`
 - **rustc-hash** v2.1.2 -- [https://github.com/rust-lang/rustc-hash](https://github.com/rust-lang/rustc-hash) -- `Apache-2.0 OR MIT`
 - **rustix** v1.1.4 -- [https://github.com/bytecodealliance/rustix](https://github.com/bytecodealliance/rustix) -- `Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT`
+- **rustls** v0.23.46 -- [https://github.com/rustls/rustls](https://github.com/rustls/rustls) -- `Apache-2.0 OR ISC OR MIT`
+- **rustls-native-certs** v0.8.5 -- [https://github.com/rustls/rustls-native-certs](https://github.com/rustls/rustls-native-certs) -- `Apache-2.0 OR ISC OR MIT`
+- **rustls-pki-types** v1.15.1 -- [https://github.com/rustls/pki-types](https://github.com/rustls/pki-types) -- `Apache-2.0 OR MIT`
+- **rustls-webpki** v0.103.15 -- [https://github.com/rustls/webpki](https://github.com/rustls/webpki) -- `ISC`
 - **rustversion** v1.0.22 -- [https://github.com/dtolnay/rustversion](https://github.com/dtolnay/rustversion) -- `Apache-2.0 OR MIT`
 - **ryu** v1.0.23 -- [https://github.com/dtolnay/ryu](https://github.com/dtolnay/ryu) -- `Apache-2.0 OR BSL-1.0`
 - **same-file** v1.0.6 -- [https://github.com/BurntSushi/same-file](https://github.com/BurntSushi/same-file) -- `MIT OR Unlicense`
+- **schannel** v0.1.29 -- [https://github.com/steffengy/schannel-rs](https://github.com/steffengy/schannel-rs) -- `MIT`
 - **schemars** v0.9.0 -- [https://github.com/GREsau/schemars](https://github.com/GREsau/schemars) -- `MIT`
 - **schemars** v1.2.1 -- [https://github.com/GREsau/schemars](https://github.com/GREsau/schemars) -- `MIT`
 - **schemars_derive** v1.2.1 -- [https://github.com/GREsau/schemars](https://github.com/GREsau/schemars) -- `MIT`
@@ -754,6 +794,7 @@ if it were canonical for the whole group.
 - **serde_derive_internals** v0.29.1 -- [https://github.com/serde-rs/serde](https://github.com/serde-rs/serde) -- `Apache-2.0 OR MIT`
 - **serde_json** v1.0.149 -- [https://github.com/serde-rs/json](https://github.com/serde-rs/json) -- `Apache-2.0 OR MIT`
 - **serde_spanned** v0.6.9 -- [https://github.com/toml-rs/toml](https://github.com/toml-rs/toml) -- `Apache-2.0 OR MIT`
+- **serde_urlencoded** v0.7.1 -- [https://github.com/nox/serde_urlencoded](https://github.com/nox/serde_urlencoded) -- `Apache-2.0 OR MIT`
 - **serde_with** v3.21.0 -- [https://github.com/jonasbb/serde_with/](https://github.com/jonasbb/serde_with/) -- `Apache-2.0 OR MIT`
 - **serde_with_macros** v3.21.0 -- [https://github.com/jonasbb/serde_with/](https://github.com/jonasbb/serde_with/) -- `Apache-2.0 OR MIT`
 - **serde_yaml** v0.9.34+deprecated -- [https://github.com/dtolnay/serde-yaml](https://github.com/dtolnay/serde-yaml) -- `Apache-2.0 OR MIT`
@@ -773,9 +814,13 @@ if it were canonical for the whole group.
 - **strum** v0.28.0 -- [https://github.com/Peternator7/strum](https://github.com/Peternator7/strum) -- `MIT`
 - **strum_macros** v0.27.2 -- [https://github.com/Peternator7/strum](https://github.com/Peternator7/strum) -- `MIT`
 - **strum_macros** v0.28.0 -- [https://github.com/Peternator7/strum](https://github.com/Peternator7/strum) -- `MIT`
+- **subtle** v2.6.1 -- [https://github.com/dalek-cryptography/subtle](https://github.com/dalek-cryptography/subtle) -- `BSD-3-Clause`
 - **symlink** v0.1.0 -- [https://gitlab.com/chris-morgan/symlink](https://gitlab.com/chris-morgan/symlink) -- `Apache-2.0 OR MIT`
 - **syn** v1.0.109 -- [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) -- `Apache-2.0 OR MIT`
 - **syn** v2.0.117 -- [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) -- `Apache-2.0 OR MIT`
+- **syn** v3.0.9 -- [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) -- `Apache-2.0 OR MIT`
+- **sync_wrapper** v1.0.2 -- [https://github.com/Actyx/sync_wrapper](https://github.com/Actyx/sync_wrapper) -- `Apache-2.0`
+- **synstructure** v0.14.0 -- [https://github.com/mystor/synstructure](https://github.com/mystor/synstructure) -- `MIT`
 - **sys-locale** v0.3.2 -- [https://github.com/1Password/sys-locale](https://github.com/1Password/sys-locale) -- `Apache-2.0 OR MIT`
 - **terminfo** v0.9.0 -- [https://github.com/meh/rust-terminfo](https://github.com/meh/rust-terminfo) -- `WTFPL`
 - **termwiz** v0.23.3 -- [https://github.com/wezterm/wezterm](https://github.com/wezterm/wezterm) -- `MIT`
@@ -788,15 +833,21 @@ if it were canonical for the whole group.
 - **time** v0.3.47 -- [https://github.com/time-rs/time](https://github.com/time-rs/time) -- `Apache-2.0 OR MIT`
 - **time-core** v0.1.8 -- [https://github.com/time-rs/time](https://github.com/time-rs/time) -- `Apache-2.0 OR MIT`
 - **time-macros** v0.2.27 -- [https://github.com/time-rs/time](https://github.com/time-rs/time) -- `Apache-2.0 OR MIT`
+- **tinystr** v0.8.4 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
 - **tinyvec** v1.11.0 -- [https://github.com/Lokathor/tinyvec](https://github.com/Lokathor/tinyvec) -- `Apache-2.0 OR MIT OR Zlib`
 - **tinyvec_macros** v0.1.1 -- [https://github.com/Soveu/tinyvec_macros](https://github.com/Soveu/tinyvec_macros) -- `Apache-2.0 OR MIT OR Zlib`
 - **tokio** v1.50.0 -- [https://github.com/tokio-rs/tokio](https://github.com/tokio-rs/tokio) -- `MIT`
 - **tokio-macros** v2.6.1 -- [https://github.com/tokio-rs/tokio](https://github.com/tokio-rs/tokio) -- `MIT`
+- **tokio-rustls** v0.26.6 -- [https://github.com/rustls/tokio-rustls](https://github.com/rustls/tokio-rustls) -- `Apache-2.0 OR MIT`
 - **tokio-util** v0.7.18 -- [https://github.com/tokio-rs/tokio](https://github.com/tokio-rs/tokio) -- `MIT`
 - **toml** v0.8.23 -- [https://github.com/toml-rs/toml](https://github.com/toml-rs/toml) -- `Apache-2.0 OR MIT`
 - **toml_datetime** v0.6.11 -- [https://github.com/toml-rs/toml](https://github.com/toml-rs/toml) -- `Apache-2.0 OR MIT`
 - **toml_edit** v0.22.27 -- [https://github.com/toml-rs/toml](https://github.com/toml-rs/toml) -- `Apache-2.0 OR MIT`
 - **toml_write** v0.1.2 -- [https://github.com/toml-rs/toml](https://github.com/toml-rs/toml) -- `Apache-2.0 OR MIT`
+- **tower** v0.5.3 -- [https://github.com/tower-rs/tower](https://github.com/tower-rs/tower) -- `MIT`
+- **tower-http** v0.6.11 -- [https://github.com/tower-rs/tower-http](https://github.com/tower-rs/tower-http) -- `MIT`
+- **tower-layer** v0.3.3 -- [https://github.com/tower-rs/tower](https://github.com/tower-rs/tower) -- `MIT`
+- **tower-service** v0.3.3 -- [https://github.com/tower-rs/tower](https://github.com/tower-rs/tower) -- `MIT`
 - **tracelogging** v1.2.4 -- [https://github.com/microsoft/tracelogging](https://github.com/microsoft/tracelogging) -- `MIT`
 - **tracelogging_macros** v1.2.3 -- [https://github.com/microsoft/tracelogging](https://github.com/microsoft/tracelogging) -- `MIT`
 - **tracing** v0.1.44 -- [https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing) -- `MIT`
@@ -806,6 +857,7 @@ if it were canonical for the whole group.
 - **tracing-log** v0.2.0 -- [https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing) -- `MIT`
 - **tracing-subscriber** v0.3.23 -- [https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing) -- `MIT`
 - **triomphe** v0.1.15 -- [https://github.com/Manishearth/triomphe](https://github.com/Manishearth/triomphe) -- `Apache-2.0 OR MIT`
+- **try-lock** v0.2.5 -- [https://github.com/seanmonstar/try-lock](https://github.com/seanmonstar/try-lock) -- `MIT`
 - **tui-markdown** v0.3.11 -- [https://github.com/joshka/tui-markdown](https://github.com/joshka/tui-markdown) -- `Apache-2.0 OR MIT`
 - **typenum** v1.19.0 -- [https://github.com/paholg/typenum](https://github.com/paholg/typenum) -- `Apache-2.0 OR MIT`
 - **ucd-trie** v0.1.7 -- [https://github.com/BurntSushi/ucd-generate](https://github.com/BurntSushi/ucd-generate) -- `Apache-2.0 OR MIT`
@@ -817,10 +869,14 @@ if it were canonical for the whole group.
 - **unicode-width** v0.2.2 -- [https://github.com/unicode-rs/unicode-width](https://github.com/unicode-rs/unicode-width) -- `Apache-2.0 OR MIT`
 - **unicode-xid** v0.2.6 -- [https://github.com/unicode-rs/unicode-xid](https://github.com/unicode-rs/unicode-xid) -- `Apache-2.0 OR MIT`
 - **unsafe-libyaml** v0.2.11 -- [https://github.com/dtolnay/unsafe-libyaml](https://github.com/dtolnay/unsafe-libyaml) -- `MIT`
+- **untrusted** v0.9.0 -- [https://github.com/briansmith/untrusted](https://github.com/briansmith/untrusted) -- `ISC`
+- **url** v2.5.8 -- [https://github.com/servo/rust-url](https://github.com/servo/rust-url) -- `Apache-2.0 OR MIT`
+- **utf8_iter** v1.0.4 -- [https://github.com/hsivonen/utf8_iter](https://github.com/hsivonen/utf8_iter) -- `Apache-2.0 OR MIT`
 - **utf8parse** v0.2.2 -- [https://github.com/alacritty/vte](https://github.com/alacritty/vte) -- `Apache-2.0 OR MIT`
 - **uuid** v1.22.0 -- [https://github.com/uuid-rs/uuid](https://github.com/uuid-rs/uuid) -- `Apache-2.0 OR MIT`
 - **vtparse** v0.6.2 -- [https://github.com/wez/wezterm](https://github.com/wez/wezterm) -- `MIT`
 - **walkdir** v2.5.0 -- [https://github.com/BurntSushi/walkdir](https://github.com/BurntSushi/walkdir) -- `MIT OR Unlicense`
+- **want** v0.3.2 -- [https://github.com/seanmonstar/want](https://github.com/seanmonstar/want) -- `MIT`
 - **wezterm-bidi** v0.2.3 -- [https://github.com/wez/wezterm](https://github.com/wez/wezterm) -- `MIT AND Unicode-DFS-2016`
 - **wezterm-blob-leases** v0.1.1 -- [https://github.com/wezterm/wezterm](https://github.com/wezterm/wezterm) -- `MIT`
 - **wezterm-color-types** v0.3.0 -- [https://github.com/wez/wezterm](https://github.com/wez/wezterm) -- `MIT`
@@ -832,11 +888,24 @@ if it were canonical for the whole group.
 - **winapi-util** v0.1.11 -- [https://github.com/BurntSushi/winapi-util](https://github.com/BurntSushi/winapi-util) -- `MIT OR Unlicense`
 - **windows_x86_64_msvc** v0.48.5 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
 - **windows-link** v0.2.1 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
+- **windows-registry** v0.6.1 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
+- **windows-result** v0.4.1 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
+- **windows-strings** v0.5.1 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
 - **windows-sys** v0.48.0 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
 - **windows-sys** v0.61.2 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
 - **windows-targets** v0.48.5 -- [https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs) -- `Apache-2.0 OR MIT`
 - **winnow** v0.7.15 -- [https://github.com/winnow-rs/winnow](https://github.com/winnow-rs/winnow) -- `MIT`
 - **winsafe** v0.0.19 -- [https://github.com/rodrigocfd/winsafe](https://github.com/rodrigocfd/winsafe) -- `MIT`
+- **writeable** v0.6.4 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **yoke** v0.8.3 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **yoke-derive** v0.8.4 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zerofrom** v0.1.8 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zerofrom-derive** v0.1.8 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zeroize** v1.9.1 -- [https://github.com/RustCrypto/utils](https://github.com/RustCrypto/utils) -- `Apache-2.0 OR MIT`
+- **zerotrie** v0.2.5 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zerovec** v0.11.8 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zerovec-derive** v0.11.6 -- [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) -- `Unicode-3.0`
+- **zip** v6.0.0 -- [https://github.com/zip-rs/zip2.git](https://github.com/zip-rs/zip2.git) -- `MIT`
 - **zmij** v1.0.21 -- [https://github.com/dtolnay/zmij](https://github.com/dtolnay/zmij) -- `MIT`
 
 ## License texts
@@ -862,7 +931,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 
 ### `Apache-2.0`
 
-Applies to 194 crate(s) (directly or via composite identifiers): adler2 v2.0.1, agent-client-protocol v1.3.0, agent-client-protocol-derive v1.3.0, agent-client-protocol-schema v1.4.0, allocator-api2 v0.2.21, anstream v0.6.21, anstyle v1.0.13, anstyle-parse v0.2.7, ... (+186 more)
+Applies to 229 crate(s) (directly or via composite identifiers): adler2 v2.0.1, agent-client-protocol v1.3.0, agent-client-protocol-derive v1.3.0, agent-client-protocol-schema v1.4.0, allocator-api2 v0.2.21, anstream v0.6.21, anstyle v1.0.13, anstyle-parse v0.2.7, ... (+221 more)
 
 _Canonical text reproduced from upstream `SPDX:Apache-2.0`:_
 
@@ -951,11 +1020,14 @@ Copyright (c) 2009-2013 Mozilla Foundation
 Copyright (c) 2010 The Rust Project Developers
 Copyright (c) 2012-2013 Mozilla Foundation
 Copyright (c) 2013-2014 The Rust Project Developers.
+Copyright (c) 2013-2016 The rust-url developers
+Copyright (c) 2013-2025 The rust-url developers
 Copyright (c) 2014 Alex Crichton
 Copyright (c) 2014 Chris Morgan and the Teepee project developers
 Copyright (c) 2014 Chris Wong
 Copyright (c) 2014 Paho Lurie-Gregg
 Copyright (c) 2014 The Rust Project Developers
+Copyright (c) 2014-2017 Melissa O'Neill and PCG Project contributors
 Copyright (c) 2014-2026 Alex Crichton
 Copyright (c) 2014-2026 Sean McArthur
 Copyright (c) 2014, Kang Seonghoon.
@@ -965,34 +1037,46 @@ Copyright (c) 2015 nwin
 Copyright (c) 2015 The Rust Project Developers
 Copyright (c) 2015-2018 The winapi-rs Developers
 Copyright (c) 2015-2020 The rust-hex Developers
+Copyright (c) 2015-2025 Sean McArthur
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2016 Amanieu d'Antras
+Copyright (c) 2016 Anthony Ramine
 Copyright (c) 2016 Artyom Pavlov
 Copyright (c) 2016 Dylan Ede
 Copyright (c) 2016 Joe Wilm
+Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
 Copyright (c) 2016 The roaring-rs developers.
 Copyright (c) 2016 The Rust Project Developers
 Copyright (c) 2016 Tomasz Miąsko
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
+Copyright (c) 2016-2025 Sean McArthur
+Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com>
 Copyright (c) 2017 arc-swap developers
 Copyright (c) 2017 Artyom Pavlov
 Copyright (c) 2017 Contributors
 Copyright (c) 2017 Frommi
+Copyright (c) 2017 http-rs authors
 Copyright (c) 2017 Nikolai Vazquez
+Copyright (c) 2017 quininer kel
 Copyright (c) 2017 Robert Grosse
 Copyright (c) 2017 The Tokio Authors
 Copyright (c) 2017-2024 oyvindln
 Copyright (c) 2018 Ashley Mannix, Christopher Armstrong, Dylan DPC, Hunar Roop Kahlon
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
+Copyright (c) 2018 The quinn Developers
 Copyright (c) 2018 The Servo Project Developers
 Copyright (c) 2018-2019 Andrew Gallant
 Copyright (c) 2018-2019 The RustCrypto Project Developers
+Copyright (c) 2018-2024 The rust-random Project Developers
 Copyright (c) 2018-2025 The rust-random Project Developers
+Copyright (c) 2018-2026 The Rand Project Developers
 Copyright (c) 2018-2026 The rust-random Project Developers
+Copyright (c) 2018-2026 The RustCrypto Project Developers
 Copyright (c) 2019 Aetf <aetf at unlimitedcodeworks dot xyz>
 Copyright (c) 2019 Daniel "Lokathor" Gee.
 Copyright (c) 2019 Manish Goregaokar
 Copyright (c) 2019 The Crossbeam Project Developers
+Copyright (c) 2019-2026 The RustCrypto Project Developers
 Copyright (c) 2020 dylni (https://github.com/dylni)
 Copyright (c) 2020 Nor Khasyatillah
 Copyright (c) 2020 Olivier Goffart <ogoffart@sixtyfps.io>
@@ -1000,21 +1084,30 @@ Copyright (c) 2020 Project Developers
 Copyright (c) 2020 Soveu
 Copyright (c) 2020 Yoshua Wuyts
 Copyright (c) 2020-2025 The RustCrypto Project Developers
+Copyright (c) 2020-2026 The RustCrypto Project Developers
 Copyright (c) 2021 1Password
 Copyright (c) 2021 RustCrypto Developers
+Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 Copyright (c) 2023 Jacob Pratt
 Copyright (c) 2023 Jacob Pratt et al.
 Copyright (c) 2024 Jacob Pratt et al.
 Copyright (c) 2024 Josh McKinney
+Copyright (c) 2024 The lru-slab Developers
+Copyright (c) 2025 Alice Maz, Marshall Pierce
 Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 Copyright 2012-2016 The Rust Project Developers.
 Copyright 2013-2014 RAD Game Tools and Valve Software
 Copyright 2014 Paho Lurie-Gregg
+Copyright 2016 Sean McArthur
 Copyright 2016-2026 Frank Denis.
+Copyright 2017 http-rs authors
+Copyright 2017 Juniper Networks, Inc.
+Copyright 2017 quininer kel
 Copyright 2018 Developers of the Rand project
 Copyright 2020 Nor Khasyatillah
 Copyright 2020 Tomasz "Soveu" Marx
 Copyright 2020 Yoshua Wuyts
+Copyright 2023 Dirkjan Ochtman
 Copyright 2023 Jacob Pratt
 Copyright 2023 Jacob Pratt et al.
 Copyright 2024 Jacob Pratt et al.
@@ -1025,7 +1118,7 @@ Copyright 2025 Zed Industries, Inc. and contributors
 
 ### `BSD-3-Clause`
 
-Applies to 2 crate(s) (directly or via composite identifiers): moxcms v0.8.1, pxfm v0.1.29
+Applies to 3 crate(s) (directly or via composite identifiers): moxcms v0.8.1, pxfm v0.1.29, subtle v2.6.1
 
 _Canonical text reproduced from upstream `SPDX:BSD-3-Clause`:_
 
@@ -1046,6 +1139,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 _Copyright notices harvested from the above crates' upstream LICENSE files:_
 
 ```
+Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence. All rights reserved.
+Copyright (c) 2016-2024 Isis Agora Lovecruft. All rights reserved.
 Copyright 2024 Radzivon Bartoshyk
 ```
 
@@ -1195,6 +1290,30 @@ express Statement of Purpose.
     this CC0 or use of the Work.
 ```
 
+### `ISC`
+
+Applies to 6 crate(s) (directly or via composite identifiers): hyper-rustls v0.27.10, ring v0.17.14, rustls v0.23.46, rustls-native-certs v0.8.5, rustls-webpki v0.103.15, untrusted v0.9.0
+
+_Canonical text reproduced from upstream `SPDX:ISC`:_
+
+```
+ISC License
+
+Copyright <year> <owner> 
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+_Copyright notices harvested from the above crates' upstream LICENSE files:_
+
+```
+Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
+Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com>
+Copyright 2015 Brian Smith.
+```
+
 ### `LLVM-exception`
 
 Applies to 1 crate(s) (directly or via composite identifiers): rustix v1.1.4
@@ -1221,7 +1340,7 @@ _Canonical text reproduced from upstream `SPDX:LLVM-exception`:_
 
 ### `MIT`
 
-Applies to 272 crate(s) (directly or via composite identifiers): adler2 v2.0.1, aho-corasick v1.1.4, allocator-api2 v0.2.21, anstream v0.6.21, anstyle v1.0.13, anstyle-parse v0.2.7, anstyle-query v1.1.5, anstyle-wincon v3.0.11, ... (+264 more)
+Applies to 318 crate(s) (directly or via composite identifiers): adler2 v2.0.1, aho-corasick v1.1.4, allocator-api2 v0.2.21, anstream v0.6.21, anstyle v1.0.13, anstyle-parse v0.2.7, anstyle-query v1.1.5, anstyle-wincon v3.0.11, ... (+310 more)
 
 _Canonical text reproduced from upstream `SPDX:MIT`:_
 
@@ -1255,13 +1374,17 @@ Copyright (c) 2009-2013 Mozilla Foundation
 Copyright (c) 2010 The Rust Project Developers
 Copyright (c) 2012-2013 Mozilla Foundation
 Copyright (c) 2013-2014 The Rust Project Developers.
+Copyright (c) 2013-2016 The rust-url developers
+Copyright (c) 2013-2025 The rust-url developers
 Copyright (c) 2014 Alex Crichton
 Copyright (c) 2014 Benjamin Sago
 Copyright (c) 2014 Carl Lerche and other MIO contributors
 Copyright (c) 2014 Chris Morgan and the Teepee project developers
 Copyright (c) 2014 Chris Wong
+Copyright (c) 2014 Mathijs van de Nes
 Copyright (c) 2014 Paho Lurie-Gregg
 Copyright (c) 2014 The Rust Project Developers
+Copyright (c) 2014-2017 Melissa O'Neill and PCG Project contributors
 Copyright (c) 2014-2019 Geoffroy Couprie
 Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
 Copyright (c) 2014-2026 Alex Crichton
@@ -1275,16 +1398,20 @@ Copyright (c) 2015 fangyuanziti
 Copyright (c) 2015 François Bernier
 Copyright (c) 2015 Jonathan Reem
 Copyright (c) 2015 nwin
+Copyright (c) 2015 steffengy
 Copyright (c) 2015 The Rust Project Developers
 Copyright (c) 2015-2018 The winapi-rs Developers
 Copyright (c) 2015-2020 The rust-hex Developers
+Copyright (c) 2015-2025 Sean McArthur
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2016 Amanieu d'Antras
+Copyright (c) 2016 Anthony Ramine
 Copyright (c) 2016 Artyom Pavlov
 Copyright (c) 2016 Dylan Ede
 Copyright (c) 2016 Jelte Fennema
 Copyright (c) 2016 Jerome Froelich
 Copyright (c) 2016 Joe Wilm
+Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
 Copyright (c) 2016 Martin Geisler
 Copyright (c) 2016 The roaring-rs developers.
 Copyright (c) 2016 The Rust Project Developers
@@ -1292,14 +1419,18 @@ Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
 Copyright (c) 2016 Tomasz Miąsko
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
 Copyright (c) 2016-2022 Florian Dehau
+Copyright (c) 2016-2025 Sean McArthur
+Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com>
 Copyright (c) 2017 Andrew Gallant
 Copyright (c) 2017 arc-swap developers
 Copyright (c) 2017 Artyom Pavlov
 Copyright (c) 2017 Contributors
 Copyright (c) 2017 Frommi
 Copyright (c) 2017 Gilad Naaman
+Copyright (c) 2017 http-rs authors
 Copyright (c) 2017 Martin Geisler
 Copyright (c) 2017 Nikolai Vazquez
+Copyright (c) 2017 quininer kel
 Copyright (c) 2017 Robert Grosse
 Copyright (c) 2017 Ted Driggs
 Copyright (c) 2017 The Tokio Authors
@@ -1308,12 +1439,18 @@ Copyright (c) 2018 Akash Kurdekar
 Copyright (c) 2018 Ashley Mannix, Christopher Armstrong, Dylan DPC, Hunar Roop Kahlon
 Copyright (c) 2018 Carl Lerche
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
+Copyright (c) 2018 The quinn Developers
 Copyright (c) 2018 The Servo Project Developers
 Copyright (c) 2018 Wez Furlong
 Copyright (c) 2018-2019 Andrew Gallant
+Copyright (c) 2018-2019 Sean McArthur
 Copyright (c) 2018-2019 The RustCrypto Project Developers
+Copyright (c) 2018-2023 Sean McArthur
+Copyright (c) 2018-2024 The rust-random Project Developers
 Copyright (c) 2018-2025 The rust-random Project Developers
+Copyright (c) 2018-2026 The Rand Project Developers
 Copyright (c) 2018-2026 The rust-random Project Developers
+Copyright (c) 2018-2026 The RustCrypto Project Developers
 Copyright (c) 2019 Aetf <aetf at unlimitedcodeworks dot xyz>
 Copyright (c) 2019 Carl Lerche
 Copyright (c) 2019 Daniel "Lokathor" Gee.
@@ -1324,7 +1461,11 @@ Copyright (c) 2019 Peter Glotfelty
 Copyright (c) 2019 The Crossbeam Project Developers
 Copyright (c) 2019 Timon
 Copyright (c) 2019 Tokio Contributors
+Copyright (c) 2019 Tower Contributors
 Copyright (c) 2019 Yoshua Wuyts
+Copyright (c) 2019-2021 Tower Contributors
+Copyright (c) 2019-2026 Sean McArthur & Hyper Contributors
+Copyright (c) 2019-2026 The RustCrypto Project Developers
 Copyright (c) 2020 🐝🐝🐝
 Copyright (c) 2020 dylni (https://github.com/dylni)
 Copyright (c) 2020 Nor Khasyatillah
@@ -1334,18 +1475,23 @@ Copyright (c) 2020 Soveu
 Copyright (c) 2020 Stephen M. Coakley
 Copyright (c) 2020 Yoshua Wuyts
 Copyright (c) 2020-2025 The RustCrypto Project Developers
+Copyright (c) 2020-2026 The RustCrypto Project Developers
 Copyright (c) 2021 1Password
 Copyright (c) 2021 Longbridge
 Copyright (c) 2021 Parker Timmerman
 Copyright (c) 2021 RustCrypto Developers
 Copyright (c) 2021 Stephen M. Coakley
 Copyright (c) 2021-2022 The Nushell Project Developers
+Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 Copyright (c) 2023 Jacob Pratt
 Copyright (c) 2023 Jacob Pratt et al.
+Copyright (c) 2023-2025 Sean McArthur
 Copyright (c) 2023-2025 The Ratatui Developers
 Copyright (c) 2024 Dheepak Krishnamurthy
 Copyright (c) 2024 Jacob Pratt et al.
 Copyright (c) 2024 Josh McKinney
+Copyright (c) 2024 The lru-slab Developers
+Copyright (c) 2025 Alice Maz, Marshall Pierce
 Copyright (c) 2025 rutrum
 Copyright (c) 2025 The Ratatui Developers
 Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
@@ -1354,12 +1500,18 @@ Copyright 2013-2014 RAD Game Tools and Valve Software
 Copyright 2014 Paho Lurie-Gregg
 Copyright 2015 Google Inc. All rights reserved.
 Copyright 2015 The Fancy Regex Authors.
+Copyright 2016 Nika Layzell
+Copyright 2016 Sean McArthur
 Copyright 2016-2026 Frank Denis.
+Copyright 2017 http-rs authors
+Copyright 2017 Juniper Networks, Inc.
+Copyright 2017 quininer kel
 Copyright 2018 Developers of the Rand project
 Copyright 2019 Ryan O'Beirne
 Copyright 2020 Nor Khasyatillah
 Copyright 2020 Tomasz "Soveu" Marx
 Copyright 2020 Yoshua Wuyts
+Copyright 2023 Dirkjan Ochtman
 Copyright 2023 Jacob Pratt
 Copyright 2023 Jacob Pratt et al.
 Copyright 2024 Jacob Pratt et al.
@@ -1368,7 +1520,7 @@ Copyright 2024 Josh McKinney
 
 ### `Unicode-3.0`
 
-Applies to 1 crate(s) (directly or via composite identifiers): unicode-ident v1.0.24
+Applies to 19 crate(s) (directly or via composite identifiers): icu_collections v2.3.0, icu_locale_core v2.3.0, icu_normalizer v2.3.0, icu_normalizer_data v2.3.0, icu_properties v2.3.0, icu_properties_data v2.3.0, icu_provider v2.3.1, litemap v0.8.3, ... (+11 more)
 
 _Canonical text reproduced from upstream `SPDX:Unicode-3.0`:_
 
@@ -1493,7 +1645,7 @@ TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 
 ### `Zlib`
 
-Applies to 5 crate(s) (directly or via composite identifiers): bytemuck v1.25.0, foldhash v0.2.0, miniz_oxide v0.8.9, tinyvec v1.11.0, tinyvec_macros v0.1.1
+Applies to 6 crate(s) (directly or via composite identifiers): bytemuck v1.25.0, foldhash v0.2.0, lru-slab v0.1.3, miniz_oxide v0.8.9, tinyvec v1.11.0, tinyvec_macros v0.1.1
 
 _Canonical text reproduced from upstream `SPDX:Zlib`:_
 
@@ -1519,6 +1671,7 @@ Copyright (c) 2017-2024 oyvindln
 Copyright (c) 2019 Daniel "Lokathor" Gee.
 Copyright (c) 2020 Soveu
 Copyright (c) 2024 Orson Peters
+Copyright (c) 2024 The lru-slab Developers
 Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 Copyright 2013-2014 RAD Game Tools and Valve Software
 Copyright 2020 Tomasz "Soveu" Marx

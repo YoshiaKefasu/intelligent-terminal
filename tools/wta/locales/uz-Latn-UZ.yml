@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Iltimos, agent orqali tizimga kiring, keyin pastda
 setup.auth.select_method: "Bu yerda davom etish uchun kirish usulini tanlang."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Agentni almashtirish uchun Aqlli terminal Settings > Agent boʻlimiga oʻting."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} ishga tushirilmadi."
+setup.subtitle.acp_missing: "%{agent} uchun ACP serveri oʻrnatilmagan. U avtomatik oʻrnatiladi."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Men tizimga kirdim — qayta ulanib koʻring"
 setup.option.retry_connection: "Qayta ulanib koʻring"
 setup.status.installing: "Oʻrnatilmoqda..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI oʻrnatilmoqda"
+setup.status.installing_acp: "%{agent} uchun ACP oʻrnatilmoqda"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} bilan ulanish oʻrnatilmoqda"
 setup.status.install_failed: "Oʻrnatish amalga oshmadi: "
 setup.status.installing_winget: " winget orqali oʻrnatilmoqda..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget ishga tushmadi: %{error}"
 agent.install.winget_exited: "winget kutilmaganda chiqdi: %{error}"
 agent.install.winget_failed_code: "winget install amalga oshmadi (chiqish kodi %{code})"
 agent.install.unsupported: "%{agent} uchun avtomatik oʻrnatish qoʻllab-quvvatlanmaydi"
+agent.install.acp_failed: "%{agent} uchun ACP serverini oʻrnatib boʻlmadi: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} oʻrnatilganligiga va PATH-da ekanligiga ishonch hosil qiling."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Veuillez vous connecter via l'agent, puis sélecti
 setup.auth.select_method: "Sélectionnez une méthode de connexion pour continuer ici."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Pour changer d'agent, allez dans Terminal Intelligent Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Nous n'avons pas pu démarrer %{agent}."
+setup.subtitle.acp_missing: "Le serveur ACP de %{agent} n'est pas installé. Il sera installé automatiquement."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Je me suis connecté — réessayer de se connecter"
 setup.option.retry_connection: "Réessayer de se connecter"
 setup.status.installing: "Installation en cours..."
 setup.status.installing_copilot_cli: "Installation de GitHub Copilot CLI"
+setup.status.installing_acp: "Installation du serveur ACP de %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Connexion à %{agent}"
 setup.status.install_failed: "Échec de l'installation : "
 setup.status.installing_winget: " Installation via winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Impossible de lancer winget : %{error}"
 agent.install.winget_exited: "winget s'est terminé de manière inattendue : %{error}"
 agent.install.winget_failed_code: "Échec de l'installation winget (code de sortie %{code})"
 agent.install.unsupported: "L'installation automatique n'est pas prise en charge pour %{agent}"
+agent.install.acp_failed: "Impossible d'installer le serveur ACP de %{agent} : %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Assurez-vous que %{name} est installé et se trouve dans le PATH."  # {Locked="PATH"}
 
 # ── Vue des agents (src/ui/agents_view.rs) ─────────────────────────────────────

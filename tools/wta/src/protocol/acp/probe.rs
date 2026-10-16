@@ -44,8 +44,17 @@ pub struct ProbeResult {
 /// pane (e.g. `"copilot --acp --stdio"`,
 /// `"npx -y @zed-industries/claude-code-acp"`).
 pub async fn probe_models(agent_cmd: &str) -> Result<ProbeResult> {
+    probe_models_for_agent(agent_cmd, None).await
+}
+
+pub async fn probe_models_for_agent(
+    agent_cmd: &str,
+    agent_id: Option<&str>,
+) -> Result<ProbeResult> {
+    crate::antigravity_acp::prepare(agent_cmd, agent_id, &crate::agent_source::AgentSource::Host)
+        .await?;
     retry_model_probe(
-        || probe_models_impl(agent_cmd, MODEL_PROBE_ENVIRONMENT_POLICY),
+        || probe_models_impl(agent_cmd, agent_id, MODEL_PROBE_ENVIRONMENT_POLICY),
         MODEL_PROBE_RETRY_DELAY,
     )
     .await
@@ -87,9 +96,10 @@ where
 
 async fn probe_models_impl(
     agent_cmd: &str,
+    agent_id: Option<&str>,
     environment_policy: ChildEnvironmentPolicy,
 ) -> Result<ProbeResult> {
-    let mut spawned = spawn_agent_process(agent_cmd, None, None, environment_policy)?;
+    let mut spawned = spawn_agent_process(agent_cmd, None, agent_id, environment_policy)?;
     tracing::debug!(
         "probe spawned: program={} is_npx={} pid={:?}",
         spawned.resolved_program,
@@ -251,6 +261,8 @@ pub struct SessionProbeResult {
 /// preamble (kept inline rather than shared so the probe stays a
 /// self-contained diagnostic).
 pub async fn probe_sessions(agent_cmd: &str) -> Result<SessionProbeResult> {
+    crate::antigravity_acp::prepare(agent_cmd, None, &crate::agent_source::AgentSource::Host)
+        .await?;
     let mut spawned = spawn_agent_process(
         agent_cmd,
         None,

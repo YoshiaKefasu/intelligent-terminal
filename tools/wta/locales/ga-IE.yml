@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Sínigh isteach tríd an ngníomhaire, ansin roghn
 setup.auth.select_method: "Roghnaigh modh sínithe isteach chun leanúint ar aghaidh anseo."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Chun gníomhairí a athrú, téigh go Teirminéal Cliste Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Níorbh fhéidir %{agent} a thosú."
+setup.subtitle.acp_missing: "Níl freastalaí ACP %{agent} suiteáilte. Suiteálfar go huathoibríoch é."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Tá mé sínithe isteach — bain triail eile as ceang
 setup.option.retry_connection: "Bain triail eile as ceangal"
 setup.status.installing: "Á shuiteáil..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI á shuiteáil"
+setup.status.installing_acp: "ACP %{agent} á shuiteáil"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Ag ceangal le %{agent}"
 setup.status.install_failed: "Theip ar shuiteáil: "
 setup.status.installing_winget: " Á shuiteáil trí winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Theip ar winget a sheoladh: %{error}"
 agent.install.winget_exited: "D'fhág winget gan choinne: %{error}"
 agent.install.winget_failed_code: "Theip ar shuiteáil winget (cód scoir %{code})"
 agent.install.unsupported: "Ní thacaítear le suiteáil uathoibríoch le haghaidh %{agent}"
+agent.install.acp_failed: "Níorbh fhéidir freastalaí ACP %{agent} a shuiteáil: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Cinntigh go bhfuil %{name} suiteáilte agus ar do PATH."  # {Locked="PATH"}
 
 # ── Amharc gníomhairí (src/ui/agents_view.rs) ─────────────────────────────────

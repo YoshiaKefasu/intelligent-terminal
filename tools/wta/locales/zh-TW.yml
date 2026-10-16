@@ -13,6 +13,7 @@ setup.auth.external_sign_in: "請透過智能體登入，然後選擇下方的 \
 setup.auth.select_method: "請選擇登入方式以在此處繼續。"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "若要切換智能體，請前往智慧終端機 Settings > Agent。"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "無法啟動 %{agent}。"
+setup.subtitle.acp_missing: "%{agent} 的 ACP 伺服器尚未安裝。系統將自動安裝。"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 setup.option.install: "安裝 %{agent}"
 setup.option.install_hint: "（將自動安裝）"
@@ -22,6 +23,7 @@ setup.option.retry_auth: "我已登入 — 重試連線"
 setup.option.retry_connection: "重試連線"
 setup.status.installing: "安裝中..."
 setup.status.installing_copilot_cli: "正在安裝 GitHub Copilot CLI"
+setup.status.installing_acp: "正在安裝 %{agent} 的 ACP"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "正在連線至 %{agent}"
 setup.status.install_failed: "安裝失敗："
 setup.status.installing_winget: " 正在透過 winget 安裝..."
@@ -120,6 +122,7 @@ agent.install.launch_failed: "無法啟動 winget：%{error}"
 agent.install.winget_exited: "winget 異常結束：%{error}"
 agent.install.winget_failed_code: "winget 安裝失敗（結束代碼 %{code}）"
 agent.install.unsupported: "不支援自動安裝 %{agent}"
+agent.install.acp_failed: "無法安裝 %{agent} 的 ACP 伺服器：%{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "請確認 %{name} 已安裝並位於 PATH 上。"  # {Locked="PATH"}
 
 # ── 智能體檢視 (src/ui/agents_view.rs) ─────────────────────────────────────

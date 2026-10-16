@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "ਕਿਰਪਾ ਕਰਕੇ ਏਜੰਟ ਰਾ�
 setup.auth.select_method: "ਇੱਥੇ ਜਾਰੀ ਰੱਖਣ ਲਈ ਸਾਈਨ ਇਨ ਕਰਨ ਦਾ ਤਰੀਕਾ ਚੁਣੋ।"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "ਏਜੰਟ ਬਦਲਣ ਲਈ ਇੰਟੈਲੀਜੈਂਟ ਟਰਮੀਨਲ Settings > Agent 'ਤੇ ਜਾਓ।"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "ਅਸੀਂ %{agent} ਨੂੰ ਸ਼ੁਰੂ ਨਹੀਂ ਕਰ ਸਕੇ।"
+setup.subtitle.acp_missing: "%{agent} ਲਈ ACP ਸਰਵਰ ਇੰਸਟਾਲ ਨਹੀਂ ਹੈ। ਇਹ ਆਪਣੇ ਆਪ ਇੰਸਟਾਲ ਹੋ ਜਾਵੇਗਾ।"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "ਮੈਂ ਸਾਈਨ ਇਨ ਕਰ ਲਿਆ — ਦ
 setup.option.retry_connection: "ਦੁਬਾਰਾ ਕਨੈਕਟ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰੋ"
 setup.status.installing: "ਇੰਸਟਾਲ ਹੋ ਰਿਹਾ ਹੈ..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ਇੰਸਟਾਲ ਹੋ ਰਿਹਾ ਹੈ"
+setup.status.installing_acp: "%{agent} ਲਈ ACP ਇੰਸਟਾਲ ਹੋ ਰਿਹਾ ਹੈ"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} ਨਾਲ ਕਨੈਕਟ ਹੋ ਰਿਹਾ ਹੈ"
 setup.status.install_failed: "ਇੰਸਟਾਲ ਅਸਫਲ: "
 setup.status.installing_winget: " winget ਰਾਹੀਂ ਇੰਸਟਾਲ ਹੋ ਰਿਹਾ ਹੈ..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget ਸ਼ੁਰੂ ਕਰਨ ਵਿੱਚ ਅ�
 agent.install.winget_exited: "winget ਅਚਾਨਕ ਬੰਦ ਹੋ ਗਿਆ: %{error}"
 agent.install.winget_failed_code: "winget ਇੰਸਟਾਲ ਅਸਫਲ (ਐਗਜ਼ਿਟ ਕੋਡ %{code})"
 agent.install.unsupported: "%{agent} ਲਈ ਆਟੋਮੈਟਿਕ ਇੰਸਟਾਲ ਸਮਰਥਿਤ ਨਹੀਂ ਹੈ"
+agent.install.acp_failed: "%{agent} ਲਈ ACP ਸਰਵਰ ਇੰਸਟਾਲ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "ਯਕੀਨੀ ਬਣਾਓ ਕਿ %{name} ਇੰਸਟਾਲ ਹੈ ਅਤੇ ਤੁਹਾਡੇ PATH 'ਤੇ ਹੈ।"  # {Locked="PATH"}
 
 # ── ਏਜੰਟ ਦ੍ਰਿਸ਼ (src/ui/agents_view.rs) ─────────────────────────────────────

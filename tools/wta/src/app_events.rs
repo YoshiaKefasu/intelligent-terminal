@@ -2581,7 +2581,7 @@ impl App {
                 self.initial_preflight_completed = true;
                 if !result.all_passed() {
                     self.show_preflight_setup(result);
-                    if self.auto_install_selected_agent && !self.try_start_fre_auto_install() {
+                    if !self.try_start_automatic_agent_install() {
                         self.auto_install_selected_agent = false;
                     }
                 } else {
@@ -2624,6 +2624,7 @@ impl App {
                     );
                 } else {
                     self.show_preflight_setup(result);
+                    self.try_start_automatic_agent_install();
                 }
             }
             AppEvent::AgentSourcesDiscovered {
@@ -2848,7 +2849,7 @@ impl App {
                         return;
                     }
                     self.auto_install_selected_agent = true;
-                    if self.try_start_fre_auto_install() {
+                    if self.try_start_automatic_agent_install() {
                         tracing::info!(
                             target: "preflight",
                             "starting one-shot FRE-requested agent installation"
@@ -4225,6 +4226,17 @@ impl App {
                         | crate::agent_check::AgentInstallOutcome::AlreadyAvailable
                 );
                 if installed {
+                    if matches!(
+                        self.current_agent_source,
+                        crate::agent_source::AgentSource::Wsl { .. }
+                    ) {
+                        if self.state != ConnectionState::Connected
+                            || !self.current_agent_id.eq_ignore_ascii_case(&agent_id)
+                        {
+                            self.reconnect_confirmed_available_agent(&agent_id);
+                        }
+                        return;
+                    }
                     let status = crate::agent_check::recheck_agent(&agent_id);
                     if status.cli_found {
                         if matches!(
@@ -4251,7 +4263,22 @@ impl App {
                 }
 
                 if let Some(setup) = self.setup.as_mut() {
-                    let current_status = Some(crate::agent_check::recheck_agent(&agent_id));
+                    let current_status = if matches!(
+                        self.current_agent_source,
+                        crate::agent_source::AgentSource::Host
+                    ) {
+                        Some(crate::agent_check::recheck_agent(&agent_id))
+                    } else {
+                        Some(crate::agent_check::AgentStatus {
+                            id: setup.preflight.agent_id.clone(),
+                            display_name: setup.preflight.display_name.clone(),
+                            cli_found: false,
+                            cli_path: None,
+                            install_hint: setup.preflight.install_hint.clone(),
+                            auth_hint: setup.preflight.auth_hint.clone(),
+                            auto_installable: setup.preflight.acp_bootstrap_available,
+                        })
+                    };
                     setup.options = build_setup_options(&setup.reason, current_status.as_ref());
                     setup.selected_index = setup
                         .selected_index

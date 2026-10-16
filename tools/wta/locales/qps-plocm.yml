@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "[!! \u202ePle_ase sign in via the agent, then sele
 setup.auth.select_method: "[!! \u202eSel_ect a sign-in method to continue here.\u202c !!]"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "[!! \u202eTo_ switch agents, go to Intelligent Terminal Settings > Agent.\u202c !!]"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "[!! We_ couldn't start %{agent}. !!]"
+setup.subtitle.acp_missing: "[!! \u202eThe \u202dACP\u202c server for \u202d%{agent}\u202c is not installed. It will be installed automatically.\u202c !!]"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked="Intelligent Terminal"}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "[!! I've_ signed in — try connecting again !!]"
 setup.option.retry_connection: "[!! Try_ connecting again !!]"
 setup.status.installing: "[!! Ins_talling... !!]"
 setup.status.installing_copilot_cli: "[!! Ins_talling GitHub Copilot CLI !!]"
+setup.status.installing_acp: "[!! \u202eInstalling \u202d%{agent}\u202c \u202dACP\u202c\u202c !!]"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "[!! Con_necting %{agent} !!]"
 setup.status.install_failed: "[!! Ins_tall failed:  !!]"
 setup.status.installing_winget: "[!!  In_stalling via winget... !!]"
@@ -124,6 +126,7 @@ agent.install.launch_failed: "[!! Fai_led to launch winget: %{error} !!]"
 agent.install.winget_exited: "[!! win_get exited unexpectedly: %{error} !!]"
 agent.install.winget_failed_code: "[!! win_get install failed (exit code %{code}) !!]"
 agent.install.unsupported: "[!! Aut_omatic install not supported for %{agent} !!]"
+agent.install.acp_failed: "[!! \u202eCould not install the \u202dACP\u202c server for \u202d%{agent}\u202c: \u202d%{error}\u202c\u202c !!]"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "[!! Mak_e sure %{name} is installed and on your PATH. !!]"  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

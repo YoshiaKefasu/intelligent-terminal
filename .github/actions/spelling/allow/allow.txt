@@ -201,6 +201,7 @@ Remappings
 reparents
 reparses
 replacen
+reqwest
 reserialization
 reserializes
 respawned
@@ -220,6 +221,7 @@ rubyw
 runtimes
 rustc
 rustflags
+rustls
 rustup
 sandboxing
 screenshots

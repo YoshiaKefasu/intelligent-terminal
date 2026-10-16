@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Clàraich a-steach tron neach-gnìomha, an uair si
 setup.auth.select_method: "Tagh dòigh clàraidh a-steach gus leantainn air adhart an seo."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Airson àidseant atharrachadh, rach gu Tèirmineal Glic Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Cha b' urrainn dhuinn %{agent} a thòiseachadh."
+setup.subtitle.acp_missing: "Chan eil am frithealaiche ACP airson %{agent} air a stàladh. Thèid a stàladh gu fèin-obrachail."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Chlàraich mi a-steach — feuch ceangal a-rithist"
 setup.option.retry_connection: "Feuch ri ceangal a-rithist"
 setup.status.installing: "Ga stàladh..."
 setup.status.installing_copilot_cli: "A' stàladh GitHub Copilot CLI"
+setup.status.installing_acp: "A' stàladh ACP airson %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "A' ceangal ri %{agent}"
 setup.status.install_failed: "Dh'fhàillig an stàladh: "
 setup.status.installing_winget: " Ga stàladh tro winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Dh'fhàillig winget a chur air bhog: %{error}"
 agent.install.winget_exited: "Dh'fhàg winget gun dùil: %{error}"
 agent.install.winget_failed_code: "Dh'fhàillig stàladh winget (còd fàgail %{code})"
 agent.install.unsupported: "Chan eil stàladh fèin-obrachail ga thaic airson %{agent}"
+agent.install.acp_failed: "Cha b' urrainn dhuinn am frithealaiche ACP airson %{agent} a stàladh: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Dèan cinnteach gu bheil %{name} air a stàladh agus air do PATH."  # {Locked="PATH"}
 
 # ── Sealladh àidseant (src/ui/agents_view.rs) ─────────────────────────────────

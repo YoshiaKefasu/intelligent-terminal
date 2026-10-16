@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Silakan masuk melalui agen AI, lalu pilih \"Saya s
 setup.auth.select_method: "Pilih metode masuk untuk melanjutkan di sini."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Untuk mengganti agen AI, buka Terminal Cerdas Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Kami tidak dapat memulai %{agent}."
+setup.subtitle.acp_missing: "Server ACP untuk %{agent} belum diinstal. Server akan diinstal secara otomatis."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Saya sudah masuk — coba sambungkan kembali"
 setup.option.retry_connection: "Coba sambungkan lagi"
 setup.status.installing: "Menginstal..."
 setup.status.installing_copilot_cli: "Menginstal GitHub Copilot CLI"
+setup.status.installing_acp: "Menginstal ACP untuk %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Menghubungkan ke %{agent}"
 setup.status.install_failed: "Instalasi gagal: "
 setup.status.installing_winget: " Menginstal melalui winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Gagal meluncurkan winget: %{error}"
 agent.install.winget_exited: "winget keluar secara tidak terduga: %{error}"
 agent.install.winget_failed_code: "winget install gagal (kode keluar %{code})"
 agent.install.unsupported: "Instalasi otomatis tidak didukung untuk %{agent}"
+agent.install.acp_failed: "Tidak dapat menginstal server ACP untuk %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Pastikan %{name} sudah diinstal dan ada di PATH Anda."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

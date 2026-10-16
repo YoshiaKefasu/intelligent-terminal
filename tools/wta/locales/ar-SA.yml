@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "يُرجى تسجيل الدخول عبر عامل
 setup.auth.select_method: "حدد طريقة لتسجيل الدخول للمتابعة هنا."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "لتبديل عوامل الذكاء الاصطناعي، انتقل إلى الوحدة الطرفية الذكية Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "تعذر بدء تشغيل %{agent}."
+setup.subtitle.acp_missing: "خادم ACP الخاص بـ %{agent} غير مثبّت. سيتم تثبيته تلقائيًا."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "لقد سجّلت الدخول — حاول الاتص
 setup.option.retry_connection: "حاول الاتصال مرة أخرى"
 setup.status.installing: "جارٍ التثبيت..."
 setup.status.installing_copilot_cli: "جارٍ تثبيت GitHub Copilot CLI"
+setup.status.installing_acp: "جارٍ تثبيت ACP الخاص بـ %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "جارٍ الاتصال بـ %{agent}"
 setup.status.install_failed: "فشل التثبيت: "
 setup.status.installing_winget: " جارٍ التثبيت عبر winget..."
@@ -138,6 +140,7 @@ agent.install.launch_failed: "فشل في تشغيل winget: %{error}"
 agent.install.winget_exited: "خرج winget بشكل غير متوقع: %{error}"
 agent.install.winget_failed_code: "فشل تثبيت winget (رمز الخروج %{code})"
 agent.install.unsupported: "التثبيت التلقائي غير مدعوم لـ %{agent}"
+agent.install.acp_failed: "تعذر تثبيت خادم ACP الخاص بـ %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "تأكد من أن %{name} مثبّت وموجود في PATH."  # {Locked="PATH"}
 
 # ── عرض عوامل الذكاء الاصطناعي (src/ui/agents_view.rs) ─────────────────────────────────────

@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Inicie sesión a través del agente y, a continuac
 setup.auth.select_method: "Seleccione un método de inicio de sesión para continuar aquí."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Para cambiar de agente, vaya a Terminal Inteligente Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "No se pudo iniciar %{agent}."
+setup.subtitle.acp_missing: "El servidor ACP de %{agent} no está instalado. Se instalará automáticamente."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Ya inicié sesión — intentar conectar de nuevo"
 setup.option.retry_connection: "Intentar conectar de nuevo"
 setup.status.installing: "Instalando..."
 setup.status.installing_copilot_cli: "Instalando GitHub Copilot CLI"
+setup.status.installing_acp: "Instalando ACP para %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Conectando con %{agent}"
 setup.status.install_failed: "Error en la instalación: "
 setup.status.installing_winget: " Instalando mediante winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "No se pudo iniciar winget: %{error}"
 agent.install.winget_exited: "winget se cerró inesperadamente: %{error}"
 agent.install.winget_failed_code: "Error en la instalación de winget (código de salida %{code})"
 agent.install.unsupported: "La instalación automática no es compatible con %{agent}"
+agent.install.acp_failed: "No se pudo instalar el servidor ACP de %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Asegúrese de que %{name} esté instalado y en el PATH."  # {Locked="PATH"}
 
 # ── Vista de agentes (src/ui/agents_view.rs) ─────────────────────────────────────

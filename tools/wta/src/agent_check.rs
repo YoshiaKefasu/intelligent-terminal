@@ -47,6 +47,10 @@ impl AgentStatus {
     pub fn can_auto_install(&self) -> bool {
         self.auto_installable
     }
+
+    pub fn acp_bootstrap_available(&self) -> bool {
+        self.id == agent_registry::ANTIGRAVITY_AGENT_ID && self.auto_installable && !self.cli_found
+    }
 }
 
 // ─── Basic functions ────────────────────────────────────────────────────────
@@ -122,8 +126,19 @@ pub fn find_acp_exe(agent_id: &str) -> Option<String> {
     let path = spawn_path()
         .map(std::ffi::OsString::from)
         .or_else(|| std::env::var_os("PATH"))?;
-    find_standalone_acp_executable_in_path(profile, &path, Path::is_file)
+    let resolved = find_standalone_acp_executable_in_path(profile, &path, Path::is_file);
+    if resolved.is_some()
+        || profile.id != agent_registry::ANTIGRAVITY_AGENT_ID
+        || has_antigravity_server_on_path(&path)
+    {
+        return resolved.map(|candidate| candidate.to_string_lossy().into_owned());
+    }
+    crate::antigravity_acp::managed_host_executable()
         .map(|candidate| candidate.to_string_lossy().into_owned())
+}
+
+fn has_antigravity_server_on_path(path: &OsStr) -> bool {
+    std::env::split_paths(path).any(|directory| directory.join("agy_acp_server.exe").is_file())
 }
 
 fn find_standalone_acp_executable_in_path(
@@ -346,7 +361,8 @@ pub async fn wsl_agent_available(distro: &str, agent_id: &str) -> bool {
         executable
     };
     if find_wsl_exe(distro, executable).await.is_none() {
-        return false;
+        return profile.id == agent_registry::ANTIGRAVITY_AGENT_ID
+            && find_wsl_exe(distro, profile.cli_executable).await.is_some();
     }
 
     if profile.acp_command_override(&source).starts_with("npx ") {
@@ -358,6 +374,14 @@ pub async fn wsl_agent_available(distro: &str, agent_id: &str) -> bool {
 pub(crate) fn wsl_agent_probe_script(executable: &str) -> String {
     let profile = agent_registry::lookup_profile(executable);
     let basename = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+    if profile.id == agent_registry::ANTIGRAVITY_AGENT_ID && basename == "agy_acp_server.par" {
+        return format!(
+            "printf '__WTA_PROBE_BEGIN__\\n'; {}; \
+             if [ -n \"$resolved\" ]; then printf '%s\\n' \"$resolved\"; fi; \
+             printf '__WTA_PROBE_END__\\n'",
+            crate::antigravity_acp::wsl_server_resolution_script()
+        );
+    }
     if profile
         .wsl_acp_launch_command
         .split_ascii_whitespace()
@@ -567,12 +591,41 @@ pub enum AgentInstallOutcome {
     DetectionTimedOut,
 }
 
-pub async fn install(
+pub async fn install_in_source(
     agent_id: &str,
+    source: &crate::agent_source::AgentSource,
     on_line: impl FnMut(String) + Send + 'static,
 ) -> AgentInstallOutcome {
-    match agent_id {
-        "copilot" => install_copilot(on_line).await,
+    let canonical_id = agent_registry::lookup_profile_by_id(agent_id).id;
+    match (canonical_id, source) {
+        ("copilot", crate::agent_source::AgentSource::Host) => install_copilot(on_line).await,
+        (agent_registry::ANTIGRAVITY_AGENT_ID, crate::agent_source::AgentSource::Host) => {
+            match crate::antigravity_acp::ensure_host().await {
+                Ok(_) => AgentInstallOutcome::Installed,
+                Err(error) => AgentInstallOutcome::Failed(
+                    t!(
+                        "agent.install.acp_failed",
+                        agent = "Google Antigravity",
+                        error = error.to_string()
+                    )
+                    .into_owned(),
+                ),
+            }
+        }
+        (
+            agent_registry::ANTIGRAVITY_AGENT_ID,
+            crate::agent_source::AgentSource::Wsl { distro },
+        ) => match crate::antigravity_acp::ensure_wsl(distro).await {
+            Ok(_) => AgentInstallOutcome::Installed,
+            Err(error) => AgentInstallOutcome::Failed(
+                t!(
+                    "agent.install.acp_failed",
+                    agent = "Google Antigravity",
+                    error = error.to_string()
+                )
+                .into_owned(),
+            ),
+        },
         _ => AgentInstallOutcome::Failed(
             t!("agent.install.unsupported", agent = agent_id).into_owned(),
         ),
@@ -632,6 +685,8 @@ fn merge_paths(fresh: &str, current: &str) -> String {
 pub fn check_agent(agent_id: &str) -> AgentStatus {
     let profile = agent_registry::lookup_profile_by_id(agent_id);
     let availability = check_host_agent_availability(agent_id, host_npx_available());
+    let ordinary_cli_found =
+        profile.id == agent_registry::ANTIGRAVITY_AGENT_ID && find_exe(agent_id).is_some();
 
     AgentStatus {
         id: agent_id.to_string(),
@@ -640,8 +695,17 @@ pub fn check_agent(agent_id: &str) -> AgentStatus {
         cli_path: availability.cli_path,
         install_hint: profile.install_hint.to_string(),
         auth_hint: profile.auth_hint.to_string(),
-        auto_installable: agent_id == "copilot",
+        auto_installable: can_install_host_agent(
+            agent_id,
+            ordinary_cli_found && availability.acp_bootstrap_available,
+        ),
     }
+}
+
+fn can_install_host_agent(agent_id: &str, ordinary_cli_found: bool) -> bool {
+    agent_id.eq_ignore_ascii_case(agent_registry::COPILOT_AGENT_ID)
+        || (agent_id.eq_ignore_ascii_case(agent_registry::ANTIGRAVITY_AGENT_ID)
+            && ordinary_cli_found)
 }
 
 pub fn recheck_agent(agent_id: &str) -> AgentStatus {
@@ -679,6 +743,7 @@ pub struct HostAgentAvailability {
     pub native_cli_found: bool,
     pub launch_ready: bool,
     pub requires_npx: bool,
+    pub acp_bootstrap_available: bool,
 }
 
 pub fn host_npx_available() -> bool {
@@ -691,12 +756,18 @@ pub fn check_host_agent_availability(agent_id: &str, npx_found: bool) -> HostAge
     let native_cli_found = cli_path.is_some();
     let requires_npx = profile.acp_launch_command.starts_with("npx ");
     let launch_ready = host_requirements_available(profile, native_cli_found, || npx_found);
+    let acp_bootstrap_available = profile.id == agent_registry::ANTIGRAVITY_AGENT_ID
+        && crate::antigravity_acp::host_platform().is_ok()
+        && !launch_ready
+        && find_exe(agent_id).is_some()
+        && !spawn_path().is_some_and(|path| has_antigravity_server_on_path(OsStr::new(&path)));
 
     HostAgentAvailability {
         cli_path,
         native_cli_found,
         launch_ready,
         requires_npx,
+        acp_bootstrap_available,
     }
 }
 
@@ -723,6 +794,9 @@ pub async fn check_agent_in_source(
                 executable
             };
             let cli_path = find_wsl_exe(distro, executable).await;
+            let acp_bootstrap_available = profile.id == agent_registry::ANTIGRAVITY_AGENT_ID
+                && cli_path.is_none()
+                && find_wsl_exe(distro, profile.cli_executable).await.is_some();
             AgentStatus {
                 id: agent_id.to_string(),
                 display_name: format!("{} — {} (WSL)", profile.display_name, distro),
@@ -732,7 +806,7 @@ pub async fn check_agent_in_source(
                 cli_path,
                 install_hint: profile.install_hint.to_string(),
                 auth_hint: profile.auth_hint.to_string(),
-                auto_installable: false,
+                auto_installable: acp_bootstrap_available,
             }
         }
     }
@@ -1048,6 +1122,24 @@ fn expand_env_vars(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn antigravity_cli_present_acp_missing_is_installable() {
+        assert!(
+            can_install_host_agent(agent_registry::ANTIGRAVITY_AGENT_ID, true),
+            "an installed ordinary Antigravity CLI must allow bootstrapping its missing ACP server"
+        );
+        assert!(!can_install_host_agent(
+            agent_registry::ANTIGRAVITY_AGENT_ID,
+            false
+        ));
+        assert!(!can_install_host_agent("custom:antigravity", true));
+        assert!(can_install_host_agent(
+            agent_registry::COPILOT_AGENT_ID,
+            false
+        ));
+        assert!(can_install_host_agent("ANTIGRAVITY", true));
+    }
 
     #[test]
     fn login_invocation_wsl_uses_selected_distro_without_host_resolution() {

@@ -138,8 +138,15 @@ Intelligent Terminal talks to all six through the
 required. **Claude Code** and **OpenAI Codex** do not speak ACP directly
 — Intelligent Terminal launches them through an `npx` wrapper that is
 fetched on demand at run time, so its only prerequisite is Node.js.
-Antigravity ships a separate native ACP server; neither it nor the native `agy`
-CLI requires Node.js or a user-installed Python runtime.
+Antigravity ships a separate native ACP server. When its ordinary `agy` CLI is
+detected, Intelligent Terminal prepares the ACP dependency before using it.
+Neither executable requires Node.js or a user-installed Python runtime.
+
+For agents running in WSL, Intelligent Terminal's separate terminal-control MCP
+relay requires a native Python 3 interpreter in the selected Linux user's login
+environment. A system or user-local Python installation is supported; Windows
+Python interoperability does not substitute for it. Preparing Antigravity ACP
+does not install Python or change your shell profile.
 
 > [!NOTE]
 > **Bringing your own ACP agent.** Any CLI that speaks ACP can also be
@@ -318,7 +325,20 @@ Gemini speaks ACP natively, so no wrapper is required.
 ### Google Antigravity ACP (Windows and WSL)
 
 Antigravity's ACP server is distributed separately from the interactive `agy` CLI.
-Download the platform-specific `antigravity-acp` archive from the
+With `agy` installed, Intelligent Terminal automatically downloads and prepares
+a supported, pinned ACP archive when the server is needed. This includes agent
+pane connections, Settings model discovery and eligible host background startup.
+Read-only availability checks do not download software. Settings displays
+installation progress and a retry action when preparation fails; the terminal
+remains usable.
+
+The managed installation validates the archive checksum, expected companion
+files and Windows publisher signatures. It does not replace a complete existing
+ACP installation, install the ordinary CLI, sign in, or change the user's PATH.
+For WSL, installation is confined to the selected distro's default-user source.
+Policy-blocked agents are not automatically prepared.
+
+You can also install ACP manually: download the platform-specific `antigravity-acp` archive from the
 [official ACP Registry](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json).
 The integration uses the standalone server's stdio protocol; do not substitute
 `agy`, `agy -p`, or an invented `agy --acp` invocation.

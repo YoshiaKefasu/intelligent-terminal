@@ -19,6 +19,7 @@ setup.auth.external_sign_in: "Մուտք գործեք գործակալի միջ�
 setup.auth.select_method: "Այստեղ շարունակելու համար ընտրեք մուտք գործելու եղանակ։"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Ագենտը փոխելու համար անցեք Խելացի տերմինալ Settings > Agent։"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Չհաջողվեց գործարկել %{agent}-ը։"
+setup.subtitle.acp_missing: "%{agent}-ի ACP սերվերը տեղադրված չէ։ Այն կտեղադրվի ինքնաշխատորեն։"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 setup.option.install: "Տեղադրել %{agent}"
 setup.option.install_hint: "(Կտեղադրվի ինքնաշխատորեն)"
@@ -28,6 +29,7 @@ setup.option.retry_auth: "Մուտք եմ գործել — կրկին միանա
 setup.option.retry_connection: "Կրկին փորձել միանալ"
 setup.status.installing: "Տեղադրվում է..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI գործիքի տեղադրում"
+setup.status.installing_acp: "%{agent}-ի ACP-ի տեղադրում"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Միացում %{agent}-ին"
 setup.status.install_failed: "Տեղադրումը ձախողվեց՝ "
 setup.status.installing_winget: " Տեղադրում winget-ի միջոցով..."
@@ -146,6 +148,7 @@ agent.install.launch_failed: "winget-ի գործարկումը ձախողվեց�
 agent.install.winget_exited: "winget-ը անսպասելիորեն դադարեց՝ %{error}"
 agent.install.winget_failed_code: "winget տեղադրումը ձախողվեց (ելքի կոդ %{code})"
 agent.install.unsupported: "Ինքնաշխատ տեղադրումը չի աջակցվում %{agent}-ի համար"
+agent.install.acp_failed: "Չհաջողվեց տեղադրել %{agent}-ի ACP սերվերը՝ %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Համոզվեք, որ %{name}-ը տեղադրված է և գտնվում է PATH-ում։"  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ───────────────────────────────────────────────────────────────

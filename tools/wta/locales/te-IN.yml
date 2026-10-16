@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "దయచేసి ఏజెంట్ ద్వా
 setup.auth.select_method: "ఇక్కడ కొనసాగించడానికి సైన్ ఇన్ పద్ధతిని ఎంచుకోండి."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "ఏజెంట్‌ను మార్చడానికి ఇంటెలిజెంట్ టెర్మినల్ Settings > Agent కు వెళ్ళండి."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "మేము %{agent}ను ప్రారంభించలేకపోయాము."
+setup.subtitle.acp_missing: "%{agent} కోసం ACP సర్వర్ ఇన్‌స్టాల్ చేయబడలేదు. ఇది ఆటోమేటిక్‌గా ఇన్‌స్టాల్ చేయబడుతుంది."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "నేను సైన్ ఇన్ చేసాను
 setup.option.retry_connection: "మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి"
 setup.status.installing: "ఇన్‌స్టాల్ అవుతోంది..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI ఇన్‌స్టాల్ అవుతోంది"
+setup.status.installing_acp: "%{agent} కోసం ACP ఇన్‌స్టాల్ అవుతోంది"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}తో కనెక్ట్ అవుతోంది"
 setup.status.install_failed: "ఇన్‌స్టాల్ విఫలమైంది: "
 setup.status.installing_winget: " winget ద్వారా ఇన్‌స్టాల్ అవుతోంది..."
@@ -137,6 +139,7 @@ agent.install.launch_failed: "winget ప్రారంభించడం వి
 agent.install.winget_exited: "winget అనుకోకుండా నిలిచిపోయింది: %{error}"
 agent.install.winget_failed_code: "winget ఇన్‌స్టాల్ విఫలమైంది (ఎగ్జిట్ కోడ్ %{code})"
 agent.install.unsupported: "%{agent} కోసం ఆటోమేటిక్ ఇన్‌స్టాల్ మద్దతు లేదు"
+agent.install.acp_failed: "%{agent} కోసం ACP సర్వర్‌ను ఇన్‌స్టాల్ చేయలేకపోయాము: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} ఇన్‌స్టాల్ చేయబడిందని మరియు మీ PATH లో ఉందని నిర్ధారించుకోండి."  # {Locked="PATH"}
 
 # ── ఏజెంట్‌ల వ్యూ (src/ui/agents_view.rs) ─────────────────────────────────────

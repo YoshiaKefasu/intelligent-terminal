@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Vui lòng đăng nhập qua tác nhân AI, sau đ�
 setup.auth.select_method: "Chọn phương thức đăng nhập để tiếp tục tại đây."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Để chuyển tác nhân AI, hãy đi tới Đầu cuối thông minh Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Chúng tôi không thể khởi động %{agent}."
+setup.subtitle.acp_missing: "Máy chủ ACP cho %{agent} chưa được cài đặt. Máy chủ sẽ được cài đặt tự động."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Tôi đã đăng nhập — thử kết nối lại"
 setup.option.retry_connection: "Thử kết nối lại"
 setup.status.installing: "Đang cài đặt..."
 setup.status.installing_copilot_cli: "Đang cài đặt GitHub Copilot CLI"
+setup.status.installing_acp: "Đang cài đặt ACP cho %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "Đang kết nối với %{agent}"
 setup.status.install_failed: "Cài đặt thất bại: "
 setup.status.installing_winget: " Đang cài đặt qua winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "Không thể khởi chạy winget: %{error}"
 agent.install.winget_exited: "winget đã thoát bất ngờ: %{error}"
 agent.install.winget_failed_code: "winget install thất bại (mã thoát %{code})"
 agent.install.unsupported: "Không hỗ trợ cài đặt tự động cho %{agent}"
+agent.install.acp_failed: "Không thể cài đặt máy chủ ACP cho %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Hãy đảm bảo %{name} đã được cài đặt và nằm trong PATH của bạn."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

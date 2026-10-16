@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Hasi saioa agentearen bidez, eta hautatu \"Saioa h
 setup.auth.select_method: "Hautatu saioa hasteko metodo bat hemen jarraitzeko."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Agenteak aldatzeko, joan Terminal Adimenduna Settings > Agent atalera."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "Ezin izan dugu %{agent} abiarazi."
+setup.subtitle.acp_missing: "%{agent} agentearen ACP zerbitzaria ez dago instalatuta. Automatikoki instalatuko da."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Saioa hasi dut — saiatu konektatzen berriro"
 setup.option.retry_connection: "Saiatu berriro konektatzen"
 setup.status.installing: "Instalatzen..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI instalatzen"
+setup.status.installing_acp: "%{agent} agentearen ACP instalatzen"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}(e)ra konektatzen"
 setup.status.install_failed: "Instalazioak huts egin du: "
 setup.status.installing_winget: " winget bidez instalatzen..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "winget abiarazi ezin izan da: %{error}"
 agent.install.winget_exited: "winget ustekabean irten da: %{error}"
 agent.install.winget_failed_code: "winget instalazioak huts egin du (irteera-kodea %{code})"
 agent.install.unsupported: "Instalazio automatikoa ez da onartzen %{agent}(e)rako"
+agent.install.acp_failed: "Ezin izan da %{agent} agentearen ACP zerbitzaria instalatu: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Ziurtatu %{name} instalatuta dagoela eta zure PATH-ean dagoela."  # {Locked="PATH"}
 
 # ── Agenteen ikuspegia (src/ui/agents_view.rs) ─────────────────────────────────

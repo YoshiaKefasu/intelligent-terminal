@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Inicieu la sessió per mitjà de l'agent i selecci
 setup.auth.select_method: "Seleccioneu un mètode d'inici de sessió per a continuar ací."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Per a canviar d'agent, aneu a Terminal Intel·ligent Settings > Agent."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "No s'ha pogut iniciar %{agent}."
+setup.subtitle.acp_missing: "El servidor ACP de %{agent} no està instal·lat. S'instal·larà automàticament."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "He iniciat la sessió — proveu de connectar de nou"
 setup.option.retry_connection: "Torneu a provar de connectar-vos"
 setup.status.installing: "S'està instal·lant..."
 setup.status.installing_copilot_cli: "S'està instal·lant GitHub Copilot CLI"
+setup.status.installing_acp: "S'està instal·lant l'ACP de %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "S'està connectant amb %{agent}"
 setup.status.install_failed: "Error en la instal·lació: "
 setup.status.installing_winget: " S'està instal·lant per mitjà de winget..."
@@ -125,6 +127,7 @@ agent.install.launch_failed: "No s'ha pogut iniciar winget: %{error}"
 agent.install.winget_exited: "winget ha eixit de manera inesperada: %{error}"
 agent.install.winget_failed_code: "La instal·lació de winget ha fallat (codi d'eixida %{code})"
 agent.install.unsupported: "La instal·lació automàtica no és compatible amb %{agent}"
+agent.install.acp_failed: "No s'ha pogut instal·lar el servidor ACP de %{agent}: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "Assegureu-vos que %{name} estiga instal·lat i al vostre PATH."  # {Locked="PATH"}
 
 # ── Vista d'agents (src/ui/agents_view.rs) ─────────────────────────────────

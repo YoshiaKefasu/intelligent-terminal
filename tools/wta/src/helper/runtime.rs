@@ -1170,6 +1170,7 @@ async fn run_acp_app(
                     selected_index: 0,
                     preflight: app::PreflightResult {
                         agent_id: String::new(),
+                        acp_bootstrap_available: false,
                         display_name: String::new(),
                         cli_status: app::CheckStatus::Skipped,
                         cli_path: None,

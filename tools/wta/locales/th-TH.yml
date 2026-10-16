@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "กรุณาลงชื่อเข้าใ�
 setup.auth.select_method: "เลือกวิธีลงชื่อเข้าใช้เพื่อดำเนินการต่อที่นี่"  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "หากต้องการสลับเอเจนต์ ให้ไปที่ เทอร์มินัลอัจฉริยะ Settings > Agent"  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "เราไม่สามารถเริ่ม %{agent} ได้"
+setup.subtitle.acp_missing: "ยังไม่ได้ติดตั้งเซิร์ฟเวอร์ ACP สำหรับ %{agent} ระบบจะติดตั้งให้โดยอัตโนมัติ"  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "ลงชื่อเข้าใช้แล้ว �
 setup.option.retry_connection: "ลองเชื่อมต่ออีกครั้ง"
 setup.status.installing: "กำลังติดตั้ง..."
 setup.status.installing_copilot_cli: "กำลังติดตั้ง GitHub Copilot CLI"
+setup.status.installing_acp: "กำลังติดตั้ง ACP สำหรับ %{agent}"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "กำลังเชื่อมต่อกับ %{agent}"
 setup.status.install_failed: "ติดตั้งล้มเหลว: "
 setup.status.installing_winget: " กำลังติดตั้งผ่าน winget..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "ไม่สามารถเปิด winget: %{
 agent.install.winget_exited: "winget หยุดทำงานโดยไม่คาดคิด: %{error}"
 agent.install.winget_failed_code: "winget install ล้มเหลว (รหัสออก %{code})"
 agent.install.unsupported: "ไม่รองรับการติดตั้งอัตโนมัติสำหรับ %{agent}"
+agent.install.acp_failed: "ไม่สามารถติดตั้งเซิร์ฟเวอร์ ACP สำหรับ %{agent} ได้: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "ตรวจสอบว่า %{name} ถูกติดตั้งแล้วและอยู่ใน PATH ของคุณ"  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────

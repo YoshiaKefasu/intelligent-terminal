@@ -10,10 +10,15 @@ Describe 'Feature Antigravity provider discovery' -Tag 'Feature', 'Antigravity' 
     BeforeAll {
         Import-Module (Join-Path $PSScriptRoot '..\ItE2E\ItE2E.psd1') -Force
         $script:appInfo = Resolve-ItApp -Package (Get-ItTestPackage)
-        $script:wta = & (Get-Module ItE2E) {
-            param($App)
-            Get-RunnableWtaPath -App $App
-        } $script:appInfo
+        # Managed-cache discovery must retain the selected package's identity.
+        [xml]$manifest = Get-Content -LiteralPath (Join-Path $script:appInfo.InstallLocation 'AppxManifest.xml') -Raw
+        $aliases = @($manifest.SelectNodes(
+            "//*[local-name()='Extension' and @Category='windows.appExecutionAlias' and @Executable='wta.exe']/*[local-name()='AppExecutionAlias']/*[local-name()='ExecutionAlias']"
+        ))
+        $aliases.Count | Should -Be 1 -Because 'the selected package must declare one WTA CLI alias'
+        $script:wta = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\$($script:appInfo.Package)\$($aliases[0].GetAttribute('Alias'))"
+        Test-Path -LiteralPath $script:wta -PathType Leaf |
+            Should -BeTrue -Because 'the availability probe must use this package family, not an unpackaged binary'
         if ($env:ITE2E_EXPECTED_WTA_SHA256) {
             (Get-FileHash -LiteralPath $script:appInfo.WtaPath -Algorithm SHA256).Hash |
                 Should -Be $env:ITE2E_EXPECTED_WTA_SHA256 -Because 'the packaged probe must match the intended source build'
@@ -38,14 +43,39 @@ Describe 'Feature Antigravity provider discovery' -Tag 'Feature', 'Antigravity' 
             Set-ItResult -Skipped -Because 'set ITE2E_ANTIGRAVITY_WSL_DISTRO to an installed native ACP test environment'
             return
         }
-        $native = Invoke-Native -FilePath 'wsl.exe' -Arguments @(
-            '-d', $distro, '--', 'bash', '-lc', 'command -v agy_acp_server.par'
-        ) -TimeoutSec 30
-        if ($native.ExitCode -ne 0 -or -not $native.StdOut.Trim()) {
-            Set-ItResult -Skipped -Because 'the selected distro does not have the native Antigravity ACP server on PATH'
-            return
+        $configuredServer = $env:ITE2E_ANTIGRAVITY_WSL_ACP_PATH
+        if ([string]::IsNullOrWhiteSpace($configuredServer)) {
+            $native = Invoke-Native -FilePath 'wsl.exe' -Arguments @(
+                '-d', $distro, '--exec', 'bash', '-lc', 'command -v agy_acp_server.par'
+            ) -TimeoutSec 30
+            if ($native.ExitCode -ne 0 -or -not $native.StdOut.Trim()) {
+                Set-ItResult -Skipped -Because 'the selected distro needs a native ACP server on PATH or ITE2E_ANTIGRAVITY_WSL_ACP_PATH'
+                return
+            }
+        } else {
+            $native = Invoke-Native -FilePath 'wsl.exe' -Arguments @(
+                '-d', $distro, '--exec', 'readlink', '-f', '--', $configuredServer
+            ) -TimeoutSec 30
+            $native.ExitCode | Should -Be 0 -Because 'the explicitly selected managed installation must resolve'
         }
-        $native.StdOut.Trim() | Should -Not -Match '^/mnt/' -Because 'Windows interop cannot substitute for the native Linux server'
+        $server = $native.StdOut.Trim()
+        $server | Should -Match '^/' -Because 'the native server must resolve to an absolute Linux path'
+        $companion = $server.Substring(0, $server.LastIndexOf('/')) + '/localharness_external'
+        foreach ($binary in @($server, $companion)) {
+            $resolved = Invoke-Native -FilePath 'wsl.exe' -Arguments @(
+                '-d', $distro, '--exec', 'readlink', '-f', '--', $binary
+            ) -TimeoutSec 30
+            $resolved.ExitCode | Should -Be 0
+            $path = $resolved.StdOut.Trim()
+            $path | Should -Match '^/'
+            $path | Should -Not -Match '^/mnt/' -Because 'Windows interop cannot substitute for either native ACP executable'
+            foreach ($check in @('-f', '-x')) {
+                $file = Invoke-Native -FilePath 'wsl.exe' -Arguments @(
+                    '-d', $distro, '--exec', 'test', $check, $path
+                ) -TimeoutSec 30
+                $file.ExitCode | Should -Be 0 -Because 'both the server and companion must be executable Linux files'
+            }
+        }
         $probe = Invoke-Native -FilePath $script:wta -Arguments @(
             'probe-agent-sources', '--wsl-distro', $distro
         ) -TimeoutSec 45

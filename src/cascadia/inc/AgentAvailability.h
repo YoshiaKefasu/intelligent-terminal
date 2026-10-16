@@ -38,6 +38,7 @@ namespace Microsoft::Terminal::AgentAvailability
         bool nativeCliFound{ false };
         bool launchReady{ false };
         bool requiresNpx{ false };
+        bool acpBootstrapAvailable{ false };
     };
 
     struct HostAgentSnapshot
@@ -91,10 +92,12 @@ namespace Microsoft::Terminal::AgentAvailability
             const auto& nativeCliFound = agent["native_cli_found"];
             const auto& launchReady = agent["launch_ready"];
             const auto& requiresNpx = agent["requires_npx"];
+            const auto& acpBootstrapAvailable = agent["acp_bootstrap_available"];
             if (!id.isString() ||
                 !nativeCliFound.isBool() ||
                 !launchReady.isBool() ||
-                !requiresNpx.isBool())
+                !requiresNpx.isBool() ||
+                (!acpBootstrapAvailable.isNull() && !acpBootstrapAvailable.isBool()))
             {
                 return std::nullopt;
             }
@@ -116,9 +119,13 @@ namespace Microsoft::Terminal::AgentAvailability
                 nativeCliFound.asBool(),
                 launchReady.asBool(),
                 requiresNpx.asBool(),
+                acpBootstrapAvailable.isBool() && acpBootstrapAvailable.asBool(),
             };
             if ((status.launchReady && !status.nativeCliFound) ||
                 (status.launchReady && status.requiresNpx && !snapshot.npxFound) ||
+                (status.acpBootstrapAvailable &&
+                 (!::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(knownAgent->id, L"antigravity") ||
+                  status.nativeCliFound || status.launchReady || status.requiresNpx)) ||
                 !snapshot.availability.emplace(std::wstring{ knownAgent->id }, status).second)
             {
                 return std::nullopt;
@@ -185,7 +192,7 @@ namespace Microsoft::Terminal::AgentAvailability
         {
             const auto status = FindHostAgentAvailability(*snapshot, agent.id);
             if (Reg::AgentIdEquals(agent.id, L"copilot") ||
-                (status && status->nativeCliFound))
+                (status && (status->nativeCliFound || status->acpBootstrapAvailable)))
             {
                 result.push_back(agent);
             }

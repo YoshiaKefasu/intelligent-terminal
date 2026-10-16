@@ -18,6 +18,17 @@ pub(super) struct HistoryTarget {
     pub provider: ProviderBinding,
 }
 
+async fn await_history_startup(
+    startup: impl std::future::Future<Output = Result<HistoryProcess>>,
+    cancelled: &tokio_util::sync::CancellationToken,
+) -> Result<HistoryProcess> {
+    tokio::select! {
+        biased;
+        _ = cancelled.cancelled() => Err(anyhow!("history startup retired")),
+        result = startup => result,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,6 +60,76 @@ mod tests {
             }
             assert_eq!(wait.budget(), Duration::from_secs(expected));
         }
+    }
+
+    #[tokio::test]
+    async fn history_startup_cancellation_wins_before_ready_work() {
+        let cancelled = tokio_util::sync::CancellationToken::new();
+        cancelled.cancel();
+        let polled = std::sync::atomic::AtomicBool::new(false);
+        let result = await_history_startup(
+            async {
+                polled.store(true, std::sync::atomic::Ordering::Relaxed);
+                Err(anyhow!("startup work must not run after retirement"))
+            },
+            &cancelled,
+        )
+        .await;
+        assert!(!polled.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("history startup retired"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn history_startup_cancellation_releases_a_pending_refresh_gate() {
+        let cancelled = tokio_util::sync::CancellationToken::new();
+        let gate = tokio::sync::Mutex::new(());
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let work = async {
+            let _guard = gate.lock().await;
+            entered.send(()).unwrap();
+            await_history_startup(std::future::pending::<Result<HistoryProcess>>(), &cancelled)
+                .await
+        };
+        let retire = async {
+            ready.await.unwrap();
+            cancelled.cancel();
+        };
+        let started = Instant::now();
+        let result = tokio::time::timeout(Duration::from_secs(1), async {
+            let (result, ()) = tokio::join!(work, retire);
+            result
+        })
+        .await;
+        assert!(
+            result.is_ok(),
+            "retirement left the refresh gate blocked on startup"
+        );
+        assert!(result
+            .unwrap()
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("history startup retired"));
+        assert!(gate.try_lock().is_ok());
+        assert_eq!(started.elapsed(), Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn history_startup_preserves_uncancelled_failure() {
+        let cancelled = tokio_util::sync::CancellationToken::new();
+        let result = await_history_startup(
+            std::future::ready(Err(anyhow!("dependency preparation failed"))),
+            &cancelled,
+        )
+        .await;
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "dependency preparation failed"
+        );
     }
 }
 
@@ -101,7 +182,9 @@ pub(super) struct HistoryProcess {
 }
 
 impl HistoryProcess {
-    fn spawn(target: &HistoryTarget) -> Result<Self> {
+    async fn spawn(target: &HistoryTarget) -> Result<Self> {
+        crate::antigravity_acp::prepare(&target.command, Some(&target.agent_id), &target.source)
+            .await?;
         let mut spawned = crate::protocol::acp::spawn::spawn_history_agent_process(
             &target.command,
             &target.agent_id,
@@ -382,9 +465,15 @@ impl HistoryQuery {
             return Err(anyhow!("history ACP process or transport exited"));
         }
         if self.process.is_none() {
-            self.process = Some(HistoryProcess::spawn(
-                target.ok_or_else(|| anyhow!("history launch target missing"))?,
-            )?);
+            self.process = Some(
+                await_history_startup(
+                    HistoryProcess::spawn(
+                        target.ok_or_else(|| anyhow!("history launch target missing"))?,
+                    ),
+                    cancelled,
+                )
+                .await?,
+            );
         }
         if let Some(process) = self.process.as_mut().filter(|process| !process.initialized) {
             self.recycling = true;

@@ -5885,6 +5885,16 @@ async fn spawn_one_agent(
     };
     let telemetry_model_source =
         provider_binding.telemetry_model_source(&resolved_agent_id, source);
+    if let Err(error) = crate::antigravity_acp::prepare(agent_cmd, agent_id, source).await {
+        crate::telemetry::log_agent_cold_start_complete(
+            &resolved_agent_id,
+            source_kind,
+            cold_start_started.elapsed().as_secs_f64() * 1000.0,
+            false,
+            "DependencyInstallFailed",
+        );
+        return Err(error).context("failed to prepare the agent's ACP dependency");
+    }
     let mut spawn_result = match spawn_agent_process_for_source_with_provider(
         agent_cmd,
         None,
@@ -7858,8 +7868,9 @@ fn request_host_history_discovery(state: &Arc<MasterStateInner>) {
             let discovery = tokio::task::spawn_blocking(move || {
                 let npx_available = crate::agent_check::host_npx_available();
                 host_history_agent_ids(allowed_ids.as_ref(), |agent_id| {
-                    crate::agent_check::check_host_agent_availability(agent_id, npx_available)
-                        .launch_ready
+                    let status =
+                        crate::agent_check::check_host_agent_availability(agent_id, npx_available);
+                    status.launch_ready || status.acp_bootstrap_available
                 })
             })
             .await;

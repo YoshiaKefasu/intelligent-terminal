@@ -97,6 +97,9 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
     public:
         AIAgentsViewModel(Model::GlobalAppSettings globalSettings);
         ~AIAgentsViewModel();
+        bool IsAcpPreparing() const noexcept { return _acpPreparing; }
+        bool AcpPreparationFailed() const noexcept { return _acpPreparationFailed; }
+        void RetryAcpPreparation() { _TriggerAcpModelProbe(); }
 
         using ViewModelHelper<AIAgentsViewModel>::PropertyChanged;
 
@@ -226,6 +229,8 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         // Settings, without waiting for the agent pane to be rebuilt.
         // See `_TriggerAcpModelProbe` in the .cpp for the full flow.
         bool _acpProbing{ false };
+        bool _acpPreparing{ false };
+        bool _acpPreparationFailed{ false };
         // Generation counter: bumped each time _TriggerAcpModelProbe
         // fires. An in-flight probe checks this before publishing its
         // result and bails if a newer trigger has superseded it (user

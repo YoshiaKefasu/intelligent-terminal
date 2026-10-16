@@ -74,6 +74,9 @@ namespace Microsoft.Terminal.Settings.Editor
         // in that case so custom agents remain usable.
         Windows.Foundation.Collections.IObservableVector<AcpModelEntry> AcpModelList { get; };
         Boolean HasAcpModelList { get; };
+        Boolean IsAcpPreparing { get; };
+        Boolean AcpPreparationFailed { get; };
+        void RetryAcpPreparation();
         // Convenience for XAML: true when the dropdown is empty so the
         // free-form TextBox should take its place. Avoids needing a
         // bool-to-bool converter resource in the page.

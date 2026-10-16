@@ -13,6 +13,7 @@ setup.auth.external_sign_in: "에이전트를 통해 로그인한 후 아래에�
 setup.auth.select_method: "여기에서 계속하려면 로그인 방법을 선택하세요."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "에이전트를 전환하려면 지능형 터미널 Settings > Agent로 이동하세요."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} 시작에 실패했습니다."
+setup.subtitle.acp_missing: "%{agent}의 ACP 서버가 설치되어 있지 않습니다. 자동으로 설치됩니다."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 setup.option.install: "%{agent} 설치"
 setup.option.install_hint: "(자동으로 설치됩니다)"
@@ -22,6 +23,7 @@ setup.option.retry_auth: "로그인 완료 — 다시 연결 시도"
 setup.option.retry_connection: "다시 연결 시도"
 setup.status.installing: "설치 중..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI 설치 중"
+setup.status.installing_acp: "%{agent}의 ACP 설치 중"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent}에 연결 중"
 setup.status.install_failed: "설치 실패: "
 setup.status.installing_winget: " winget을 통해 설치 중..."
@@ -120,6 +122,7 @@ agent.install.launch_failed: "winget을 시작할 수 없습니다: %{error}"
 agent.install.winget_exited: "winget이 예기치 않게 종료되었습니다: %{error}"
 agent.install.winget_failed_code: "winget 설치 실패(종료 코드 %{code})"
 agent.install.unsupported: "%{agent}에 대한 자동 설치가 지원되지 않습니다"
+agent.install.acp_failed: "%{agent}의 ACP 서버를 설치하지 못했습니다: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name}이(가) 설치되어 있고 PATH에 있는지 확인하세요."  # {Locked="PATH"}
 
 # ── 에이전트 보기 (src/ui/agents_view.rs) ─────────────────────────────────────

@@ -14,6 +14,7 @@ setup.auth.external_sign_in: "Agentewan yaykuy, chaymanta uraypi \"Yaykurqaniña
 setup.auth.select_method: "Kaypi hinalla purinaykipaq huk yaykuna ñanta akllay."  # Shown only inside the actual sign-in method picker; follows the auth intro.
 setup.auth.switch_agent: "Agente t'ikranapaq Yuyaysapa Terminal Settings > Agent nisqaman riy."  # Shared auth guidance; "Agent" names the selector on the Settings "Agents" page, not the navigation label. {Locked="Settings","Agent"}
 setup.subtitle.connection_failed: "%{agent} nisqata mana qallariyta atirqaykuchu."
+setup.subtitle.acp_missing: "%{agent} nisqapa ACP sirwiqnin mana churasqachu. Kikinmanta churakunqa."  # Shown when the ordinary CLI exists but its separate ACP server is missing. %{agent} is the AI agent display name. {Locked="ACP"}
 
 # {Locked=qps-ploc,qps-ploca,qps-plocm}, {Locked="Settings"}
 
@@ -25,6 +26,7 @@ setup.option.retry_auth: "Yaykurqaniña — watiqmanta tinkiyta ruwasun"
 setup.option.retry_connection: "Watiqmanta tinkiyta ruway"
 setup.status.installing: "Churachkan..."
 setup.status.installing_copilot_cli: "GitHub Copilot CLI churachkan"
+setup.status.installing_acp: "%{agent} nisqapa ACP churachkan"  # Busy status while downloading and preparing the separate ACP server; %{agent} is the AI agent display name. {Locked="ACP"}
 setup.status.connecting_agent: "%{agent} nisqaman tinkichkan"
 setup.status.install_failed: "Churay mana allinchu: "
 setup.status.installing_winget: " winget nisqawan churachkan..."
@@ -124,6 +126,7 @@ agent.install.launch_failed: "winget nisqata qallarichiy mana atikurqanchu: %{er
 agent.install.winget_exited: "winget mana suyasqanpi lluqsirqan: %{error}"
 agent.install.winget_failed_code: "winget churay mana allinchu (lluqsiy kode %{code})"
 agent.install.unsupported: "Kikinmanta churay mana allinchu %{agent} nisqapaq"
+agent.install.acp_failed: "%{agent} nisqapa ACP sirwiqninta churayta mana atikurqanchu: %{error}"  # Installation failure; %{agent} is the AI agent display name and %{error} is a diagnostic description. {Locked="ACP"}
 agent.custom.auth_hint: "%{name} churasqa kasqanta PATH nisqapiña kasqanta qhaway."  # {Locked="PATH"}
 
 # ── Agents view (src/ui/agents_view.rs) ─────────────────────────────────────
