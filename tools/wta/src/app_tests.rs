@@ -1059,6 +1059,167 @@ fn terminal_agent_event_for_unknown_session_does_not_fabricate_a_row() {
     }
 }
 
+#[test]
+fn cwd_hook_requires_a_known_session_and_prefers_new_cwd() {
+    use crate::agent_sessions::{CliSource, SessionEvent};
+    let payload = json!({ "cwd": "C:\\old", "new_cwd": "C:\\new" });
+    let facts = crate::app::AgentEventFacts {
+        key: "cwd-session".into(),
+        session_known: false,
+        session_status: None,
+        pane_owned_by_other: false,
+    };
+    let absent = crate::app::plan_agent_event(
+        "agent.cwd.changed",
+        &payload,
+        "pane-1",
+        &CliSource::Claude,
+        &facts,
+    );
+    assert!(absent.events.is_empty());
+
+    let known = crate::app::AgentEventFacts {
+        session_known: true,
+        ..facts
+    };
+    let plan = crate::app::plan_agent_event(
+        "agent.cwd.changed",
+        &payload,
+        "pane-1",
+        &CliSource::Claude,
+        &known,
+    );
+    assert!(matches!(
+        plan.events.as_slice(),
+        [SessionEvent::WorkingDirectoryChanged { cwd, pane_session_id, .. }]
+            if cwd == &std::path::PathBuf::from("C:\\new") && pane_session_id == "pane-1"
+    ));
+}
+
+#[test]
+fn opencode_unbind_plan_never_synthesizes_or_claims_a_pane() {
+    use crate::agent_sessions::{CliSource, SessionEvent};
+    let facts = crate::app::AgentEventFacts {
+        key: "session".into(),
+        session_known: false,
+        session_status: None,
+        pane_owned_by_other: false,
+    };
+    assert!(crate::app::plan_agent_event(
+        "agent.session.unbind",
+        &json!({}),
+        "pane",
+        &CliSource::OpenCode,
+        &facts
+    )
+    .events
+    .is_empty());
+    let known = crate::app::AgentEventFacts {
+        session_known: true,
+        ..facts
+    };
+    assert!(matches!(crate::app::plan_agent_event(
+        "agent.session.unbind", &json!({}), "pane", &CliSource::OpenCode, &known
+    ).events.as_slice(), [SessionEvent::SessionUnbound { pane_session_id, .. }] if pane_session_id == "pane"));
+    assert!(crate::app::plan_agent_event(
+        "agent.session.unbind",
+        &json!({}),
+        "pane",
+        &CliSource::Claude,
+        &known
+    )
+    .events
+    .is_empty());
+}
+
+#[test]
+fn prompt_refreshes_existing_session_cwd_without_rebinding_its_pane() {
+    use crate::agent_sessions::{AgentSessionRegistry, CliSource, SessionEvent};
+
+    let pane = "dd7141e2-a8d7-4766-b7ee-77c286cafe83";
+    for (source, cli) in [
+        (CliSource::Copilot, "copilot"),
+        (CliSource::Claude, "claude"),
+        (CliSource::Codex, "codex"),
+        (CliSource::Gemini, "gemini"),
+    ] {
+        let mut registry = AgentSessionRegistry::new();
+        registry.apply(SessionEvent::SessionStarted {
+            key: "native-session".into(),
+            cli_source: source,
+            pane_session_id: pane.into(),
+            cwd: "C:\\Users\\example".into(),
+            title: String::new(),
+        });
+        let params = json!({
+            "event": "agent.prompt.submit",
+            "cli_source": cli,
+            "agent_session_id": "native-session",
+            "payload": { "cwd": "C:\\Users\\example\\project" }
+        });
+        let mut published = Vec::new();
+        route_agent_event_to_registry_with_hook_sink(&mut registry, pane, &params, |event| {
+            published.push(event)
+        });
+        assert!(
+            matches!(
+                published.as_slice(),
+                [SessionEvent::WorkingDirectoryChanged { key, pane_session_id, cwd }, SessionEvent::ToolStarting { .. }]
+                    if key == "native-session"
+                        && pane_session_id == pane
+                        && cwd == &std::path::PathBuf::from("C:\\Users\\example\\project")
+            ),
+            "{cli}"
+        );
+        assert_eq!(
+            registry.get(&"native-session".to_string()).unwrap().cwd,
+            std::path::PathBuf::from("C:\\Users\\example\\project"),
+            "{cli}"
+        );
+        assert_eq!(
+            registry.key_for_pane(pane).as_deref(),
+            Some("native-session"),
+            "{cli}"
+        );
+    }
+
+    let facts = crate::app::AgentEventFacts {
+        key: "native-session".into(),
+        session_known: true,
+        session_status: None,
+        pane_owned_by_other: false,
+    };
+    for (source, payload, foreign_owner) in [
+        (
+            CliSource::OpenCode,
+            json!({ "cwd": "C:\\unverified" }),
+            false,
+        ),
+        (
+            CliSource::Antigravity,
+            json!({ "cwd": "C:\\workspace-root" }),
+            false,
+        ),
+        (CliSource::Copilot, json!({}), false),
+        (CliSource::Codex, json!({ "cwd": "C:\\wrong" }), true),
+    ] {
+        let plan = crate::app::plan_agent_event(
+            "agent.prompt.submit",
+            &payload,
+            pane,
+            &source,
+            &crate::app::AgentEventFacts {
+                pane_owned_by_other: foreign_owner,
+                ..facts.clone()
+            },
+        );
+        assert!(!plan
+            .events
+            .iter()
+            .any(|event| matches!(event, SessionEvent::WorkingDirectoryChanged { .. })));
+    }
+}
+
 /// `agent.error` is NOT a terminal event and must keep its synthetic start.
 ///
 /// It reports a session that is still live but failing, and its
@@ -1066,6 +1227,113 @@ fn terminal_agent_event_for_unknown_session_does_not_fabricate_a_row() {
 /// than the session key. Without a row — and therefore without a pane binding —
 /// a first-observed connection failure silently no-ops, losing the only signal
 /// that the agent broke.
+#[test]
+fn stale_opencode_end_does_not_stop_a_session_rebound_to_another_pane() {
+    use crate::agent_sessions::{AgentSessionRegistry, AgentStatus};
+
+    let mut reg = AgentSessionRegistry::new();
+    let hook = |event, pane| {
+        json!({
+            "event": event,
+            "cli_source": "opencode",
+            "agent_session_id": "rebound",
+            "payload": { "cwd": r"C:\repo", "title": pane }
+        })
+    };
+    for pane in ["old-pane", "new-pane"] {
+        route_agent_event_to_registry(&mut reg, pane, &hook("agent.session.start", pane));
+    }
+    assert!(!route_agent_event_to_registry(
+        &mut reg,
+        "old-pane",
+        &hook("agent.session.end", "old-pane"),
+    ));
+    let row = reg.get(&"rebound".to_string()).unwrap();
+    assert_eq!(row.status, AgentStatus::Idle);
+    assert_eq!(row.pane_session_id.as_deref(), Some("new-pane"));
+    route_agent_event_to_registry(&mut reg, "new-pane", &hook("agent.session.end", "new-pane"));
+    assert_eq!(
+        reg.get(&"rebound".to_string()).unwrap().status,
+        AgentStatus::Ended
+    );
+}
+
+#[test]
+fn opencode_server_activity_does_not_bind_an_unowned_pane() {
+    use crate::agent_sessions::{AgentSessionRegistry, AgentStatus};
+
+    let mut reg = AgentSessionRegistry::new();
+    let server_prompt = json!({
+        "event": "agent.prompt.submit",
+        "cli_source": "opencode",
+        "agent_session_id": "server-only",
+        "payload": { "cwd": r"C:\repo", "pane_owner": false }
+    });
+    assert!(!route_agent_event_to_registry(
+        &mut reg,
+        "server-pane",
+        &server_prompt
+    ));
+    assert!(reg.get(&"server-only".to_string()).is_none());
+
+    let start = json!({
+        "event": "agent.session.start",
+        "cli_source": "opencode",
+        "agent_session_id": "server-only",
+        "payload": { "cwd": r"C:\repo", "title": "Original" }
+    });
+    route_agent_event_to_registry(&mut reg, "tui-pane", &start);
+    route_agent_event_to_registry(&mut reg, "server-pane", &server_prompt);
+    let row = reg.get(&"server-only".to_string()).unwrap();
+    assert_eq!(row.status, AgentStatus::Working);
+    assert_eq!(row.pane_session_id.as_deref(), Some("tui-pane"));
+    assert!(reg.key_for_pane("server-pane").is_none());
+}
+
+#[test]
+fn opencode_rename_updates_only_current_pane_metadata() {
+    use crate::agent_sessions::{AgentSessionRegistry, AgentStatus};
+
+    let mut reg = AgentSessionRegistry::new();
+    let hook = |event, title| {
+        json!({
+            "event": event,
+            "cli_source": "opencode",
+            "agent_session_id": "shared",
+            "payload": { "cwd": r"C:\repo", "title": title }
+        })
+    };
+    route_agent_event_to_registry(
+        &mut reg,
+        "old-pane",
+        &hook("agent.session.start", "Original"),
+    );
+    route_agent_event_to_registry(
+        &mut reg,
+        "new-pane",
+        &hook("agent.session.start", "Current"),
+    );
+    route_agent_event_to_registry(&mut reg, "new-pane", &hook("agent.prompt.submit", ""));
+    assert!(!route_agent_event_to_registry(
+        &mut reg,
+        "old-pane",
+        &hook("agent.session.renamed", "Stale")
+    ));
+    let row = reg.get(&"shared".to_string()).unwrap();
+    assert_eq!(row.title, "Current");
+    assert_eq!(row.pane_session_id.as_deref(), Some("new-pane"));
+    assert_eq!(row.status, AgentStatus::Working);
+    route_agent_event_to_registry(
+        &mut reg,
+        "new-pane",
+        &hook("agent.session.renamed", "Renamed"),
+    );
+    let row = reg.get(&"shared".to_string()).unwrap();
+    assert_eq!(row.title, "Renamed");
+    assert_eq!(row.pane_session_id.as_deref(), Some("new-pane"));
+    assert_eq!(row.status, AgentStatus::Working);
+}
+
 #[test]
 fn agent_error_for_unknown_session_still_records_the_failure() {
     use crate::agent_sessions::{AgentSessionRegistry, AgentStatus, SessionEvent};

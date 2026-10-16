@@ -82,6 +82,10 @@ namespace Microsoft::Terminal::RichTab::Provider
         void UpdateFirstPartyFields(
             AttachmentId attachment,
             std::unordered_map<std::string, std::string> fields);
+        void UpdateAgentWorkingDirectory(
+            AttachmentId attachment,
+            bool agentActive,
+            std::optional<std::string> workingDirectory);
         void Activate(AttachmentId attachment);
         void Notify(AttachmentId attachment, ActivationEvent reason);
         void ReloadProviders();
@@ -121,6 +125,9 @@ namespace Microsoft::Terminal::RichTab::Provider
         struct SessionState
         {
             SessionContext context;
+            bool agentActive{ false };
+            std::optional<std::string> agentWorkingDirectory;
+            std::unordered_map<AttachmentId, std::optional<std::string>> activeAgentWorkingDirectories;
             uint64_t sessionIncarnation{ 0 };
             uint64_t contextRevision{ 0 };
             uint64_t updateSequence{ 0 };
@@ -136,7 +143,8 @@ namespace Microsoft::Terminal::RichTab::Provider
         void _Refresh(
             const std::string& sessionId,
             ActivationEvent reason,
-            bool initial);
+            bool initial,
+            std::string_view onlyProvider = {});
         void _RunProvider(
             Registration provider,
             Request request,
@@ -147,6 +155,8 @@ namespace Microsoft::Terminal::RichTab::Provider
             std::vector<std::string> diagnostics = {}) const;
         void _Enqueue(std::function<void()> work);
         void _PruneDetachedSessionsLocked();
+        void _InvalidateGitStatusWorkingDirectoryLocked(SessionState& session);
+        bool _RecomputeAgentWorkingDirectoryLocked(SessionState& session);
 
         mutable std::mutex _mutex;
         std::mutex _executorMutex;
