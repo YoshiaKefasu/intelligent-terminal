@@ -99,15 +99,50 @@ namespace TerminalAppLocalTests
         Grid _root;
     };
 
+    static FrameworkElement _findProgressElement(const FrameworkElement& root, const winrt::hstring& name)
+    {
+        if (const auto named = root.FindName(name).try_as<FrameworkElement>())
+        {
+            return named;
+        }
+        // Horizontal progress is now outside the header's namescope. Inspect
+        // the actual owned presenter, not a stale header-only lookup.
+        if (const auto header = root.try_as<winrt::TerminalApp::TabHeaderControl>())
+        {
+            const auto presenter = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ProgressRingPresenter();
+            if (!presenter)
+            {
+                return nullptr;
+            }
+            const auto find = [&](auto&& self, const DependencyObject& element) -> FrameworkElement {
+                if (const auto visual = element.try_as<FrameworkElement>(); visual && visual.Name() == name)
+                {
+                    return visual;
+                }
+                for (int32_t index = 0; index < Media::VisualTreeHelper::GetChildrenCount(element); ++index)
+                {
+                    if (const auto found = self(self, Media::VisualTreeHelper::GetChild(element, index)))
+                    {
+                        return found;
+                    }
+                }
+                return nullptr;
+            };
+            return find(find, presenter);
+        }
+        return nullptr;
+    }
+
     static bool _progressIndicatorsMatch(const FrameworkElement& root,
                                          const wchar_t* prefix,
                                          const bool active,
                                          const bool indeterminate,
                                          const std::optional<uint32_t> value = std::nullopt)
     {
-        const auto determinate = root.FindName(winrt::hstring{ std::wstring{ prefix } + L"ProgressRing" }).as<winrt::MUX::Controls::ProgressRing>();
-        const auto busy = root.FindName(winrt::hstring{ std::wstring{ prefix } + L"IndeterminateProgressRing" }).as<winrt::TerminalApp::IndeterminateProgressRing>();
-        return Media::VisualTreeHelper::GetParent(determinate).as<UIElement>().Visibility() == (active ? Visibility::Visible : Visibility::Collapsed) &&
+        const auto determinate = _findProgressElement(root, winrt::hstring{ std::wstring{ prefix } + L"ProgressRing" }).as<winrt::MUX::Controls::ProgressRing>();
+        const auto busy = _findProgressElement(root, winrt::hstring{ std::wstring{ prefix } + L"IndeterminateProgressRing" }).as<winrt::TerminalApp::IndeterminateProgressRing>();
+        return determinate && busy &&
+               Media::VisualTreeHelper::GetParent(determinate).as<UIElement>().Visibility() == (active ? Visibility::Visible : Visibility::Collapsed) &&
                determinate.Visibility() == (indeterminate ? Visibility::Collapsed : Visibility::Visible) &&
                busy.Visibility() == (indeterminate ? Visibility::Visible : Visibility::Collapsed) &&
                determinate.IsActive() == active &&
@@ -120,6 +155,61 @@ namespace TerminalAppLocalTests
                                                const bool indeterminate)
     {
         return root.FindName(indeterminate ? L"PaneIndeterminateProgressRing" : L"PaneProgressRing").as<Control>();
+    }
+
+    static FrameworkElement _sidebarProgressRoot(const winrt::TerminalApp::TabStrip& strip,
+                                                 const winrt::MUX::Controls::TabViewItem& tab)
+    {
+        const auto impl = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip);
+        const auto display = impl->DisplayItemForTab(tab);
+        const auto container = impl->ItemsList().ContainerFromItem(display).try_as<ListViewItem>();
+        return container ? container.ContentTemplateRoot().try_as<FrameworkElement>() : nullptr;
+    }
+
+    static bool _sidebarProgressIndicatorsMatch(const winrt::TerminalApp::TabStrip& strip,
+                                                const winrt::MUX::Controls::TabViewItem& tab,
+                                                const bool shown,
+                                                const bool indeterminate,
+                                                const std::optional<uint32_t> value = std::nullopt)
+    {
+        const auto impl = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip);
+        const auto display = impl->DisplayItemForTab(tab);
+        const auto root = _sidebarProgressRoot(strip, tab);
+        if (!root)
+        {
+            return false;
+        }
+        const auto header = root.FindName(L"TabHeaderPresenter").as<winrt::TerminalApp::TabHeaderControl>();
+        if (strip.IsRailCollapsed() && impl->HeaderForTab(tab))
+        {
+            return false;
+        }
+        const auto ring = root.FindName(indeterminate ? L"TabIndeterminateProgressRing" : L"TabProgressRing").as<Control>();
+        const auto icon = root.FindName(L"TabIconPresenter").as<ContentPresenter>();
+        const auto slot = Media::VisualTreeHelper::GetParent(icon);
+        if (Media::VisualTreeHelper::GetParent(Media::VisualTreeHelper::GetParent(ring)) != slot)
+        {
+            return false;
+        }
+        if (shown)
+        {
+            if (!ring.IsLoaded() || ring.ActualWidth() <= 0 || ring.ActualHeight() <= 0)
+            {
+                return false;
+            }
+            for (DependencyObject element = ring; element; element = Media::VisualTreeHelper::GetParent(element))
+            {
+                if (const auto visual = element.try_as<UIElement>(); visual && visual.Visibility() != Visibility::Visible)
+                {
+                    return false;
+                }
+            }
+        }
+        return !header.ShowProgressRing() &&
+               _findProgressElement(header, L"HeaderProgressRingPresenter").Visibility() == Visibility::Collapsed &&
+               display.ShowProgressRing() == shown &&
+               root.FindName(L"TabGroupChevronIcon").as<UIElement>().Visibility() == (shown ? Visibility::Collapsed : Visibility::Visible) &&
+               _progressIndicatorsMatch(root, L"Tab", shown, indeterminate, value);
     }
 
     static double _effectiveTextOpacity(const TextBlock& text, const Media::Brush& brush)
@@ -387,6 +477,7 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalSidebarPaneActivationSkipsPreviousFocus);
         TEST_METHOD(HorizontalTabProgressSurvivesAsyncVerticalTeardown);
         TEST_METHOD(HeaderProgressWrapperBindingPreservesRingState);
+        TEST_METHOD(HorizontalCompactProgressSurvivesDeselection);
         TEST_METHOD(IndeterminateProgressUsesSharedResource);
         TEST_METHOD(IndeterminateProgressStopsHiddenClocks);
         TEST_METHOD(TabProgressSurvivesMoveTabReorder);
@@ -395,7 +486,8 @@ namespace TerminalAppLocalTests
         TEST_METHOD(SidebarHeaderRenameUsesRealizedView);
         TEST_METHOD(SidebarHeaderRenamerStaysAtTitlePosition);
         TEST_METHOD(VerticalTabStripCompatibilitySetPaneItemsPreservesHeaderProgress);
-        TEST_METHOD(VerticalSinglePaneProgressKeepsProfileIcon);
+        TEST_METHOD(VerticalSinglePaneProgressReplacesProfileIcon);
+        TEST_METHOD(ProgressReplacementPreservesIndependentStatusGlyphs);
         TEST_METHOD(PaneProgressSurvivesTabLayoutLifecycle);
         TEST_METHOD(VerticalTabPaneProgressThemeSwitchRefreshesBrushes);
         TEST_METHOD(VerticalTabExpandedGroupKeepsHeaderProgressForAgentSource);
@@ -13903,19 +13995,15 @@ namespace TerminalAppLocalTests
             const auto rowHeader = stripImpl->HeaderForTab(tab).as<winrt::TerminalApp::TabHeaderControl>();
             VERIFY_IS_FALSE(rowHeader == header);
             VERIFY_IS_TRUE(rowHeader.TabStatus() == tabStatus);
-            const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(rowHeader);
-            const auto headerRing = rowHeader.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
-            VERIFY_IS_TRUE(headerImpl->ShowProgressRing());
+            VERIFY_IS_FALSE(rowHeader.ShowProgressRing());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(strip, tab, true, false, 60));
             VERIFY_IS_TRUE(header.TabStatus().IsProgressRingActive());
             VERIFY_IS_FALSE(header.TabStatus().IsProgressRingIndeterminate());
             VERIFY_ARE_EQUAL(uint32_t{ 60 }, header.TabStatus().ProgressValue());
-            VERIFY_ARE_EQUAL(Visibility::Visible, headerRing.Visibility());
-            VERIFY_IS_TRUE(headerRing.IsActive());
-            VERIFY_ARE_EQUAL(uint32_t{ 60 }, gsl::narrow<uint32_t>(headerRing.Value()));
         });
     }
 
-    void TabTests::VerticalSinglePaneProgressKeepsProfileIcon()
+    void TabTests::VerticalSinglePaneProgressReplacesProfileIcon()
     {
         const CascadiaSettings settings{ LR"({
             "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
@@ -13933,13 +14021,23 @@ namespace TerminalAppLocalTests
             winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
             winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
         winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
-        _initializeTerminalPage(page, settings, *connection);
+        Grid layoutHost{ nullptr };
+        TestOnUIThread([&]() {
+            layoutHost = Grid{};
+            layoutHost.Width(1280);
+            layoutHost.Height(720);
+        });
+        _initializeTerminalPage(page, settings, *connection, layoutHost);
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            return page->_tabStrip.ContainerFromIndex(0) != nullptr;
+        });
 
         winrt::com_ptr<winrt::TerminalApp::implementation::Tab> tab;
         winrt::TerminalApp::TabStripDisplayItem display{ nullptr };
         winrt::TerminalApp::TabHeaderControl header{ nullptr };
         winrt::Windows::UI::Xaml::Controls::ContentPresenter iconPresenter{ nullptr };
-        winrt::MUX::Controls::ProgressRing headerRing{ nullptr };
+        winrt::MUX::Controls::ProgressRing tabRing{ nullptr };
         winrt::MUX::Controls::IconSource profileIcon{ nullptr };
         IconElement profileVisual{ nullptr };
 
@@ -13956,7 +14054,7 @@ namespace TerminalAppLocalTests
             const auto root = page->_tabStrip.ContainerFromIndex(0).as<ListViewItem>().ContentTemplateRoot().as<FrameworkElement>();
             iconPresenter = root.FindName(L"TabIconPresenter").as<ContentPresenter>();
             header = strip->HeaderForTab(tab->TabViewItem()).as<winrt::TerminalApp::TabHeaderControl>();
-            headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            tabRing = root.FindName(L"TabProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             profileIcon = display.IconSource().as<winrt::MUX::Controls::IconSource>();
             profileVisual = iconPresenter.Content().as<IconElement>();
 
@@ -13965,39 +14063,46 @@ namespace TerminalAppLocalTests
             VERIFY_ARE_EQUAL(winrt::hstring{ L"\xE8A5" }, profileVisual.as<FontIcon>().Glyph());
             VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
             VERIFY_ARE_EQUAL(Visibility::Visible, iconPresenter.Visibility());
-            VERIFY_IS_TRUE(_progressIndicatorsMatch(header, L"Header", false, false));
-            VERIFY_IS_FALSE(headerRing.IsActive());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), false, false));
+            VERIFY_IS_TRUE(Media::VisualTreeHelper::GetParent(Media::VisualTreeHelper::GetParent(tabRing)) ==
+                           Media::VisualTreeHelper::GetParent(iconPresenter));
+            VERIFY_IS_TRUE(header.Presentation().IconSource() == profileIcon);
+            VERIFY_IS_FALSE(tabRing.IsActive());
         });
 
         _emitOsc(connection, u"\x1b]9;4;1;42\a");
         _waitForContentTransferReviewUI([&]() {
             const auto projectedIcon = display.IconSource().try_as<winrt::MUX::Controls::FontIconSource>();
-            return winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ShowProgressRing() &&
-                   display.IconVisibility() == Visibility::Visible &&
-                   iconPresenter.Visibility() == Visibility::Visible &&
+            return _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), true, false, 42) &&
+                   display.IconVisibility() == Visibility::Collapsed &&
+                   iconPresenter.Visibility() == Visibility::Collapsed &&
                    projectedIcon != nullptr &&
                    projectedIcon.Glyph() == L"\xE8A5" &&
                    display.IconSource() == profileIcon &&
+                   header.Presentation().IconSource() == profileIcon &&
+                   tab->TabViewItem().IconSource() == tab->_progressIconSource &&
                    iconPresenter.Content() == profileVisual &&
                    header.TabStatus().IsProgressRingActive() &&
-                   headerRing.Visibility() == Visibility::Visible &&
-                   headerRing.IsActive();
+                   tabRing.Visibility() == Visibility::Visible &&
+                   tabRing.IsActive();
         });
 
         TestOnUIThread([&]() {
             page->_tabStrip.IsRailCollapsed(true);
             VERIFY_ARE_EQUAL(Visibility::Collapsed, display.HeaderVisibility());
-            VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
-            VERIFY_ARE_EQUAL(Visibility::Visible, iconPresenter.Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, iconPresenter.Visibility());
             VERIFY_IS_TRUE(display.IconSource() == profileIcon);
             VERIFY_IS_TRUE(iconPresenter.Content() == profileVisual);
             VERIFY_IS_TRUE(header.TabStatus().IsProgressRingActive());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), true, false, 42));
 
             page->_tabStrip.IsRailCollapsed(false);
             VERIFY_ARE_EQUAL(Visibility::Visible, display.HeaderVisibility());
-            VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
-            VERIFY_ARE_EQUAL(Visibility::Visible, iconPresenter.Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, iconPresenter.Visibility());
             VERIFY_IS_TRUE(header.TabStatus().IsProgressRingActive());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), true, false, 42));
         });
 
         _emitOsc(connection, u"\x1b]9;4;0;0\a");
@@ -14007,11 +14112,266 @@ namespace TerminalAppLocalTests
                    iconPresenter.Visibility() == Visibility::Visible &&
                    restoredIcon != nullptr &&
                    restoredIcon.Glyph() == L"\xE8A5" &&
+                   display.IconSource() == profileIcon &&
+                   tab->TabViewItem().IconSource() == profileIcon &&
                    iconPresenter.Content() == profileVisual &&
                    !header.TabStatus().IsProgressRingActive() &&
-                   _progressIndicatorsMatch(header, L"Header", false, false) &&
-                   !headerRing.IsActive();
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), false, false) &&
+                   !tabRing.IsActive();
         });
+
+        TestOnUIThread([&]() {
+            page->_OnVerticalRailCollapseRequested(nullptr, nullptr);
+        });
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            const auto leading = Media::VisualTreeHelper::GetParent(iconPresenter).as<FrameworkElement>();
+            return page->_isVerticalRailCollapsed &&
+                   leading.ActualWidth() == 28.0 &&
+                   iconPresenter.ActualWidth() == 16.0 &&
+                   iconPresenter.Visibility() == Visibility::Visible;
+        });
+        TestOnUIThread([&]() {
+            const auto leading = Media::VisualTreeHelper::GetParent(iconPresenter).as<FrameworkElement>();
+            const auto root = Media::VisualTreeHelper::GetParent(leading).as<FrameworkElement>();
+            const auto container = page->_tabStrip.ContainerFromIndex(0).as<ListViewItem>();
+            // Desktop's inherited item style must not impose a wider row than
+            // the compact viewport and clip an otherwise correctly centered icon.
+            VERIFY_ARE_EQUAL(0.0, container.MinWidth());
+            const auto bounds = iconPresenter.TransformToVisual(root).TransformBounds({ 0, 0, 16, 16 });
+            VERIFY_IS_TRUE(bounds.X >= 0 && bounds.X + bounds.Width <= root.ActualWidth());
+            VERIFY_IS_TRUE(std::abs(bounds.X + bounds.Width / 2 - root.ActualWidth() / 2) <= 1.0);
+            const auto foreground = profileVisual.Foreground().try_as<Media::SolidColorBrush>();
+            VERIFY_IS_NOT_NULL(foreground);
+            VERIFY_IS_TRUE(foreground.Color().A > 0 && foreground.Opacity() > 0);
+            VERIFY_IS_TRUE(display.IconSource() == profileIcon);
+            VERIFY_IS_TRUE(iconPresenter.Content() == profileVisual);
+        });
+
+        // Bitmap icons have no intrinsic layout size. Exercise the actual
+        // collapsed template with a packaged bitmap as well as the font above.
+        TestOnUIThread([&]() {
+            tab->UpdateIcon(L"ms-appx:///taef.png", IconStyle::Default);
+            page->_ApplyTabListProjection(*tab);
+            page->UpdateLayout();
+        });
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            const auto bitmap = iconPresenter.Content().try_as<BitmapIcon>();
+            return bitmap && bitmap.IsLoaded() &&
+                   bitmap.ActualWidth() == 16.0 && bitmap.ActualHeight() == 16.0;
+        });
+        TestOnUIThread([&]() {
+            const auto bitmap = iconPresenter.Content().as<BitmapIcon>();
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"ms-appx:///taef.png" }, bitmap.UriSource().AbsoluteUri());
+            const auto root = Media::VisualTreeHelper::GetParent(Media::VisualTreeHelper::GetParent(iconPresenter)).as<FrameworkElement>();
+            const auto bounds = bitmap.TransformToVisual(root).TransformBounds({ 0, 0, 16, 16 });
+            VERIFY_IS_TRUE(bounds.X >= 0 && bounds.X + bounds.Width <= root.ActualWidth());
+            VERIFY_IS_TRUE(std::abs(bounds.X + bounds.Width / 2 - root.ActualWidth() / 2) <= 1.0);
+            VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
+        });
+    }
+
+    void TabTests::ProgressReplacementPreservesIndependentStatusGlyphs()
+    {
+        UIElement previousContent{ nullptr };
+        TestOnUIThread([&]() { previousContent = Window::Current().Content(); });
+        const auto cleanup = wil::scope_exit([&]() {
+            TestOnUIThread([&]() { Window::Current().Content(previousContent); });
+        });
+
+        winrt::TerminalApp::TabStrip strip{ nullptr };
+        winrt::MUX::Controls::TabViewItem tab{ nullptr };
+        winrt::TerminalApp::TabHeaderControl nativeHeader{ nullptr };
+        winrt::TerminalApp::TerminalTabStatus status{ nullptr };
+        StackPanel host{ nullptr };
+        TestOnUIThread([&]() {
+            strip = winrt::TerminalApp::TabStrip{};
+            tab = winrt::MUX::Controls::TabViewItem{};
+            nativeHeader = winrt::TerminalApp::TabHeaderControl{};
+            status = winrt::TerminalApp::TerminalTabStatus{};
+            nativeHeader.Title(L"Independent status");
+            nativeHeader.TabStatus(status);
+            tab.Header(nativeHeader);
+            strip.Width(320);
+            strip.Height(160);
+            strip.TabItems().Append(tab);
+            strip.SetTabPresentation(tab, nativeHeader.Title(), L"\xE8A5");
+            host = StackPanel{};
+            host.Children().Append(strip);
+            host.Children().Append(nativeHeader);
+            Window::Current().Content(host);
+            Window::Current().Activate();
+            host.UpdateLayout();
+        });
+        _waitForContentTransferReviewUI([&]() {
+            host.UpdateLayout();
+            return winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip)->HeaderForTab(tab) != nullptr;
+        });
+        TestOnUIThread([&]() {
+            const auto impl = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip);
+            const auto display = impl->DisplayItemForTab(tab);
+            const auto rowHeader = impl->HeaderForTab(tab).as<winrt::TerminalApp::TabHeaderControl>();
+            const auto icon = display.IconSource();
+            status.BellIndicator(true);
+            status.IsPaneZoomed(true);
+            status.IsReadOnlyActive(true);
+            status.IsConnectionClosed(true);
+            status.IsInputBroadcastActive(true);
+            status.IsKeepRunning(true);
+            status.IsPinned(true);
+            const auto verifyGlyphs = [&](const winrt::TerminalApp::TabHeaderControl& header) {
+                for (const auto name : { L"HeaderBellIndicator", L"HeaderZoomIcon", L"HeaderLockIcon", L"HeaderClosedIcon",
+                                         L"HeaderBroadcastIcon", L"HeaderKeepRunningIcon", L"HeaderPinnedIcon" })
+                {
+                    const auto glyph = header.as<FrameworkElement>().FindName(name).as<FontIcon>();
+                    VERIFY_IS_TRUE(glyph.IsLoaded());
+                    VERIFY_IS_TRUE(glyph.ActualWidth() > 0);
+                    for (DependencyObject element = glyph; element; element = Media::VisualTreeHelper::GetParent(element))
+                    {
+                        if (const auto visual = element.try_as<UIElement>())
+                        {
+                            VERIFY_ARE_EQUAL(Visibility::Visible, visual.Visibility());
+                        }
+                    }
+                }
+            };
+            for (const auto active : { false, true, false })
+            {
+                status.IsProgressRingActive(active);
+                for (const auto indeterminate : { false, true })
+                {
+                    status.IsProgressRingIndeterminate(indeterminate);
+                    strip.SetTabPresentation(tab, nativeHeader.Title(), L"\xE8A5");
+                    host.UpdateLayout();
+                    VERIFY_IS_TRUE(rowHeader.TabStatus() == status);
+                    VERIFY_IS_TRUE(nativeHeader.TabStatus() == status);
+                    VERIFY_IS_TRUE(display.IconSource() == icon);
+                    VERIFY_ARE_EQUAL(active ? Visibility::Collapsed : Visibility::Visible, display.IconVisibility());
+                    VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(strip, tab, active, indeterminate));
+                    verifyGlyphs(rowHeader);
+                    verifyGlyphs(nativeHeader);
+                }
+            }
+            status.BellIndicator(false);
+            strip.UpdateLayout();
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, rowHeader.as<FrameworkElement>().FindName(L"HeaderBellIndicator").as<FontIcon>().Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Visible, rowHeader.as<FrameworkElement>().FindName(L"HeaderLockIcon").as<FontIcon>().Visibility());
+        });
+    }
+
+    void TabTests::HorizontalCompactProgressSurvivesDeselection()
+    {
+        UIElement previousContent{ nullptr };
+        TestOnUIThread([&]() { previousContent = Window::Current().Content(); });
+        const auto cleanup = wil::scope_exit([&]() {
+            TestOnUIThread([&]() { Window::Current().Content(previousContent); });
+        });
+        const auto connection = winrt::make_self<TestConnection>(
+            winrt::guid{ L"{6239a42c-cccc-49a3-80bd-e8fdd045186d}" },
+            winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        Grid host{ nullptr };
+        TestOnUIThread([&]() {
+            host = Grid{};
+            host.Width(1000);
+            host.Height(1000);
+        });
+        const auto page = _commonSetup(nullptr, host);
+        winrt::com_ptr<winrt::TerminalApp::implementation::Tab> tab;
+        winrt::TerminalApp::Tab sibling{ nullptr };
+        TestOnUIThread([&]() {
+            VERIFY_IS_TRUE(page->_ApplyTabLayout(TabLayout::Horizontal));
+            page->_CompleteTabLayoutChange(page->_tabLayoutGeneration);
+            const auto initial = page->_tabs.GetAt(0);
+            const auto pane = page->_MakeTerminalPane(NewTerminalArgs{}, nullptr, *connection);
+            VERIFY_IS_NOT_NULL(page->_CreateNewTabFromPane(pane));
+            tab = page->_GetFocusedTabImpl();
+            page->_RemoveTab(initial);
+            VERIFY_SUCCEEDED(page->_OpenNewTab(NewTerminalArgs{}));
+            sibling = page->_tabs.GetAt(1);
+            page->_tabView.SelectedItem(tab->TabViewItem());
+            host.UpdateLayout();
+        });
+        _waitForContentTransferReviewUI([&]() {
+            host.UpdateLayout();
+            return tab->TabViewItem().IsLoaded() && tab->TabViewItem().ActualWidth() > 0;
+        });
+        const auto visible = [](DependencyObject element) {
+            for (; element; element = Media::VisualTreeHelper::GetParent(element))
+            {
+                if (const auto visual = element.try_as<UIElement>();
+                    visual && visual.Visibility() != Visibility::Visible)
+                {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (const auto widthMode : { winrt::MUX::Controls::TabViewWidthMode::Compact,
+                                      winrt::MUX::Controls::TabViewWidthMode::Equal,
+                                      winrt::MUX::Controls::TabViewWidthMode::SizeToContent })
+        {
+            TestOnUIThread([&]() {
+                page->_tabView.TabWidthMode(widthMode);
+                page->_tabView.SelectedItem(tab->TabViewItem());
+                tab->UpdateIcon(L"ms-appx:///AgentIcons/copilot.svg", IconStyle::Monochrome);
+                host.UpdateLayout();
+            });
+            _emitOsc(connection, u"\x1b]9;4;3;0\a");
+            _waitForContentTransferReviewUI([&]() {
+                const auto header = tab->TabViewItem().Header().as<winrt::TerminalApp::TabHeaderControl>();
+                const auto ring = _findProgressElement(header, L"HeaderIndeterminateProgressRing");
+                return header.TabStatus().IsProgressRingActive() && ring && ring.IsLoaded() && visible(ring);
+            });
+            TestOnUIThread([&]() {
+                const auto header = tab->TabViewItem().Header().as<winrt::TerminalApp::TabHeaderControl>();
+                VERIFY_IS_NOT_NULL(header.Presentation().IconSource());
+                VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+                if (widthMode == winrt::MUX::Controls::TabViewWidthMode::Compact)
+                {
+                    // Reapplying the native template must not strand the one
+                    // presenter in a stale IconBox or attach it twice.
+                    const auto controlTemplate = tab->TabViewItem().Template();
+                    tab->TabViewItem().Template(nullptr);
+                    tab->TabViewItem().Template(controlTemplate);
+                    tab->TabViewItem().ApplyTemplate();
+                    host.UpdateLayout();
+                }
+                page->_tabView.SelectedItem(sibling.TabViewItem());
+                host.UpdateLayout();
+            });
+            _waitForContentTransferReviewUI([&]() {
+                host.UpdateLayout();
+                const auto item = tab->TabViewItem();
+                const auto root = Media::VisualTreeHelper::GetChild(item, 0).as<FrameworkElement>();
+                const auto header = item.Header().as<winrt::TerminalApp::TabHeaderControl>();
+                const auto ring = _findProgressElement(header, L"HeaderIndeterminateProgressRing");
+                const auto icon = root.FindName(L"IconControl").as<ContentControl>();
+                const auto box = root.FindName(L"IconBox").as<Viewbox>();
+                return page->_tabView.SelectedItem() == sibling.TabViewItem() &&
+                       visible(ring) && visible(box) && ring.ActualWidth() > 0 &&
+                       Media::VisualTreeHelper::GetParent(_findProgressElement(header, L"HeaderProgressRingPresenter")) == box.Child() &&
+                       icon.Visibility() == Visibility::Collapsed &&
+                       root.FindName(L"ContentPresenter").as<UIElement>().Visibility() ==
+                           (widthMode == winrt::MUX::Controls::TabViewWidthMode::Compact ? Visibility::Collapsed : Visibility::Visible);
+            });
+            _emitOsc(connection, u"\x1b]9;4;0\a");
+            _waitForContentTransferReviewUI([&]() {
+                const auto item = tab->TabViewItem();
+                const auto root = Media::VisualTreeHelper::GetChild(item, 0).as<FrameworkElement>();
+                const auto header = item.Header().as<winrt::TerminalApp::TabHeaderControl>();
+                return !header.TabStatus().IsProgressRingActive() &&
+                       page->_tabView.SelectedItem() == sibling.TabViewItem() &&
+                       item.IconSource() == header.Presentation().IconSource() &&
+                       visible(root.FindName(L"IconControl").as<UIElement>());
+            });
+            TestOnUIThread([&]() {
+                page->_tabView.SelectedItem(tab->TabViewItem());
+                host.UpdateLayout();
+                VERIFY_IS_FALSE(tab->_tabStatus.IsProgressRingActive());
+                VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_iconSource);
+            });
+        }
     }
 
     void TabTests::HeaderProgressWrapperBindingPreservesRingState()
@@ -14033,8 +14393,8 @@ namespace TerminalAppLocalTests
             status.IsProgressRingIndeterminate(false);
             status.ProgressValue(42);
             header.TabStatus(status);
-            wrapper = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            ring = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            wrapper = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            ring = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             first = ContentPresenter{};
             second = ContentPresenter{};
             StackPanel host;
@@ -14076,7 +14436,7 @@ namespace TerminalAppLocalTests
         });
         winrt::TerminalApp::IndeterminateProgressRing busy{ nullptr };
         TestOnUIThread([&]() {
-            busy = header.as<FrameworkElement>().FindName(L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
+            busy = _findProgressElement(header, L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
             const auto peer = Automation::Peers::FrameworkElementAutomationPeer::CreatePeerForElement(busy);
             VERIFY_ARE_EQUAL(Automation::Peers::AutomationControlType::ProgressBar, peer.GetAutomationControlType());
             VERIFY_IS_NULL(peer.GetPattern(Automation::Peers::PatternInterface::RangeValue));
@@ -14227,7 +14587,7 @@ namespace TerminalAppLocalTests
                 VERIFY_ARE_EQUAL(Automation::Peers::AutomationControlType::ProgressBar, peer.GetAutomationControlType());
                 VERIFY_IS_NULL(peer.GetPattern(Automation::Peers::PatternInterface::RangeValue));
             }
-            const auto busy = header.FindName(L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
+            const auto busy = _findProgressElement(header, L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
             VERIFY_IS_TRUE(busy.Style() == header.Resources().Lookup(resourceKey).as<Style>());
         });
     }
@@ -14244,7 +14604,7 @@ namespace TerminalAppLocalTests
             status.IsProgressRingActive(true);
             status.IsProgressRingIndeterminate(true);
             header.TabStatus(status);
-            ring = header.FindName(L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
+            ring = _findProgressElement(header, L"HeaderIndeterminateProgressRing").as<winrt::TerminalApp::IndeterminateProgressRing>();
             first = Grid{};
             second = Grid{};
             host = StackPanel{};
@@ -14278,8 +14638,11 @@ namespace TerminalAppLocalTests
         TestOnUIThread([&]() {
             const auto impl = winrt::get_self<winrt::TerminalApp::implementation::IndeterminateProgressRing>(ring);
             const auto previousClock = impl->_animation;
-            impl->_StopAnimation();
-            impl->_UpdateAnimation();
+            // Use the public ABI so the dependency-property callback runs in
+            // the control's module, not this test DLL's separate static DP.
+            ring.IsActive(false);
+            VERIFY_IS_NULL(impl->_animation);
+            ring.IsActive(true);
             VERIFY_IS_FALSE(previousClock == impl->_animation);
         });
         verifyClock(true);
@@ -14352,10 +14715,23 @@ namespace TerminalAppLocalTests
         const auto second = winrt::make_self<TestConnection>(
             winrt::guid{ L"{6239a42c-bbbb-49a3-80bd-e8fdd045185d}" },
             winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
-        auto page = _commonSetup(*first, nullptr, std::nullopt, true);
+        Grid layoutHost{ nullptr };
+        TestOnUIThread([&]() {
+            layoutHost = Grid{};
+            layoutHost.Width(1280);
+            layoutHost.Height(720);
+        });
+        auto page = _commonSetup(*first, layoutHost, std::nullopt, true);
         winrt::com_ptr<winrt::TerminalApp::implementation::Tab> tab;
         winrt::TerminalApp::TabHeaderControl originalHeader{ nullptr };
+        winrt::MUX::Controls::IconSource originalSource{ nullptr };
 
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            const auto focused = page->_GetFocusedTabImpl();
+            return focused && focused->GetActiveTerminalControl().ActualWidth() > 0 &&
+                   winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip)->HeaderForTab(focused->TabViewItem()) != nullptr;
+        });
         TestOnUIThread([&]() {
             tab = page->_GetFocusedTabImpl();
             VERIFY_IS_NOT_NULL(tab);
@@ -14366,6 +14742,7 @@ namespace TerminalAppLocalTests
             originalHeader = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip)
                                  ->HeaderForTab(tab->TabViewItem())
                                  .as<winrt::TerminalApp::TabHeaderControl>();
+            originalSource = originalHeader.Presentation().IconSource().as<winrt::MUX::Controls::IconSource>();
         });
 
         _emitOsc(second, u"\x1b]9;4;3;0\a");
@@ -14379,13 +14756,16 @@ namespace TerminalAppLocalTests
             }
 
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
             return !headerImpl->ShowProgressRing() &&
                    presenter.Visibility() == Visibility::Collapsed &&
                    header.TabStatus().IsProgressRingActive() &&
                    header.TabStatus().IsProgressRingIndeterminate() &&
                    _progressIndicatorsMatch(header, L"Header", true, true) &&
-                   tab->TabViewItem().IconSource() != nullptr;
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), false, true) &&
+                   header.Presentation().IconSource() != nullptr &&
+                   header.Presentation().IconSource() == originalSource &&
+                   tab->TabViewItem().IconSource() == tab->_progressIconSource;
         });
 
         TestOnUIThread([&]() {
@@ -14407,13 +14787,15 @@ namespace TerminalAppLocalTests
             VERIFY_IS_TRUE(header.Presentation() == originalHeader.Presentation());
             originalHeader = header;
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
             VERIFY_IS_TRUE(headerImpl->ShowProgressRing());
             VERIFY_ARE_EQUAL(Visibility::Visible, presenter.Visibility());
             VERIFY_IS_TRUE(header.TabStatus().IsProgressRingActive());
             VERIFY_IS_TRUE(header.TabStatus().IsProgressRingIndeterminate());
             VERIFY_IS_TRUE(_progressIndicatorsMatch(header, L"Header", true, true));
-            VERIFY_IS_NOT_NULL(tab->TabViewItem().IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            VERIFY_IS_NOT_NULL(header.Presentation().IconSource());
+            VERIFY_IS_TRUE(header.Presentation().IconSource() == originalSource);
         });
 
         _emitOsc(second, u"\x1b]9;4;1;73\a");
@@ -14443,10 +14825,11 @@ namespace TerminalAppLocalTests
                 return false;
             }
 
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
             return !winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ShowProgressRing() &&
                    presenter.Visibility() == Visibility::Collapsed &&
-                   _progressIndicatorsMatch(header, L"Header", true, true);
+                   _progressIndicatorsMatch(header, L"Header", true, true) &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), false, true);
         });
 
         _emitOsc(second, u"\x1b]9;4;0;0\a");
@@ -14459,12 +14842,36 @@ namespace TerminalAppLocalTests
                 return false;
             }
 
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            return winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ShowProgressRing() &&
-                   presenter.Visibility() == Visibility::Visible &&
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            return !winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ShowProgressRing() &&
+                   presenter.Visibility() == Visibility::Collapsed &&
                    !header.TabStatus().IsProgressRingActive() &&
                    _progressIndicatorsMatch(header, L"Header", false, true) &&
-                   tab->TabViewItem().IconSource() != nullptr;
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), false, true) &&
+                   tab->TabViewItem().IconSource() == originalSource;
+        });
+
+        TestOnUIThread([&]() {
+            VERIFY_IS_TRUE(page->_ApplyTabLayout(TabLayout::Horizontal));
+        });
+        _waitForContentTransferReviewUI([&]() {
+            return !page->_changingTabLayout && !page->_isVerticalLayout &&
+                   tab->TabViewItem().IconSource() == originalSource;
+        });
+        _emitOsc(second, u"\x1b]9;4;3;0\a");
+        _waitForContentTransferReviewUI([&]() {
+            const auto header = tab->TabViewItem().Header().as<winrt::TerminalApp::TabHeaderControl>();
+            return header.ShowProgressRing() &&
+                   _progressIndicatorsMatch(header, L"Header", true, true) &&
+                   tab->TabViewItem().IconSource() == tab->_progressIconSource &&
+                   header.Presentation().IconSource() == originalSource;
+        });
+        _emitOsc(second, u"\x1b]9;4;0;0\a");
+        _waitForContentTransferReviewUI([&]() {
+            const auto header = tab->TabViewItem().Header().as<winrt::TerminalApp::TabHeaderControl>();
+            return _progressIndicatorsMatch(header, L"Header", false, true) &&
+                   tab->TabViewItem().IconSource() == originalSource &&
+                   header.Presentation().IconSource() == originalSource;
         });
     }
 
@@ -14535,11 +14942,14 @@ namespace TerminalAppLocalTests
                     return false;
                 }
 
-                const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
+                const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
                 const auto display = vertical ? displayForProgressTab() : nullptr;
                 return (!vertical || (display != nullptr && display.IsGroup() && display.IsExpanded())) &&
-                       winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header)->ShowProgressRing() == showHeaderProgress &&
-                       presenter.Visibility() == (showHeaderProgress ? Visibility::Visible : Visibility::Collapsed) &&
+                       header.ShowProgressRing() == (!vertical && showHeaderProgress) &&
+                       presenter.Visibility() == (!vertical && showHeaderProgress ? Visibility::Visible : Visibility::Collapsed) &&
+                       (!vertical || _sidebarProgressIndicatorsMatch(page->_tabStrip, progressTab->TabViewItem(), showHeaderProgress, header.TabStatus().IsProgressRingIndeterminate())) &&
+                       progressTab->TabViewItem().IconSource() == progressTab->_progressIconSource &&
+                       header.Presentation().IconSource() != nullptr &&
                        header.TabStatus().IsProgressRingActive() &&
                        _progressIndicatorsMatch(header, L"Header", true, header.TabStatus().IsProgressRingIndeterminate());
             });
@@ -14579,7 +14989,8 @@ namespace TerminalAppLocalTests
         moveAndVerify(MoveTabDirection::Backward, 0, true, false);
         _emitOsc(second, u"\x1b]9;4;3;0\a");
         _waitForContentTransferReviewUI([&]() {
-            return _progressIndicatorsMatch(headerForProgressTab(), L"Header", true, true);
+            return _progressIndicatorsMatch(headerForProgressTab(), L"Header", true, true) &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, progressTab->TabViewItem(), false, true);
         });
         moveAndVerify(MoveTabDirection::Forward, 1, true, false);
         TestOnUIThread([&]() {
@@ -15139,13 +15550,19 @@ namespace TerminalAppLocalTests
 
     void TabTests::PaneProgressSurvivesTabLayoutLifecycle()
     {
-        auto page = _commonSetup(nullptr, nullptr, std::nullopt, true);
         const auto first = winrt::make_self<TestConnection>(
             winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
             winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
         const auto second = winrt::make_self<TestConnection>(
             winrt::guid{ L"{6239a42c-bbbb-49a3-80bd-e8fdd045185c}" },
             winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        Grid layoutHost{ nullptr };
+        TestOnUIThread([&]() {
+            layoutHost = Grid{};
+            layoutHost.Width(1280);
+            layoutHost.Height(720);
+        });
+        auto page = _commonSetup(*first, layoutHost, std::nullopt, true);
 
         winrt::com_ptr<winrt::TerminalApp::implementation::Tab> tab;
         uint32_t firstContentId{};
@@ -15262,12 +15679,16 @@ namespace TerminalAppLocalTests
                 const auto state = page->TaskbarState();
                 VERIFY_ARE_EQUAL(expectedState, state.State());
                 VERIFY_ARE_EQUAL(expectedValue, state.Progress());
-                VERIFY_IS_NOT_NULL(tab->TabViewItem().IconSource());
+                const auto source = headerForTab().Presentation().IconSource();
+                VERIFY_IS_NOT_NULL(source);
+                VERIFY_IS_TRUE(tab->_tabStatus.IsProgressRingActive() ?
+                                   tab->TabViewItem().IconSource() == tab->_progressIconSource :
+                                   tab->TabViewItem().IconSource() == source);
                 if (page->_isVerticalLayout)
                 {
                     const auto display = displayForTab();
-                    VERIFY_ARE_EQUAL(display.IsGroup() && !page->_tabStrip.IsRailCollapsed() ? Visibility::Collapsed : Visibility::Visible, display.IconVisibility());
-                    VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
+                    VERIFY_ARE_EQUAL((display.IsGroup() && !page->_tabStrip.IsRailCollapsed()) || display.ShowProgressRing() ? Visibility::Collapsed : Visibility::Visible, display.IconVisibility());
+                    VERIFY_IS_TRUE(display.IconSource() == source);
                 }
             });
         };
@@ -15287,15 +15708,19 @@ namespace TerminalAppLocalTests
                 }
 
                 const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-                const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
+                const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
                 const auto state = page->TaskbarState();
-                return headerImpl->ShowProgressRing() == expectedShowProgressRing &&
+                const auto showNativeProgress = !page->_isVerticalLayout && expectedShowProgressRing;
+                return headerImpl->ShowProgressRing() == showNativeProgress &&
                        header.TabStatus().IsProgressRingActive() == expectedActive &&
                        header.TabStatus().IsProgressRingIndeterminate() == expectedIndeterminate &&
                        (!expectedActive || expectedIndeterminate || header.TabStatus().ProgressValue() == expectedValue) &&
                        presenter != nullptr &&
-                       presenter.Visibility() == (expectedShowProgressRing ? Visibility::Visible : Visibility::Collapsed) &&
+                       presenter.Visibility() == (showNativeProgress ? Visibility::Visible : Visibility::Collapsed) &&
                        (expectedShowProgressRing && expectedActive ? Visibility::Visible : Visibility::Collapsed) == expectedVisibility &&
+                       (!page->_isVerticalLayout ||
+                        _sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), expectedShowProgressRing && expectedActive, expectedIndeterminate,
+                                                        expectedActive && !expectedIndeterminate ? std::optional{ expectedValue } : std::nullopt)) &&
                        _progressIndicatorsMatch(header, L"Header", expectedActive, expectedIndeterminate, expectedActive && !expectedIndeterminate ? std::optional{ expectedValue } : std::nullopt) &&
                        state.State() == expectedState &&
                        state.Progress() == expectedProgress;
@@ -15311,19 +15736,25 @@ namespace TerminalAppLocalTests
                 const auto header = headerForTab();
                 VERIFY_IS_NOT_NULL(header);
                 const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-                const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-                const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+                const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+                const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
                 VERIFY_IS_NOT_NULL(presenter);
                 VERIFY_IS_NOT_NULL(headerRing);
-                VERIFY_ARE_EQUAL(expectedShowProgressRing, headerImpl->ShowProgressRing());
+                const auto showNativeProgress = !page->_isVerticalLayout && expectedShowProgressRing;
+                VERIFY_ARE_EQUAL(showNativeProgress, headerImpl->ShowProgressRing());
                 VERIFY_ARE_EQUAL(expectedActive, header.TabStatus().IsProgressRingActive());
                 VERIFY_ARE_EQUAL(expectedIndeterminate, header.TabStatus().IsProgressRingIndeterminate());
                 if (expectedActive && !expectedIndeterminate)
                 {
                     VERIFY_ARE_EQUAL(expectedValue, header.TabStatus().ProgressValue());
                 }
-                VERIFY_ARE_EQUAL(expectedShowProgressRing ? Visibility::Visible : Visibility::Collapsed, presenter.Visibility());
+                VERIFY_ARE_EQUAL(showNativeProgress ? Visibility::Visible : Visibility::Collapsed, presenter.Visibility());
                 VERIFY_ARE_EQUAL(expectedVisibility, expectedShowProgressRing && expectedActive ? Visibility::Visible : Visibility::Collapsed);
+                if (page->_isVerticalLayout)
+                {
+                    VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, tab->TabViewItem(), expectedShowProgressRing && expectedActive, expectedIndeterminate,
+                                                                   expectedActive && !expectedIndeterminate ? std::optional{ expectedValue } : std::nullopt));
+                }
                 VERIFY_IS_TRUE(_progressIndicatorsMatch(header, L"Header", expectedActive, expectedIndeterminate));
                 if (expectedActive && !expectedIndeterminate)
                 {
@@ -15336,10 +15767,18 @@ namespace TerminalAppLocalTests
                                    .MainResourceMap()
                                    .GetSubtree(L"TerminalApp/Resources");
         const auto statusText = [&](const winrt::hstring& key) {
-            return resources.GetValue(key).ValueAsString();
+            winrt::hstring text;
+            TestOnUIThread([&]() {
+                text = resources.GetValue(key).ValueAsString();
+            });
+            return text;
         };
         const auto brushColor = [&](const wchar_t* key) {
-            return ThemeLookup(Application::Current().Resources(), page->_tabStrip.ActualTheme(), winrt::box_value(key)).as<Media::SolidColorBrush>().Color();
+            winrt::Windows::UI::Color color{};
+            TestOnUIThread([&]() {
+                color = ThemeLookup(Application::Current().Resources(), page->_tabStrip.ActualTheme(), winrt::box_value(key)).as<Media::SolidColorBrush>().Color();
+            });
+            return color;
         };
         const auto paneProgressRoot = [&](const uint32_t contentId) {
             const auto display = displayForTab();
@@ -15362,7 +15801,11 @@ namespace TerminalAppLocalTests
                     return FrameworkElement{ nullptr };
                 }
 
-                const auto templateRoot = displayContainer.ContentTemplateRoot().as<StackPanel>();
+                const auto templateRoot = displayContainer.ContentTemplateRoot().try_as<StackPanel>();
+                if (!templateRoot)
+                {
+                    return FrameworkElement{ nullptr };
+                }
                 const auto paneList = templateRoot.Children().GetAt(1).as<ItemsControl>();
                 const auto paneContainer = paneList.ContainerFromIndex(paneIndex).as<ContentPresenter>();
                 if (!paneContainer || Media::VisualTreeHelper::GetChildrenCount(paneContainer) == 0)
@@ -15396,7 +15839,11 @@ namespace TerminalAppLocalTests
                     return winrt::hstring{};
                 }
 
-                const auto templateRoot = displayContainer.ContentTemplateRoot().as<StackPanel>();
+                const auto templateRoot = displayContainer.ContentTemplateRoot().try_as<StackPanel>();
+                if (!templateRoot)
+                {
+                    return winrt::hstring{};
+                }
                 const auto paneList = templateRoot.Children().GetAt(1).as<ItemsControl>();
                 const auto paneContainer = paneList.ContainerFromIndex(paneIndex).as<ContentPresenter>();
                 if (!paneContainer || Media::VisualTreeHelper::GetChildrenCount(paneContainer) == 0)
@@ -15418,12 +15865,14 @@ namespace TerminalAppLocalTests
                                             const bool expectedIndeterminate,
                                             const std::optional<winrt::Windows::UI::Color>& expectedForeground,
                                             const winrt::hstring& expectedStatusToken) {
+            bool logged = false;
             _waitForContentTransferReviewUI([&]() {
                 const auto paneItem = findPaneItem(contentId);
                 const auto root = paneProgressRoot(contentId);
                 const auto ring = root ? _effectiveProgressIndicator(root, expectedIndeterminate) : nullptr;
+                const auto icon = root ? root.FindName(L"PaneIconPresenter").try_as<ContentPresenter>() : nullptr;
                 const auto automationName = paneAutomationName(contentId);
-                if (paneItem == nullptr || ring == nullptr)
+                if (paneItem == nullptr || ring == nullptr || icon == nullptr)
                 {
                     return false;
                 }
@@ -15438,10 +15887,25 @@ namespace TerminalAppLocalTests
                                            actualName.find(std::wstring_view{ expectedPercent.c_str(), expectedPercent.size() }) != std::wstring_view::npos;
                 const auto foreground = ring.Foreground().try_as<Media::SolidColorBrush>();
                 const auto foregroundMatches = !expectedForeground.has_value() ?
-                                                   foreground == nullptr :
+                                                   ring.ReadLocalValue(Control::ForegroundProperty()) == DependencyProperty::UnsetValue() :
                                                    foreground != nullptr && foreground.Color() == *expectedForeground;
+                const auto progressSlot = Media::VisualTreeHelper::GetParent(ring).as<Grid>();
+                if (!logged)
+                {
+                    logged = true;
+                    Log::Comment(automationName.c_str());
+                    Log::Comment(expectedStatusToken.c_str());
+                    Log::Comment(foregroundMatches ? L"Pane foreground matches" : L"Pane foreground differs");
+                    Log::Comment(containsStatus ? L"Pane status token matches" : L"Pane status token differs");
+                    Log::Comment(_progressIndicatorsMatch(root, L"Pane", expectedVisibility == Visibility::Visible, expectedIndeterminate, expectedState != 0 && !expectedIndeterminate ? std::optional{ expectedValue } : std::nullopt) ?
+                                     L"Pane indicators match" : L"Pane indicators differ");
+                }
                 return paneItem.ProgressState() == expectedState &&
                        paneItem.ProgressValue() == expectedValue &&
+                       icon.Visibility() == (expectedState == 0 ? Visibility::Visible : Visibility::Collapsed) &&
+                       Media::VisualTreeHelper::GetParent(progressSlot) == Media::VisualTreeHelper::GetParent(icon) &&
+                       Grid::GetColumn(progressSlot) == Grid::GetColumn(icon) &&
+                       Grid::GetRowSpan(progressSlot) == Grid::GetRowSpan(icon) &&
                        _progressIndicatorsMatch(root, L"Pane", expectedVisibility == Visibility::Visible, expectedIndeterminate, expectedState != 0 && !expectedIndeterminate ? std::optional{ expectedValue } : std::nullopt) &&
                        Automation::AutomationProperties::GetName(ring) == paneItem.AutomationName() &&
                        foregroundMatches &&
@@ -15451,8 +15915,6 @@ namespace TerminalAppLocalTests
         };
 
         TestOnUIThread([&]() {
-            const auto firstPane = page->_MakeTerminalPane(NewTerminalArgs{}, nullptr, *first);
-            VERIFY_IS_NOT_NULL(page->_CreateNewTabFromPane(firstPane));
             tab = page->_GetFocusedTabImpl();
             VERIFY_IS_NOT_NULL(tab);
             page->_ApplyTabListProjection(*tab);
@@ -15465,6 +15927,11 @@ namespace TerminalAppLocalTests
             const auto display = displayForTab();
             VERIFY_IS_NOT_NULL(display);
             VERIFY_IS_FALSE(display.IsGroup());
+        });
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            return headerForTab() != nullptr && tab->GetActiveTerminalControl().ActualWidth() > 0 &&
+                   page->_tabStrip.ContainerFromIndex(0) != nullptr;
         });
 
         emitOsc(first, u"\x1b]9;4;3;0\a");
@@ -15873,8 +16340,8 @@ namespace TerminalAppLocalTests
             }
 
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             const auto state = page->TaskbarState();
             return display.IsGroup() &&
                    display.PaneItems().Size() == 2 &&
@@ -15884,7 +16351,9 @@ namespace TerminalAppLocalTests
                    firstPaneItem.ProgressValue() == 25 &&
                    secondPaneItem.ProgressState() == 4 &&
                    secondPaneItem.ProgressValue() == 60 &&
-                   headerImpl->ShowProgressRing() &&
+                   !headerImpl->ShowProgressRing() &&
+                   presenter.Visibility() == Visibility::Collapsed &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), true, false, 90) &&
                    header.TabStatus().IsProgressRingActive() &&
                    !header.TabStatus().IsProgressRingIndeterminate() &&
                    header.TabStatus().ProgressValue() == 90 &&
@@ -15905,8 +16374,9 @@ namespace TerminalAppLocalTests
             const auto header = _headerForTab(fixture);
             VERIFY_IS_NOT_NULL(header);
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
-            VERIFY_IS_TRUE(headerImpl->ShowProgressRing());
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            VERIFY_IS_FALSE(headerImpl->ShowProgressRing());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), true, false, 90));
             VERIFY_ARE_EQUAL(Visibility::Visible, headerRing.Visibility());
             VERIFY_ARE_EQUAL(uint32_t{ 90 }, header.TabStatus().ProgressValue());
 
@@ -15938,8 +16408,8 @@ namespace TerminalAppLocalTests
             }
 
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             const auto state = page->TaskbarState();
             const auto activePane = fixture.tab->GetActivePane();
             return activePane != nullptr &&
@@ -15951,6 +16421,7 @@ namespace TerminalAppLocalTests
                    secondPaneItem.ProgressState() == 1 &&
                    secondPaneItem.ProgressValue() == 20 &&
                    !headerImpl->ShowProgressRing() &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), false, false, 40) &&
                    header.as<UIElement>().Visibility() == Visibility::Visible &&
                    presenter != nullptr &&
                    presenter.Visibility() == Visibility::Collapsed &&
@@ -15972,9 +16443,10 @@ namespace TerminalAppLocalTests
             const auto header = _headerForTab(fixture);
             VERIFY_IS_NOT_NULL(header);
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             VERIFY_IS_FALSE(headerImpl->ShowProgressRing());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), false, false, 40));
             VERIFY_ARE_EQUAL(Visibility::Visible, header.as<UIElement>().Visibility());
             VERIFY_ARE_EQUAL(Visibility::Collapsed, presenter.Visibility());
             VERIFY_ARE_EQUAL(Visibility::Visible, headerRing.Visibility());
@@ -16040,8 +16512,8 @@ namespace TerminalAppLocalTests
             }
 
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             const auto state = page->TaskbarState();
             return display.IsGroup() &&
                    display.PaneItems().Size() == 2 &&
@@ -16051,7 +16523,9 @@ namespace TerminalAppLocalTests
                    secondPaneItem.ProgressValue() == 90 &&
                    thirdPaneItem.ProgressState() == 1 &&
                    thirdPaneItem.ProgressValue() == 20 &&
-                   headerImpl->ShowProgressRing() &&
+                   !headerImpl->ShowProgressRing() &&
+                   presenter.Visibility() == Visibility::Collapsed &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), true, false, 90) &&
                    header.TabStatus().IsProgressRingActive() &&
                    !header.TabStatus().IsProgressRingIndeterminate() &&
                    header.TabStatus().ProgressValue() == 90 &&
@@ -16072,8 +16546,9 @@ namespace TerminalAppLocalTests
             const auto header = _headerForTab(fixture);
             VERIFY_IS_NOT_NULL(header);
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
-            VERIFY_IS_TRUE(headerImpl->ShowProgressRing());
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            VERIFY_IS_FALSE(headerImpl->ShowProgressRing());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), true, false, 90));
             VERIFY_ARE_EQUAL(Visibility::Visible, headerRing.Visibility());
             VERIFY_ARE_EQUAL(uint32_t{ 90 }, header.TabStatus().ProgressValue());
 
@@ -16095,8 +16570,8 @@ namespace TerminalAppLocalTests
             }
 
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             const auto state = page->TaskbarState();
             return display.IsGroup() &&
                    display.PaneItems().Size() == 2 &&
@@ -16107,6 +16582,7 @@ namespace TerminalAppLocalTests
                    thirdPaneItem.ProgressState() == 1 &&
                    thirdPaneItem.ProgressValue() == 20 &&
                    !headerImpl->ShowProgressRing() &&
+                   _sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), false, false, 90) &&
                    header.TabStatus().IsProgressRingActive() &&
                    !header.TabStatus().IsProgressRingIndeterminate() &&
                    header.TabStatus().ProgressValue() == 90 &&
@@ -16127,9 +16603,10 @@ namespace TerminalAppLocalTests
             const auto header = _headerForTab(fixture);
             VERIFY_IS_NOT_NULL(header);
             const auto headerImpl = winrt::get_self<winrt::TerminalApp::implementation::TabHeaderControl>(header);
-            const auto presenter = header.as<FrameworkElement>().FindName(L"HeaderProgressRingPresenter").as<Grid>();
-            const auto headerRing = header.as<FrameworkElement>().FindName(L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
+            const auto presenter = _findProgressElement(header, L"HeaderProgressRingPresenter").as<Grid>();
+            const auto headerRing = _findProgressElement(header, L"HeaderProgressRing").as<winrt::MUX::Controls::ProgressRing>();
             VERIFY_IS_FALSE(headerImpl->ShowProgressRing());
+            VERIFY_IS_TRUE(_sidebarProgressIndicatorsMatch(page->_tabStrip, fixture.tab->TabViewItem(), false, false, 90));
             VERIFY_ARE_EQUAL(Visibility::Collapsed, presenter.Visibility());
             VERIFY_ARE_EQUAL(Visibility::Visible, headerRing.Visibility());
             VERIFY_IS_TRUE(headerRing.IsActive());
@@ -16783,22 +17260,27 @@ namespace TerminalAppLocalTests
             }
             tab->_tabStatus.IsProgressRingActive(true);
             tab->UpdateIcon(L"\xE8A5", IconStyle::Hidden);
-            VERIFY_IS_NULL(tab->TabViewItem().IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            VERIFY_IS_NULL(tab->_headerControl.Presentation().IconSource());
             VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
             const auto hiddenSource = display.IconSource();
             strip->SyncTabPresentation(display);
             VERIFY_IS_TRUE(display.IconSource() == hiddenSource);
             tab->UpdateIcon(L"\xE8A5", IconStyle::Default);
             VERIFY_IS_TRUE(tab->_tabStatus.IsProgressRingActive());
-            VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
-            VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            VERIFY_IS_TRUE(display.IconSource() == tab->_headerControl.Presentation().IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
             const auto defaultSource = display.IconSource();
             tab->UpdateIcon(L"\xE8A5", IconStyle::Monochrome);
             VERIFY_IS_FALSE(display.IconSource() == defaultSource);
-            VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
+            VERIFY_IS_TRUE(display.IconSource() == tab->_headerControl.Presentation().IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
             tab->_tabStatus.IsProgressRingActive(false);
+            tab->_UpdateIconVisibility();
             strip->SyncTabPresentation(display);
             VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
+            VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
             VERIFY_ARE_EQUAL(0u, collectionChanges);
         });
     }
@@ -17331,18 +17813,43 @@ namespace TerminalAppLocalTests
     {
         using State = winrt::Microsoft::Terminal::TerminalConnection::ConnectionState;
         const auto connection = winrt::make_self<TestConnection>(winrt::guid{ L"{436c8552-a3b3-4141-9b6c-c57b3251936e}" }, State::Connected);
-        auto page = _commonSetup(nullptr, nullptr, std::nullopt, true);
+        Grid layoutHost{ nullptr };
+        TestOnUIThread([&]() {
+            layoutHost = Grid{};
+            layoutHost.Width(1280);
+            layoutHost.Height(720);
+        });
+        auto page = _commonSetup(*connection, layoutHost, std::nullopt, true);
+        winrt::com_ptr<winrt::TerminalApp::implementation::Tab> tab;
+        std::shared_ptr<Pane> sourcePane;
+        winrt::guid paneSessionId{};
+        winrt::hstring profileIcon;
+        winrt::TerminalApp::TabStripDisplayItem display{ nullptr };
+        winrt::TerminalApp::TabHeaderPresentation presentation{ nullptr };
+        winrt::MUX::Controls::IconSource copilotSource{ nullptr };
+        winrt::MUX::Controls::IconSource geminiSource{ nullptr };
+        ContentPresenter iconPresenter{ nullptr };
+        BitmapIcon realizedCopilot{ nullptr };
+        winrt::TerminalApp::TabStripDisplayItem restoredDisplay{ nullptr };
+        winrt::MUX::Controls::IconSource restoredSource{ nullptr };
+        const std::u16string progressStart{ u"\x1b]9;4;3\x07" };
+        const std::u16string progressEnd{ u"\x1b]9;4;0\x07" };
 
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            const auto focused = page->_GetFocusedTabImpl();
+            return focused && focused->GetActiveTerminalControl().ActualWidth() > 0 &&
+                   winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip)->HeaderForTab(focused->TabViewItem()) != nullptr;
+        });
         TestOnUIThread([&]() {
             page->Width(1200);
             page->Height(600);
             page->UpdateLayout();
-            const auto tab = page->_GetFocusedTabImpl();
+            tab = page->_GetFocusedTabImpl();
             tab->SuppressAgentPrewarm();
-            tab->GetActiveTerminalControl().Connection(*connection);
-            auto sourcePane = tab->GetActivePane();
-            const auto paneSessionId = sourcePane->GetSessionId();
-            const auto profileIcon = sourcePane->GetContent().Icon();
+            sourcePane = tab->GetActivePane();
+            paneSessionId = sourcePane->GetSessionId();
+            profileIcon = sourcePane->GetContent().Icon();
             page->_UpdateTabIcon(*tab);
             VERIFY_ARE_EQUAL(profileIcon, tab->Icon());
             page->_tabStrip.RichTabAgentStatusVisible(false);
@@ -17354,7 +17861,6 @@ namespace TerminalAppLocalTests
             sourcePane = tab->GetRootPane()->FindPaneBySessionId(paneSessionId);
             VERIFY_IS_NOT_NULL(sourcePane);
 
-            const std::u16string progressStart{ u"\x1b]9;4;3\x07" };
             connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressStart.data(), progressStart.data() + progressStart.size() });
             tab->_UpdateProgressState();
             VERIFY_IS_TRUE(tab->_tabStatus.IsProgressRingActive());
@@ -17369,20 +17875,22 @@ namespace TerminalAppLocalTests
             VERIFY_ARE_EQUAL(
                 winrt::hstring{ L"ms-appx:///AgentIcons/copilot.svg" },
                 tab->Icon());
-            VERIFY_IS_NOT_NULL(tab->TabViewItem().IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
             const auto strip = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip);
-            const auto display = strip->DisplayItemForTab(tab->TabViewItem());
+            display = strip->DisplayItemForTab(tab->TabViewItem());
             VERIFY_IS_NOT_NULL(display.IconSource().try_as<winrt::MUX::Controls::BitmapIconSource>());
-            VERIFY_IS_TRUE(display.IconSource() == tab->TabViewItem().IconSource());
-            VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
-            const auto copilotSource = display.IconSource();
+            presentation = tab->TabViewItem().Header().as<winrt::TerminalApp::TabHeaderControl>().Presentation();
+            VERIFY_IS_TRUE(display.IconSource() == presentation.IconSource());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            copilotSource = display.IconSource().as<winrt::MUX::Controls::IconSource>();
             VERIFY_IS_NOT_NULL(copilotSource.as<winrt::MUX::Controls::BitmapIconSource>().UriSource());
             page->UpdateLayout();
             const auto row = page->_tabStrip.ContainerFromIndex(page->_GetFocusedTabIndex().value()).as<ListViewItem>().ContentTemplateRoot().as<FrameworkElement>();
-            const auto iconPresenter = row.FindName(L"TabIconPresenter").as<ContentPresenter>();
-            const auto realizedCopilot = iconPresenter.Content().as<winrt::Windows::UI::Xaml::Controls::BitmapIcon>();
+            iconPresenter = row.FindName(L"TabIconPresenter").as<ContentPresenter>();
+            realizedCopilot = iconPresenter.Content().as<BitmapIcon>();
             VERIFY_IS_NOT_NULL(realizedCopilot.UriSource());
             VERIFY_IS_TRUE(realizedCopilot.ShowAsMonochrome());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, iconPresenter.Visibility());
             VERIFY_IS_TRUE(page->_ApplyAgentSessionStatusDelta(
                 "session-agent-icon",
                 winrt::to_string(::Microsoft::Console::Utils::GuidToPlainString(paneSessionId)),
@@ -17398,27 +17906,57 @@ namespace TerminalAppLocalTests
                 uint64_t{ 1235 },
                 "Attention"));
             VERIFY_IS_TRUE(display.IconSource() == copilotSource);
-            const std::u16string progressEnd{ u"\x1b]9;4;0\x07" };
             connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressEnd.data(), progressEnd.data() + progressEnd.size() });
             tab->_UpdateProgressState();
+        });
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            return !tab->_tabStatus.IsProgressRingActive() &&
+                   display.IconVisibility() == Visibility::Visible &&
+                   iconPresenter.Visibility() == Visibility::Visible;
+        });
+        TestOnUIThread([&]() {
             VERIFY_IS_FALSE(tab->_tabStatus.IsProgressRingActive());
             const auto tabIcon = tab->TabViewItem().IconSource().try_as<winrt::Microsoft::UI::Xaml::Controls::BitmapIconSource>();
             VERIFY_IS_NOT_NULL(tabIcon);
             VERIFY_IS_NOT_NULL(tabIcon.UriSource());
             VERIFY_IS_TRUE(display.IconSource() == copilotSource);
             VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
+            page->UpdateLayout();
+            VERIFY_ARE_EQUAL(Visibility::Visible, iconPresenter.Visibility());
+            VERIFY_IS_TRUE(iconPresenter.Content() == realizedCopilot);
             tab->HideIcon(true);
             VERIFY_ARE_EQUAL(winrt::hstring{ L"ms-appx:///AgentIcons/copilot.svg" }, tab->Icon());
+            VERIFY_IS_NULL(presentation.IconSource());
+            VERIFY_IS_NULL(tab->TabViewItem().IconSource());
             VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
             tab->HideIcon(false);
             VERIFY_IS_NOT_NULL(tab->TabViewItem().IconSource().try_as<winrt::Microsoft::UI::Xaml::Controls::BitmapIconSource>());
+            VERIFY_IS_TRUE(presentation.IconSource() == copilotSource);
+            VERIFY_IS_TRUE(display.IconSource() == copilotSource);
             VERIFY_ARE_EQUAL(Visibility::Visible, display.IconVisibility());
+            connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressStart.data(), progressStart.data() + progressStart.size() });
+            tab->_UpdateProgressState();
+            VERIFY_IS_TRUE(tab->_tabStatus.IsProgressRingActive());
             VERIFY_IS_TRUE(page->_ApplyAgentSessionStatusDelta(
                 "session-agent-icon",
                 winrt::to_string(::Microsoft::Console::Utils::GuidToPlainString(paneSessionId)),
                 "gemini",
                 uint64_t{ 1236 },
                 "Working"));
+            geminiSource = presentation.IconSource().as<winrt::MUX::Controls::IconSource>();
+            VERIFY_IS_NOT_NULL(geminiSource.as<winrt::MUX::Controls::BitmapIconSource>().UriSource());
+            VERIFY_IS_TRUE(geminiSource != copilotSource);
+            VERIFY_IS_TRUE(display.IconSource() == geminiSource);
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            tab->HideIcon(true);
+            VERIFY_IS_NULL(presentation.IconSource());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, display.IconVisibility());
+            tab->HideIcon(false);
+            VERIFY_IS_TRUE(presentation.IconSource() == geminiSource);
+            VERIFY_IS_TRUE(display.IconSource() == geminiSource);
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
 
             VERIFY_IS_TRUE(page->_ApplyTabLayout(TabLayout::Horizontal));
             page->_CompleteTabLayoutChange(page->_tabLayoutGeneration);
@@ -17426,12 +17964,17 @@ namespace TerminalAppLocalTests
             VERIFY_ARE_EQUAL(
                 winrt::hstring{ L"ms-appx:///AgentIcons/gemini.svg" },
                 tab->Icon());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            VERIFY_IS_TRUE(presentation.IconSource() == geminiSource);
             VERIFY_IS_TRUE(page->_ApplyTabLayout(TabLayout::Vertical));
             page->_CompleteTabLayoutChange(page->_tabLayoutGeneration);
             VERIFY_IS_TRUE(page->_isVerticalLayout);
             VERIFY_ARE_EQUAL(
                 winrt::hstring{ L"ms-appx:///AgentIcons/gemini.svg" },
                 tab->Icon());
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            const auto strip = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(page->_tabStrip);
+            VERIFY_IS_TRUE(strip->DisplayItemForTab(tab->TabViewItem()).IconSource() == geminiSource);
 
             VERIFY_IS_TRUE(page->_ApplyAgentSessionStatusDelta(
                 "session-agent-icon",
@@ -17440,6 +17983,42 @@ namespace TerminalAppLocalTests
                 uint64_t{ 2345 },
                 "Ended"));
             VERIFY_ARE_EQUAL(profileIcon, tab->Icon());
+            restoredDisplay = strip->DisplayItemForTab(tab->TabViewItem());
+            restoredSource = presentation.IconSource().as<winrt::MUX::Controls::IconSource>();
+            VERIFY_IS_NOT_NULL(restoredSource);
+            VERIFY_IS_TRUE(restoredSource != geminiSource);
+            VERIFY_IS_TRUE(restoredDisplay.IconSource() == restoredSource);
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == tab->_progressIconSource);
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, restoredDisplay.IconVisibility());
+            VERIFY_IS_TRUE(tab->_tabStatus.IsProgressRingActive());
+            connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressEnd.data(), progressEnd.data() + progressEnd.size() });
+            tab->_UpdateProgressState();
+        });
+        _waitForContentTransferReviewUI([&]() {
+            page->UpdateLayout();
+            return !tab->_tabStatus.IsProgressRingActive() &&
+                   restoredDisplay.IconVisibility() == Visibility::Visible;
+        });
+        TestOnUIThread([&]() {
+            VERIFY_IS_FALSE(tab->_tabStatus.IsProgressRingActive());
+            VERIFY_ARE_EQUAL(Visibility::Visible, restoredDisplay.IconVisibility());
+            VERIFY_ARE_EQUAL(profileIcon, tab->Icon());
+            VERIFY_IS_TRUE(restoredDisplay.IconSource() == restoredSource);
+            VERIFY_IS_TRUE(restoredDisplay.IconSource() == tab->TabViewItem().IconSource());
+            connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressStart.data(), progressStart.data() + progressStart.size() });
+            tab->_UpdateProgressState();
+            tab->HideIcon(true);
+            connection->TerminalOutput.raise(winrt::array_view<const char16_t>{ progressEnd.data(), progressEnd.data() + progressEnd.size() });
+            tab->_UpdateProgressState();
+            VERIFY_IS_FALSE(tab->_tabStatus.IsProgressRingActive());
+            VERIFY_IS_NULL(presentation.IconSource());
+            VERIFY_IS_NULL(tab->TabViewItem().IconSource());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, restoredDisplay.IconVisibility());
+            tab->HideIcon(false);
+            VERIFY_IS_TRUE(presentation.IconSource() == restoredSource);
+            VERIFY_IS_TRUE(restoredDisplay.IconSource() == restoredSource);
+            VERIFY_IS_TRUE(tab->TabViewItem().IconSource() == restoredSource);
+            VERIFY_ARE_EQUAL(Visibility::Visible, restoredDisplay.IconVisibility());
             page->_paneAgentSessions[paneSessionId] = { L"session-collision", L"custom:agent", {} };
             VERIFY_IS_TRUE(page->_ApplyAgentSessionStatusDelta(
                 "session-collision",

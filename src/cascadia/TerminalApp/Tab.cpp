@@ -499,9 +499,10 @@ namespace winrt::TerminalApp::implementation
         _lastIconStyle = iconStyle;
 
         const auto previousIcon = Icon();
-        TabViewItem().IconSource(iconStyle == IconStyle::Hidden || _iconHidden ?
-                                     IconSource{ nullptr } :
-                                     ::Microsoft::Terminal::UI::AgentIcons::SourceForIconPath(_lastIconPath, iconStyle == IconStyle::Monochrome));
+        _iconSource = iconStyle == IconStyle::Hidden ?
+                          IconSource{ nullptr } :
+                          ::Microsoft::Terminal::UI::AgentIcons::SourceForIconPath(_lastIconPath, iconStyle == IconStyle::Monochrome);
+        _UpdateIconVisibility();
         Icon(iconStyle == IconStyle::Hidden ? winrt::hstring{} : _lastIconPath);
         if (Icon() == previousIcon)
         {
@@ -511,7 +512,7 @@ namespace winrt::TerminalApp::implementation
 
     // Method Description:
     // - Hide or show the tab icon for this tab
-    // - Independent of progress; explicit icon visibility is retained.
+    // - Explicit visibility is independent of OSC progress.
     // Arguments:
     // - hide: if true, we hide the icon; if false, we show the icon
     void Tab::HideIcon(const bool hide)
@@ -520,18 +521,28 @@ namespace winrt::TerminalApp::implementation
 
         if (_iconHidden != hide)
         {
-            if (hide)
-            {
-                TabViewItem().IconSource(IconSource{ nullptr });
-            }
-            else
-            {
-                TabViewItem().IconSource(_lastIconStyle == IconStyle::Hidden ?
-                                             IconSource{ nullptr } :
-                                             ::Microsoft::Terminal::UI::AgentIcons::SourceForIconPath(_lastIconPath, _lastIconStyle == IconStyle::Monochrome));
-            }
             _iconHidden = hide;
+            _UpdateIconVisibility();
             PropertyChanged.raise(*this, WUX::Data::PropertyChangedEventArgs{ L"Icon" });
+        }
+    }
+
+    void Tab::_UpdateIconVisibility()
+    {
+        // Retain identity independently of progress. Horizontal progress uses
+        // the native icon slot, which survives Compact's hidden header. An empty
+        // native source keeps that slot enabled without painting an identity;
+        // the Sidebar descriptor never receives this presentation-only source.
+        const auto source = _iconHidden ? IconSource{ nullptr } : _iconSource;
+        _headerControl.Presentation().IconSource(source);
+        TabViewItem().IconSource(_tabStatus.IsProgressRingActive() ? _progressIconSource : source);
+        if (Media::VisualTreeHelper::GetChildrenCount(TabViewItem()) > 0)
+        {
+            const auto root = Media::VisualTreeHelper::GetChild(TabViewItem(), 0).as<FrameworkElement>();
+            if (const auto icon = root.FindName(L"IconControl").try_as<WUX::Controls::ContentControl>())
+            {
+                icon.Visibility(_tabStatus.IsProgressRingActive() ? Visibility::Collapsed : Visibility::Visible);
+            }
         }
     }
 
@@ -1594,6 +1605,7 @@ namespace winrt::TerminalApp::implementation
         {
             _tabStatus.IsProgressRingActive(false);
         }
+        _UpdateIconVisibility();
 
         // fire an event signaling that our taskbar progress changed.
         TaskbarProgressChanged.raise(nullptr, nullptr);
