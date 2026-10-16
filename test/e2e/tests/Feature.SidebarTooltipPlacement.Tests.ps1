@@ -124,7 +124,7 @@ Describe 'Feature: Sidebar tooltip placement' -Tag @('Feature', 'SidebarTooltipP
         try {
             $launch = Get-Date
             $app = Start-Terminal -Package $package -TimeoutSec 30 -PassFre $true -State @{
-                sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+                featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
             } -Settings @{
                 language = $Language; tabLayout = 'horizontal'; startupActions = ''; firstWindowPreference = 'defaultProfile'
                 windowingBehavior = 'useNew'; 'warning.confirmOnClose' = 'never'; autoErrorDetectionEnabled = $false; autoFixEnabled = $false

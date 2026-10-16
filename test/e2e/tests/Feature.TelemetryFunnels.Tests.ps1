@@ -55,7 +55,11 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
             foreach ($name in @('AllowAutoFix', 'AllowedAgents', 'AllowCustomAgents')) {
                 Set-TelemetryPolicy -Transaction $script:policyTransaction -Name $name -Value $null
             }
-            $script:app = Start-Terminal -Package Dev -PassFre $true -Settings @{
+            $script:app = Start-Terminal -Package Dev -PassFre $true -State @{
+                featureRolloutId = '{00000000-0000-0000-0000-000000000002}'
+                sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Horizontal'
+                sidebarLayoutMigrationCompleted = $true
+            } -Settings @{
                 acpAgent = 'custom:telemetry-fixture'; acpCustomCommand = $command; acpModel = ''
                 delegateAgent = 'copilot'; autoFixEnabled = $false; autoErrorDetectionEnabled = $true
                 tabLayout = 'horizontal'; 'agentPane.yoloMode' = $false
@@ -230,6 +234,32 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
                     tabLayout = 'horizontal'; autoFixEnabled = $false
                 }
             }
+            Invoke-TelemetryPhase -Name startup-not-enrolled -Action {
+                Save-TelemetryOwnedProcesses -App $script:app
+                Stop-TelemetryOwnedTerminal -App $script:app
+                $script:app = $null
+                @(Get-WtProcessesForApp -App $script:target) | Should -HaveCount 0
+                Set-TelemetryPolicy -Transaction $script:policyTransaction -Name AllowedAgents -Value $null
+                Set-TelemetryPolicy -Transaction $script:policyTransaction -Name AllowCustomAgents -Value $null
+                # The original configuration backup still owns this inactive state.
+                # A version-1 record without its GUID is rejected, not auto-enrolled
+                # during settings load as an ordinary fresh version-0 state would be.
+                $state = Get-WtStateObject -App $script:target
+                $state.PSObject.Properties.Remove('featureRolloutId')
+                $state.sidebarRolloutVersion = 1
+                $state.sidebarRolloutAssignment = 'Horizontal'
+                $state | ConvertTo-Json -Depth 64 | Set-Content -LiteralPath $script:target.StatePath -Encoding utf8
+                Invoke-TelemetryStartupCase -Name notEnrolled -Settings @{
+                    acpAgent = ''; acpCustomCommand = ''; acpCustomCommands = @()
+                    delegateAgent = ''; delegateCustomCommand = ''; delegateCustomCommands = @()
+                    tabLayout = 'vertical'; autoFixEnabled = $false
+                }
+                $loaded = Get-WtStateObject -App $script:app
+                $loaded.PSObject.Properties.Name | Should -Not -Contain 'featureRolloutId'
+                $loaded.sidebarRolloutVersion | Should -Be 1
+                $loaded.sidebarRolloutAssignment | Should -Be 'Horizontal'
+                (Get-WtSettingsObject -App $script:app).tabLayout | Should -Be 'vertical'
+            }
         }
         finally { Stop-TestTelemetryTrace -Trace $trace }
         $script:records = @(Read-TestTelemetryTrace -Directory $trace.Directory -ProcessIds @($script:ownedPids) `
@@ -280,6 +310,8 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
             AllowedAgentsPolicy = 'AnsiString'
             AllowCustomAgentsPolicy = 'AnsiString'
             SidebarEnabled = 'Boolean'
+            SidebarRolloutName = 'UnicodeString'
+            SidebarRolloutAssignment = 'UnicodeString'
             DefaultsFallback = 'Boolean'
         }
         @($created[0].Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' } | Sort-Object) | Should -Be ($expected.Keys | Sort-Object)
@@ -287,7 +319,19 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
             $created[0].Types[$field] | Should -Match ($expected[$field] + '$')
         }
         $created[0].Fields.PrimaryProvider | Should -Be 'custom'
+        $created[0].Fields.SidebarRolloutName | Should -Be 'sidebar-upgrade-v1'
+        $created[0].Fields.SidebarRolloutAssignment | Should -Be 'Horizontal'
         $created[0].Types.PartA_PrivTags | Should -Match 'UInt64$'
+        $rejected = @(Get-TelemetryPhaseEvents -Phase startup-not-enrolled -Name AppCreated |
+            Where-Object ProcessId -eq $script:startupCases.notEnrolled)
+        $rejected | Should -HaveCount 1
+        @($rejected[0].Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' } | Sort-Object) | Should -Be ($expected.Keys | Sort-Object)
+        foreach ($field in $expected.Keys) {
+            $rejected[0].Types[$field] | Should -Match ($expected[$field] + '$')
+        }
+        $rejected[0].Fields.SidebarRolloutName | Should -Be ''
+        $rejected[0].Fields.SidebarRolloutAssignment | Should -Be 'NotEnrolled'
+        $rejected[0].Fields.SidebarEnabled | Should -BeIn @('true', '1')
         @($script:records | Where-Object Name -in @('AgentProviderConfigured', 'CustomAgentConfigured', 'SidebarStateOnLaunch')) | Should -HaveCount 0
     }
 
@@ -308,7 +352,11 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
             Should -BeLessThan ([DateTimeOffset]$script:phases['second-window'].Data.ActivationUtc).UtcDateTime
         @($script:records | Where-Object { $_.ProcessId -eq $script:primaryAppPid -and $_.Name -eq 'AppCreated' }) |
             Should -HaveCount 2 -Because 'initial and secondary windows each emit once; activation and settings reload do not'
-        @($created[0].Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' }) | Should -HaveCount 13
+        @($created[0].Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' }) | Should -HaveCount 15
+        $created[0].Types.SidebarRolloutName | Should -Match 'UnicodeString$'
+        $created[0].Types.SidebarRolloutAssignment | Should -Match 'UnicodeString$'
+        $created[0].Fields.SidebarRolloutName | Should -Be 'sidebar-upgrade-v1'
+        $created[0].Fields.SidebarRolloutAssignment | Should -Be 'Horizontal'
     }
 
     It 'Connected helpers receive current native Autofix configuration' -ForEach @(
@@ -543,7 +591,11 @@ Describe 'Feature: telemetry funnels' -Tag 'Feature', 'Telemetry' -Skip:($env:IT
         @($script:records | Where-Object { $_.ProcessId -eq $script:startupCases.noAgent -and $_.Name -eq 'AgentSessionStarted' }) |
             Should -HaveCount 0
         foreach ($snapshot in @($inventory, $none)) {
-            @($snapshot.Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' }) | Should -HaveCount 13
+            @($snapshot.Fields.Keys | Where-Object { $_ -ne 'PartA_PrivTags' }) | Should -HaveCount 15
+            $snapshot.Types.SidebarRolloutName | Should -Match 'UnicodeString$'
+            $snapshot.Types.SidebarRolloutAssignment | Should -Match 'UnicodeString$'
+            $snapshot.Fields.SidebarRolloutName | Should -Be 'sidebar-upgrade-v1'
+            $snapshot.Fields.SidebarRolloutAssignment | Should -Be 'Horizontal'
             $snapshot.Fields.AllowedAgentsPolicy | Should -Be 'not_configured'
             $snapshot.Fields.AllowCustomAgentsPolicy | Should -Be 'not_configured'
             $snapshot.Fields.DefaultsFallback | Should -BeIn @('false', '0')

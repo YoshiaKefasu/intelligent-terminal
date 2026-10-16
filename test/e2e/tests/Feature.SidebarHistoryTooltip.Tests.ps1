@@ -312,7 +312,7 @@ Describe 'Feature: Sidebar history hover' -Tag @('Feature', 'SidebarHistoryToolt
             $profile = '{' + [guid]::NewGuid() + '}'
             $launch = Get-Date
             $script:app = Start-Terminal -Package $script:package -PassFre $true -TimeoutSec 45 -State @{
-                sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+                featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
             } -Settings @{
                 language = $Language; tabLayout = 'vertical'; tabLayoutVerticalWidth = 320
                 startupActions = ''; firstWindowPreference = 'defaultProfile'; windowingBehavior = 'useNew'

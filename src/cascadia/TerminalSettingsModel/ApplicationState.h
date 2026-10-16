@@ -49,7 +49,10 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
     X(FileSource::Shared, bool, AgentFreCompleted, "agentFreCompleted", false)                                                                                            \
     X(FileSource::Shared, bool, AgentWelcomeShown, "agentWelcomeShown", false)                                                                                            \
     X(FileSource::Shared, bool, SidebarLayoutMigrationCompleted, "sidebarLayoutMigrationCompleted", false)                                                                \
-    X(FileSource::Shared, bool, SidebarIntroductionShown, "sidebarIntroductionShown", false)
+    X(FileSource::Shared, bool, SidebarIntroductionShown, "sidebarIntroductionShown", false)                                                                              \
+    X(FileSource::Shared, winrt::guid, FeatureRolloutId, "featureRolloutId")                                                                                              \
+    X(FileSource::Shared, uint32_t, SidebarRolloutVersion, "sidebarRolloutVersion", 0)                                                                                    \
+    X(FileSource::Shared, winrt::hstring, SidebarRolloutAssignment, "sidebarRolloutAssignment")
 
     struct WindowLayout : WindowLayoutT<WindowLayout>
     {
@@ -77,7 +80,7 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         void Flush();
         void Reset() noexcept;
 
-        void FromJson(const Json::Value& root, FileSource parseSource) const noexcept;
+        void FromJson(const Json::Value& root, FileSource parseSource) const;
         Json::Value ToJson(FileSource parseSource) const noexcept;
 
         void AppendPersistedWindowLayout(Model::WindowLayout layout);
@@ -96,7 +99,14 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         // Hold this lock across reading settings, migration, and recording completion.
         wil::unique_handle LockSidebarState(bool wait = true) const;
         void RefreshSidebarState() const;
+        bool PrepareSidebarRollout() noexcept;
         bool CompleteSidebarLayoutMigration() noexcept;
+        static uint32_t FeatureRolloutBucket(const winrt::guid& featureRolloutId, std::string_view rolloutName) noexcept;
+        Model::TabLayout SidebarRolloutLayout() const noexcept;
+        winrt::hstring SidebarRolloutName() const;
+
+        static constexpr uint32_t CurrentSidebarRolloutVersion = 1;
+        static constexpr std::string_view CurrentSidebarRolloutName{ "sidebar-upgrade-v1" };
 
         // State getters/setters
 #define MTSM_APPLICATION_STATE_GEN(source, type, name, key, ...) \
@@ -124,6 +134,7 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         void _write() noexcept;
         void _read() const noexcept;
         Json::Value _readSharedJson() const;
+        bool _hasValidSidebarRollout() const noexcept;
         void _persistSidebarFlag(std::string_view key) const;
         static void _preserveSidebarFlags(Json::Value& root, const Json::Value& previous);
 

@@ -187,7 +187,7 @@ Describe 'Feature: Sidebar provider appearance' -Tag @('Feature', 'SidebarProvid
         $profile = '{' + [guid]::NewGuid().ToString() + '}'
         try {
             $script:app = Start-Terminal -Package Dev -PassFre $true -State @{
-                sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+                featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
             } -Settings @{
                 theme = $Theme; language = 'en-US'; tabLayout = 'horizontal'; startupActions = ''
                 firstWindowPreference = 'defaultProfile'; windowingBehavior = 'useNew'

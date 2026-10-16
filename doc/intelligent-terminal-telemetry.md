@@ -42,7 +42,7 @@ Business-field counts exclude the common `PartA_PrivTags` field.
 
 | Provider | Event | What it records / trigger | Business fields | Privacy category |
 |---|---|---|---|---|
-| App | [AppCreated](#appappcreated) | Window-created provider, custom-agent, policy, and sidebar configuration snapshot | 13 | Usage |
+| App | [AppCreated](#appappcreated) | Window-created provider, custom-agent, policy, and sidebar configuration snapshot | 15 | Usage |
 | App | [AgentPaneOpened](#appagentpaneopened) | Instrumented assistant-open or sessions-view request | 2 | Usage |
 | App | [CommandPaletteAgentPromptEntered](#appcommandpaletteagentpromptentered) | Entry into visible foreground agent prompt mode | 1 | Usage |
 | App | [CommandPaletteDispatchedAgentPrompt](#appcommandpalettedispatchedagentprompt) | Submission of an agent prompt through the Command Palette | 2 | Usage |
@@ -491,6 +491,8 @@ the same process and windows that never connect an agent session.
 | `AllowedAgentsPolicy` | String | `not_configured`, `empty`, or `allowlist`; never the allowlist entries |
 | `AllowCustomAgentsPolicy` | String | `not_configured`, `allowed`, or `blocked` |
 | `SidebarEnabled` | Bool | Whether the configured tab layout is vertical |
+| `SidebarRolloutName` | WideString | `sidebar-upgrade-v1` after successful rollout migration; empty if not enrolled |
+| `SidebarRolloutAssignment` | WideString | Fixed initial assignment: `Sidebar`, `Horizontal`, or `NotEnrolled` if migration has not completed |
 | `DefaultsFallback` | Bool | Whether the currently accepted settings came from initial load-failure fallback |
 
 Both roles and shared policy/sidebar state belong to this single record;
@@ -498,6 +500,26 @@ there are no separate startup configuration or sidebar events. Later
 windows reflect the then-current settings, not a frozen process-start
 snapshot. Settings reload and agent session creation/load do not emit
 `AppCreated`.
+
+The sidebar upgrade rollout assigns approximately 80% of installation
+identities to Sidebar and 20% to Horizontal, including users who already
+completed the older all-Sidebar migration. A random GUID is persisted locally
+in shared application state; FNV-1a over `sidebar-upgrade-v1` followed by the
+GUID's canonical 16 bytes selects one of 10,000 buckets (0-7,999 Sidebar,
+8,000-9,999 Horizontal). This is a statistical allocation, not an exact quota.
+The GUID is stored under `featureRolloutId` and exposed locally through the
+read-only `ApplicationState.FeatureRolloutId` property. Other features can reuse
+it with their own versioned rollout name through `FeatureRolloutBucket`.
+It is not included in telemetry: `SidebarRolloutName` is the fixed
+`sidebar-upgrade-v1` label, not the GUID. Its scope is the current settings/state
+directory, shared across elevation levels, not the entire physical device.
+Deleting state starts a new identity and assignment.
+
+The assigned layout is applied once, only recording completion after both
+settings and state are saved. Subsequent user layout changes are preserved.
+`SidebarRolloutAssignment` stays fixed while `SidebarEnabled` reports the
+current layout. Analyze groups using backend device metadata and a documented
+snapshot-selection rule; event counts across windows are not assignment shares.
 
 An empty provider is `none`; a `custom:` ID is `custom`; other unrecognized
 values are `unknown`. This does not prove a CLI is installed, authenticated,

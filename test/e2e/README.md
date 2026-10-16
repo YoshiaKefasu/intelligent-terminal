@@ -88,7 +88,7 @@ authenticated ACP agents. Available suites (results depend on the selected packa
 |---|---|---|
 | `Feature.Packaging.Tests.ps1` | §9 packaging/protocol (incl. WT_COM_CLSID injected into pane shells) + §10 logging + log retention/cleanup | 18 |
 | `Feature.HookShutdown.Tests.ps1` | Fixed-CLSID native/cached hook delivery, passive WTA publisher/listener shutdown suppression, and ordinary headless COM compatibility; no windows, agents, or configuration edits | 4 |
-| `Feature.TelemetryFunnels.Tests.ps1` | Opt-in real ETW: daily activity, correlated prompt/completion, detection/offer/Run, foreground palette visits, startup/provider configuration and policy state; Run results remain unknown, not execution success | 18 required + 2 optional hot-policy diagnostics (requires `ITE2E_TELEMETRY=1` and explicit policy approval) |
+| `Feature.TelemetryFunnels.Tests.ps1` | Opt-in real ETW: daily activity, correlated prompt/completion, detection/offer/Run, foreground palette visits, startup/provider configuration and policy state; AppCreated schema includes rejected enrollment (empty rollout name / NotEnrolled, typed UnicodeString) without changing the user's chosen layout. Run results remain unknown, not execution success | 18 required + 2 optional hot-policy diagnostics (requires `ITE2E_TELEMETRY=1` and explicit policy approval) |
 | `Feature.SidebarTelemetry.Tests.ps1` | Opt-in typed ETW: sidebar actions, real tab-order pin/unpin, KeepId/AttemptId restoration and surviving observation sessions, Launch/UserChange field snapshots, raw-provider-ID exclusion and negative controls | 10 (requires `ITE2E_TELEMETRY=1`; no policy changes) |
 | `Feature.WtcliPublishStdin.Tests.ps1` | PR #652: WTA/wtcli stdin transport delivers command-line-limit-sized events intact and preserves positional compatibility | 3 |
 | `Feature.Settings.Tests.ps1` | §1 Settings>AI Agents + §0 FRE settings/positions/auto-error/session-mgmt | 18 |
@@ -106,7 +106,7 @@ authenticated ACP agents. Available suites (results depend on the selected packa
 | `Feature.CombinedAgentsSidebar.Tests.ps1` | Updated Sidebar UX: static Tabs text; standard independent Agents only/Recent agent sessions toggles; four rendered scope combinations; global search; clear/close and collapse-preference restoration; toggle-during-search; UIA checked states and foreground-gated Ctrl+Shift+G/R. C427 adds physical owning-tab Move up/down in Agents-only scope to the nearest visible owner, exact canonical insertion order across hidden ordinary neighbors and visible group displacement, expanded/collapsed group and shell/helper identity preservation, visible-disabled Search Move and history negative controls, and physical top-row Ctrl+Alt+1/2/9 in the chosen All/Agents-only filter independently of search before/after movement from shell/helper/ItemsList focus. Search, including zero results, never renumbers navigation targets. Only visible owned ItemsList descendants count. Existing native CLI resume (Recent preference On/Off), live/group actions, metadata, identity, retention, ownership, scroll, expansion events, focus, mutations and resize protections remain. C367/C381/C397/C408 retain their IDs; C382/C383 remain retired. Explicit feature-head Dev hashes and automatic verified Dev preflight required; deterministic ACP history/provider-labelled cmd tabs, no model quota. Fresh hash-backed settings/state/runtime snapshots restore only after package inactivity. Focused C427 live accepted at 64243d5c; the other 33 cases are not newly credited | 34 |
 | `Feature.AgentsModeActions.Tests.ps1` | Original plus opens the configured default profile across filters, search and layout; splits retain the source profile without view-specific delegation, assistant panes stay fixed, and explicit native-provider fixtures retain held-hook identity; exact Dev hashes, no provider prompts | 7 |
 | `Feature.SidebarRelativeTime.Tests.ps1` | PR #1070: six-unit English/Arabic compact ages, readable RTL geometry, and provider accessibility; deterministic history fixture | 2 |
-| `Feature.SidebarUpgrade.Tests.ps1` | Superseding PM/UX: persisted once-only Horizontal migration and later explicit Horizontal restart, independently pending introduction, absent flags/fresh FRE gate, real palette collapse deferral, exact-shell owned second-window suppression, actual rendered tip/restart suppression; real state.json sharing fault, visible warning, Horizontal memory/disk rollback and released-lock retry. No ACL/registry changes, provider quota or callback fault proxies; exact Dev hashes and automatic Dev preflight required | 6 (authored, not live accepted) |
+| `Feature.SidebarUpgrade.Tests.ps1` | Deterministically seeded Sidebar rollout group: persisted once-only Horizontal migration and later explicit Horizontal restart, independently pending introduction, absent flags/fresh FRE gate, real palette collapse deferral, exact-shell owned second-window suppression, actual rendered tip/restart suppression; real state.json sharing fault, visible warning, Horizontal memory/disk rollback and released-lock retry. Both-group migration, stable identity and approximate 80/20 allocation are covered by ApplicationState native tests. No ACL/registry changes, provider quota or callback fault proxies; exact Dev hashes and automatic Dev preflight required | 6 (authored, not live accepted) |
 | `Feature.SidebarProviderAppearance.Tests.ps1` | PR #1070: horizontal-first provider creation, native identity/layout preservation, and scoped Light/Dark header evidence; rendered foreground requires independent visual review | 2 |
 | `Feature.McpDelegatedAgentIdentity.Tests.ps1` | PR #1070: canonical provider bootstrap and identity-only hot updates across session MCP, helper, and native creation; controlled agent fixtures and ordinary-shell negative control | 1 |
 | `Feature.AgentPaneInteraction.Tests.ps1` | open/hide/focus, input/rendering, slash, Copilot chat | 14 |
@@ -259,12 +259,31 @@ These hermetic checks do not establish live C427 acceptance.
 The report driver does not
 accept `-FullNameFilter`; use its whole-suite `-Path` option for release results.
 
-Ordinary revised Sidebar fixtures explicitly pass `-State @{
-sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true }`
-to `Start-Terminal`. This is opt-in, applied only after the existing owned
+Ordinary revised Sidebar fixtures explicitly seed a deterministic completed
+rollout when calling `Start-Terminal`:
+
+```powershell
+Start-Terminal -Package Dev -State @{
+    featureRolloutId = '{00000000-0000-0000-0000-000000000001}'
+    sidebarRolloutVersion = 1
+    sidebarRolloutAssignment = 'Sidebar'
+    sidebarLayoutMigrationCompleted = $true
+    sidebarIntroductionShown = $true
+} -Settings @{ tabLayout = 'vertical' }
+```
+
+For the Horizontal cohort, use installation ID
+`{00000000-0000-0000-0000-000000000002}` and assignment `Horizontal`.
+The rollout version suppresses re-enrollment; the legacy
+`sidebarLayoutMigrationCompleted` flag alone does not. Completed fixtures
+preserve their configured layout independently of the fixed assignment.
+`featureRolloutId` is the shared local GUID source for feature rollouts, not the
+`SidebarRolloutName` telemetry label.
+This is opt-in, applied only after the existing owned
 settings/state backup, and self-verifies persistence; default harness startup
-and fresh FRE behavior are unchanged. Upgrade tests intentionally supply false
-flags and preserve the migrated state across relaunch, restoring the original
+and fresh FRE behavior are unchanged. Upgrade tests intentionally supply
+incomplete migration/rollout state and preserve the migrated state across
+relaunch, restoring the original
 bytes only after their last owned process exits.
 The persistence-failure case prepares its protected baseline before launch and
 holds an existing `state.json` read handle without write/delete sharing.

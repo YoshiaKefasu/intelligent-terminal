@@ -90,7 +90,7 @@ Describe 'Feature: Sidebar compact relative time' -Tag @('Feature', 'SidebarRela
             $profileId = '{' + [guid]::NewGuid().ToString() + '}'
             $launchStarted = Get-Date
             $script:app = Start-Terminal -Package Dev -PassFre $true -TimeoutSec 60 -State @{
-                sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+                featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
             } -Settings @{
                 language = $Locale; tabLayout = 'vertical'; tabLayoutVerticalWidth = 600
                 startupActions = ''; firstWindowPreference = 'defaultProfile'; windowingBehavior = 'useNew'

@@ -1672,15 +1672,19 @@ bool CascadiaSettings::WriteSettingsToDisk()
 
 bool CascadiaSettings::MigrateSidebarLayout(ApplicationState& state, const std::function<bool()>& save)
 {
-    if (state.SidebarLayoutMigrationCompleted())
+    if (!state.PrepareSidebarRollout())
+    {
+        WarnSidebarPersistenceFailure();
+        return false;
+    }
+    if (state.SidebarRolloutVersion() == ApplicationState::CurrentSidebarRolloutVersion)
     {
         return true;
     }
     const auto hadLayout = _globals->HasTabLayout();
     const auto previous = _globals->TabLayout();
-    // Persist even an inherited Sidebar default so this transaction also
-    // covers fresh users and records completion only after a successful save.
-    _globals->TabLayout(Model::TabLayout::Vertical);
+    const auto assignedLayout = state.SidebarRolloutLayout();
+    _globals->TabLayout(assignedLayout);
     bool saved = false;
     try
     {
@@ -1712,8 +1716,8 @@ bool CascadiaSettings::MigrateSidebarLayout(ApplicationState& state, const std::
         CATCH_LOG();
         if (!rolledBack)
         {
-            LOG_HR_MSG(E_FAIL, "Sidebar migration rollback failed; retaining the last successfully saved Sidebar setting in memory");
-            _globals->TabLayout(Model::TabLayout::Vertical);
+            LOG_HR_MSG(E_FAIL, "Sidebar migration rollback failed; retaining the last successfully saved layout in memory");
+            _globals->TabLayout(assignedLayout);
             WarnSidebarPersistenceFailure();
         }
     }

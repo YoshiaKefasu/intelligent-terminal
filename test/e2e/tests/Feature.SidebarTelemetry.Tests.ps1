@@ -209,7 +209,7 @@ Describe 'Feature: sidebar telemetry' -Tag 'Feature', 'Telemetry', 'SidebarTelem
         $trace = Start-TestTelemetryTrace -Directory (Join-Path $script:root 'capture')
         try {
             $script:app = Start-Terminal -Package Dev -PassFre $true -State @{
-                sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+                featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
             } -Settings @{
                 language = 'en-US'; tabLayout = 'horizontal'; confirmOnClose = 'never'
                 firstWindowPreference = 'defaultProfile'; startupActions = ''; windowingBehavior = 'useNew'
@@ -562,8 +562,12 @@ Describe 'Feature: sidebar telemetry' -Tag 'Feature', 'Telemetry', 'SidebarTelem
         $created[1].Fields.SidebarEnabled | Should -BeIn @('true', '1')
         foreach ($event in $created) {
             $event.Types.SidebarEnabled | Should -Match 'Boolean$'
+            $event.Types.SidebarRolloutName | Should -Match 'UnicodeString$'
+            $event.Types.SidebarRolloutAssignment | Should -Match 'UnicodeString$'
+            $event.Fields.SidebarRolloutName | Should -Be 'sidebar-upgrade-v1'
+            $event.Fields.SidebarRolloutAssignment | Should -Be 'Sidebar'
             $event.Types.PartA_PrivTags | Should -Match 'UInt64$'
-            @($event.Fields.Keys) | Should -HaveCount 14
+            @($event.Fields.Keys) | Should -HaveCount 16
         }
         $script:metadata | Should -HaveCount (19 + $script:rowFieldCases.Count + $created.Count)
         $startupMetadata = @($script:metadata | Where-Object Name -eq AppCreated)[0]

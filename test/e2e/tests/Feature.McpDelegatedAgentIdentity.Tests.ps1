@@ -65,7 +65,7 @@ Describe 'Feature: MCP delegated agent identity' -Tag @('Feature', 'McpDelegated
         $script:delegateCommand = "`"$pwsh`" -NoLogo -NoProfile -File `"$nativeFixture`" -LogPath `"$script:launchLog`" -RunId $script:runId"
         $script:ownsConfig = $true
         $script:app = Start-Terminal -Package Dev -PassFre $true -State @{
-            sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
+            featureRolloutId = '{00000000-0000-0000-0000-000000000001}'; sidebarRolloutVersion = 1; sidebarRolloutAssignment = 'Sidebar'; sidebarLayoutMigrationCompleted = $true; sidebarIntroductionShown = $true
         } -Settings @{
             language = 'en-US'; tabLayout = 'vertical'; startupActions = ''
             firstWindowPreference = 'defaultProfile'; windowingBehavior = 'useNew'

@@ -56,12 +56,25 @@ instead of letting unordered snapshot rows repeatedly change the icon.
 
 ## One-time Sidebar upgrade and introduction
 
-- Sidebar becomes the default tab layout for new users. On the first eligible
-  upgrade, existing non-Sidebar users also move to Sidebar once.
+- The `sidebar-upgrade-v1` rollout assigns approximately 80% of installation
+  identities to Sidebar and 20% to Horizontal. On the first eligible load,
+  apply that assignment once to new and upgraded installations, including
+  those that already completed the older all-Sidebar migration.
+- Persist a random `featureRolloutId` GUID in shared `state.json`.
+  Reuse this local identity as the source for other feature rollouts, with each
+  feature supplying its own versioned rollout name to `FeatureRolloutBucket`.
+  Use stable rollout-scoped bucketing, not per-launch randomness or a
+  hardware identifier. Share identity across windows and elevation levels
+  using the existing sidebar-state file lock. Clearing state resets identity.
 - Persist a hidden migration-completed state separately from the hidden
   introduction-shown state. Neither appears as an editable Settings UI option.
   Migration completion is recorded only after its required layout change has
   succeeded through the existing settings persistence path.
+- Record `sidebarRolloutVersion` and `sidebarRolloutAssignment` on
+  completion independently of the legacy `sidebarLayoutMigrationCompleted`
+  flag. Report `SidebarRolloutName` and `SidebarRolloutAssignment` in
+  `AppCreated`; the fixed assignment is separate from current `SidebarEnabled`.
+  Do not emit the installation GUID.
 - Later choosing horizontal tabs must not reset either state. Restarting,
   reloading settings, opening another window, or another ordinary upgrade must
   not force Sidebar again or repeat an already-shown introduction.
