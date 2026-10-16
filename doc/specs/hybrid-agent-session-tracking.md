@@ -135,6 +135,16 @@ Watcher processing then, in order:
 There is no ordering requirement and the row identity is the same session id
 throughout, so no duplicate is ever produced.
 
+### Hook-owned Copilot activity
+
+Hook-owned sessions do not supplement hooks with transcript permission events.
+Copilot's `PostToolUse` restores Working after a successful tool return;
+`Stop` owns Idle, and late tool returns do not reactivate an Idle turn.
+This intentionally uses the latest session-level hook,
+not per-request approval correlation: a tool can remain Waiting while it runs,
+and another parallel tool's return may replace an outstanding wait. The original
+born-bound, hookless file-watcher fallback is unchanged.
+
 ### Born-bound activity fallback
 
 Born-bound (see [wta-launched-cli-session-binding.md](./wta-launched-cli-session-binding.md))

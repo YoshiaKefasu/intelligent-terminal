@@ -2401,9 +2401,8 @@ fn previous_hook_command_spellings_are_rejected() {
     }
 }
 
-/// Both CLIs must carry the common event set, and neither may subscribe a
-/// per-tool-call hook. `ErrorOccurred` must NOT appear (undocumented legacy
-/// name; the documented equivalent is `StopFailure`).
+/// Both CLIs carry the common event set. Only Copilot subscribes tool returns;
+/// PreToolUse remains absent and ErrorOccurred is not a supported event name.
 #[test]
 fn claude_and_copilot_carry_full_event_catalog() {
     const COMMON_EVENTS: &[&str] = &[
@@ -2414,22 +2413,8 @@ fn claude_and_copilot_carry_full_event_catalog() {
         "StopFailure",
         "Stop",
     ];
-    // Copilot's `PreToolUse` was the last per-tool-call subscription, kept for
-    // the Attention path that `app.rs` synthesizes when `tool_name` is a
-    // user-input tool. Copilot 1.0.81-2 fires `Notification` for the same
-    // question — both carrying the question text, ~0.9s apart — so the tool
-    // hook only bought a duplicate. It cost a PowerShell start per tool call
-    // (~536 ms measured, ~388 ms of it `pwsh` startup) on the fail-closed path,
-    // where the CLI blocks until the hook returns. The completion events went
-    // earlier for the same reason: `app.rs` discards them because `agent.stop`
-    // owns the turn-end.
-    //
-    // Turn-level Working is unaffected: `UserPromptSubmit` already maps to
-    // `ToolStarting`. What is given up is per-tool granularity in the session
-    // row — the tool's name, not its status.
-    const NO_PER_TOOL_EVENTS: &[&str] = &[
+    const UNSUBSCRIBED_EVENTS: &[&str] = &[
         "PreToolUse",
-        "PostToolUse",
         "PostToolUseFailure",
         "BeforeTool",
         "AfterTool",
@@ -2448,13 +2433,26 @@ fn claude_and_copilot_carry_full_event_catalog() {
             !hooks.contains("\"ErrorOccurred\":"),
             "{label} hooks.json still references undocumented ErrorOccurred"
         );
-        for event in NO_PER_TOOL_EVENTS {
+        for event in UNSUBSCRIBED_EVENTS {
             assert!(
                 !hooks.contains(&format!("\"{event}\":")),
-                "{label} hooks.json subscribes {event}, which fires once per tool \
-                 call and costs a shell start each time; the Attention path it \
-                 used to serve is covered by Notification"
+                "{label} hooks.json must not subscribe {event}"
             );
+        }
+        let doc: Value = serde_json::from_str(hooks).unwrap();
+        if label == "copilot" {
+            let handlers = doc["hooks"]["PostToolUse"][0]["hooks"].as_array().unwrap();
+            assert!(!handlers.is_empty());
+            for handler in handlers {
+                for field in ["powershell", "bash"] {
+                    assert!(handler[field]
+                        .as_str()
+                        .unwrap()
+                        .contains("--event agent.tool.finished"));
+                }
+            }
+        } else {
+            assert!(doc["hooks"].get("PostToolUse").is_none());
         }
     }
 }
@@ -2483,7 +2481,7 @@ fn strip_per_cli_hook_fields(value: &mut Value) {
     }
 }
 
-/// Claude's CwdChanged hook has no Copilot equivalent; all shared hooks retain parity.
+/// CLI-specific hooks are excluded; all shared hooks retain parity.
 #[test]
 fn claude_and_copilot_hooks_json_are_parity_identical() {
     let mut normalized_claude: Value = serde_json::from_str(CLAUDE_HOOKS_JSON).unwrap();
@@ -2497,6 +2495,11 @@ fn claude_and_copilot_hooks_json_are_parity_identical() {
         .as_object_mut()
         .unwrap()
         .remove("CwdChanged");
+    assert!(normalized_copilot["hooks"]
+        .as_object_mut()
+        .unwrap()
+        .remove("PostToolUse")
+        .is_some());
     strip_per_cli_hook_fields(&mut normalized_claude);
     strip_per_cli_hook_fields(&mut normalized_copilot);
 
@@ -2549,7 +2552,7 @@ fn copilot_uses_native_plugin_layout() {
 fn native_hook_bundle_versions_match_their_marketplaces() {
     let manifests = [
         ("claude", CLAUDE_PLUGIN_JSON, "0.1.9"),
-        ("copilot", COPILOT_PLUGIN_JSON, "0.1.7"),
+        ("copilot", COPILOT_PLUGIN_JSON, "0.1.8"),
         ("gemini", GEMINI_EXTENSION_JSON, "0.1.7"),
         ("codex", CODEX_PLUGIN_JSON, "0.1.9"),
         ("opencode", OPENCODE_PLUGIN_JSON, "0.1.16"),

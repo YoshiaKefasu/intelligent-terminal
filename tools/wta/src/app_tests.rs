@@ -1574,7 +1574,7 @@ fn sessionless_notification_falls_back_to_recent_live_cli_session() {
     );
 }
 
-/// Turn-based hook status (multi-tool turn bug): Copilot/Gemini fire a
+/// Turn-based hook status (multi-tool turn bug): Copilot fires a
 /// `tool.finished` per tool — several per turn, in parallel batches — but
 /// the agent keeps working until `agent.stop`. A `tool.finished` must NOT
 /// demote the row to Idle (only `agent.stop` ends the turn); otherwise a
@@ -1633,12 +1633,44 @@ fn copilot_tool_finished_keeps_working_only_agent_stop_idles() {
         "tool completions never end the turn",
     );
 
+    route(&mut reg, "agent.notification");
+    route(&mut reg, "agent.tool.failed");
+    assert_eq!(
+        reg.get(&sid.to_string()).unwrap().status,
+        AgentStatus::Attention
+    );
+    route(&mut reg, "agent.tool.finished");
+    let row = reg.get(&sid.to_string()).unwrap();
+    assert_eq!(row.status, AgentStatus::Working);
+    assert!(row.current_tool.is_none());
+    assert!(row.attention_reason.is_none());
+
     // Only agent.stop ends the turn → Idle.
     route(&mut reg, "agent.stop");
     assert_eq!(
         reg.get(&sid.to_string()).unwrap().status,
         AgentStatus::Idle,
         "agent.stop owns the turn-end → Idle",
+    );
+    route(&mut reg, "agent.tool.finished");
+    assert_eq!(
+        reg.get(&sid.to_string()).unwrap().status,
+        AgentStatus::Idle,
+        "a late tool return must not reactivate the completed turn",
+    );
+    route(&mut reg, "agent.error");
+    route(&mut reg, "agent.tool.finished");
+    assert_eq!(
+        reg.get(&sid.to_string()).unwrap().status,
+        AgentStatus::Error
+    );
+    reg.apply(SessionEvent::PaneClosed {
+        pane_session_id: pane.into(),
+    });
+    route(&mut reg, "agent.tool.finished");
+    assert_eq!(
+        reg.get(&sid.to_string()).unwrap().status,
+        AgentStatus::Ended
     );
 }
 
@@ -1942,6 +1974,131 @@ fn claude_permission_prompt_notification_still_sets_attention() {
 }
 
 #[test]
+fn copilot_background_notifications_preserve_session_activity() {
+    use crate::agent_sessions::{AgentSessionRegistry, CliSource, SessionEvent};
+
+    let key = "copilot-sid".to_string();
+    let pane = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    for activity in [
+        SessionEvent::ToolStarting {
+            key: key.clone(),
+            tool_name: "prompt".into(),
+        },
+        SessionEvent::ToolCompleted { key: key.clone() },
+        SessionEvent::Notification {
+            key: key.clone(),
+            message: "Permission needed".into(),
+        },
+    ] {
+        for type_field in ["notificationType", "notification_type"] {
+            for notification_type in [
+                "shell_completed",
+                "shell_detached_completed",
+                "agent_completed",
+                "agent_idle",
+            ] {
+                let mut reg = AgentSessionRegistry::new();
+                reg.apply(SessionEvent::SessionStarted {
+                    key: key.clone(),
+                    cli_source: CliSource::Copilot,
+                    pane_session_id: pane.into(),
+                    cwd: std::path::PathBuf::from("C:\\repo"),
+                    title: "copilot".into(),
+                });
+                reg.apply(activity.clone());
+                let before = reg.get(&key).unwrap().clone();
+                reg.take_dirty();
+
+                let mut payload = json!({ "message": "Background work completed" });
+                payload[type_field] = json!(notification_type);
+                let params = json!({
+                    "event": "agent.notification",
+                    "cli_source": "copilot",
+                    "agent_session_id": key,
+                    "payload": payload,
+                });
+                let mut applied = Vec::new();
+                let changed = route_agent_event_to_registry_with_hook_sink(
+                    &mut reg,
+                    pane,
+                    &params,
+                    |event| applied.push(event),
+                );
+
+                let after = reg.get(&key).unwrap();
+                assert_eq!(
+                    after.status, before.status,
+                    "{type_field}={notification_type}"
+                );
+                assert_eq!(after.current_tool, before.current_tool);
+                assert_eq!(after.attention_reason, before.attention_reason);
+                assert!(!changed);
+                assert!(!reg.take_dirty());
+                assert!(applied.is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn copilot_background_notification_does_not_create_a_session() {
+    use crate::agent_sessions::AgentSessionRegistry;
+
+    let mut reg = AgentSessionRegistry::new();
+    let params = json!({
+        "event": "agent.notification",
+        "cli_source": "copilot",
+        "agent_session_id": "copilot-sid",
+        "payload": {
+            "message": "Shell command has completed successfully",
+            "notificationType": "shell_completed",
+        },
+    });
+    let mut applied = Vec::new();
+    let changed = route_agent_event_to_registry_with_hook_sink(
+        &mut reg,
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        &params,
+        |event| applied.push(event),
+    );
+    assert!(reg.iter_sorted().is_empty());
+    assert!(!changed);
+    assert!(applied.is_empty());
+}
+
+#[test]
+fn copilot_actionable_notifications_still_set_attention() {
+    use crate::agent_sessions::{AgentSessionRegistry, AgentStatus};
+
+    for type_field in ["notificationType", "notification_type"] {
+        for notification_type in ["permission_prompt", "elicitation_dialog"] {
+            let mut reg = AgentSessionRegistry::new();
+            let mut payload = json!({ "message": "User action needed" });
+            payload[type_field] = json!(notification_type);
+            let params = json!({
+                "event": "agent.notification",
+                "cli_source": "copilot",
+                "agent_session_id": "copilot-sid",
+                "payload": payload,
+            });
+            route_agent_event_to_registry_with_hook_sink(
+                &mut reg,
+                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                &params,
+                |_| {},
+            );
+
+            let session = reg.get(&"copilot-sid".to_string()).unwrap();
+            assert_eq!(session.status, AgentStatus::Attention);
+            assert_eq!(
+                session.attention_reason.as_deref(),
+                Some("User action needed")
+            );
+        }
+    }
+}
+
+#[test]
 fn copilot_shell_completed_notification_leaves_activity_unchanged() {
     use crate::agent_sessions::{AgentStatus, CliSource};
 
@@ -1976,8 +2133,7 @@ fn copilot_shell_completed_notification_leaves_activity_unchanged() {
 }
 
 /// The filter is a denylist of known-inert types, not an allowlist of known
-/// types: CLIs that send no `notification_type` at all (Copilot, Gemini,
-/// OpenCode) and any type Claude adds later must keep reaching Attention.
+/// types: CLIs that send no type and any type added later must keep reaching Attention.
 /// Under-reporting silently loses an approval request; over-reporting only
 /// costs a badge the next event clears.
 #[test]
@@ -1986,10 +2142,9 @@ fn notification_without_a_known_type_still_sets_attention() {
     for payload in [
         json!({ "message": "approve: rm -rf foo" }),
         json!({ "message": "something new", "notification_type": "some_future_prompt" }),
+        json!({ "message": "something new", "notificationType": "some_future_prompt" }),
         json!({ "message": "approve command", "notificationType": "permission_prompt" }),
         json!({ "message": "answer question", "notificationType": "elicitation_dialog" }),
-        json!({ "message": "agent completed", "notificationType": "agent_completed" }),
-        json!({ "message": "detached shell completed", "notificationType": "shell_detached_completed" }),
     ] {
         let mut reg = AgentSessionRegistry::new();
         reg.apply(SessionEvent::SessionStarted {

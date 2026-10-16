@@ -393,6 +393,10 @@ pub enum SessionEvent {
     ToolCompleted {
         key: AgentKey,
     },
+    /// A Copilot tool succeeded; the agent may continue until its Stop hook.
+    ToolReturned {
+        key: AgentKey,
+    },
     Notification {
         key: AgentKey,
         message: String,
@@ -793,19 +797,25 @@ impl AgentSessionRegistry {
                 }
             }
 
+            SessionEvent::ToolReturned { key } => {
+                if let Some(entry) = self.sessions.get_mut(&key) {
+                    if entry.cli_source != CliSource::Copilot
+                        || !matches!(entry.status, AgentStatus::Working | AgentStatus::Attention)
+                    {
+                        return;
+                    }
+                    entry.status = AgentStatus::Working;
+                    entry.current_tool = None;
+                    entry.attention_reason = None;
+                    entry.last_activity_at = now;
+                    self.dirty = true;
+                }
+            }
+
             SessionEvent::ToolCompleted { key } => {
                 if let Some(entry) = self.sessions.get_mut(&key) {
-                    // Demote to Idle when this completion resolves an active
-                    // wait. Two cases produce Attention:
-                    //   1. A user-input tool started (e.g. Copilot's `ask_user`)
-                    //      — its matching ToolCompleted means the user replied.
-                    //   2. A `Notification` event from a permission_prompt hook
-                    //      escalated us mid-tool — the matching tool.completed
-                    //      / tool.failed (approve / reject) resolves it.
-                    // Both cases mean "next event clears Attention", so we
-                    // demote on any ToolCompleted while in Attention. The Error
-                    // state is separate (set by ConnectionFailed) and is NOT
-                    // touched here, so transient-error UX still works.
+                    // Turn completion owns Idle. Ordinary Copilot tool returns
+                    // use ToolReturned so between-tool work remains Active.
                     let demotable = entry.status == AgentStatus::Working
                         || entry.status == AgentStatus::Attention;
                     if demotable {

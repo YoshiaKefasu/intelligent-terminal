@@ -1042,6 +1042,9 @@ pub enum SessionHookParams {
     ToolCompleted {
         key: crate::agent_sessions::AgentKey,
     },
+    ToolReturned {
+        key: crate::agent_sessions::AgentKey,
+    },
     Notification {
         key: crate::agent_sessions::AgentKey,
         message: String,
@@ -1119,6 +1122,7 @@ impl From<&crate::agent_sessions::SessionEvent> for SessionHookParams {
                 tool_name: tool_name.clone(),
             },
             SessionEvent::ToolCompleted { key } => Self::ToolCompleted { key: key.clone() },
+            SessionEvent::ToolReturned { key } => Self::ToolReturned { key: key.clone() },
             SessionEvent::Notification { key, message } => Self::Notification {
                 key: key.clone(),
                 message: message.clone(),
@@ -1207,6 +1211,7 @@ impl From<SessionHookParams> for crate::agent_sessions::SessionEvent {
                 Self::ToolStarting { key, tool_name }
             }
             SessionHookParams::ToolCompleted { key } => Self::ToolCompleted { key },
+            SessionHookParams::ToolReturned { key } => Self::ToolReturned { key },
             SessionHookParams::Notification { key, message } => Self::Notification { key, message },
             SessionHookParams::SessionStopped { key, reason } => {
                 Self::SessionStopped { key, reason }
@@ -2659,6 +2664,28 @@ fn apply_event_locked(state: &mut RegistryState, ev: SessionEvent) -> bool {
             }
             entry.status = Some(AgentStatus::Working);
             entry.current_tool = Some(tool_name);
+            entry.last_activity_at_ms = Some(now);
+            true
+        }
+        SessionEvent::ToolReturned { key } => {
+            let sid = acp::schema::v1::SessionId::new(key);
+            let Some(identity) = unique_identity_for_raw(state, &sid) else {
+                return false;
+            };
+            let Some(entry) = state.sessions.get_mut(&identity) else {
+                return false;
+            };
+            if entry.cli_source != Some(CliSource::Copilot)
+                || !matches!(
+                    entry.status,
+                    Some(AgentStatus::Working | AgentStatus::Attention)
+                )
+            {
+                return false;
+            }
+            entry.status = Some(AgentStatus::Working);
+            entry.current_tool = None;
+            entry.attention_reason = None;
             entry.last_activity_at_ms = Some(now);
             true
         }
@@ -6037,6 +6064,9 @@ mod tests {
             },
             SessionEvent::ToolCompleted {
                 key: "tool-completed".to_string(),
+            },
+            SessionEvent::ToolReturned {
+                key: "tool-returned".to_string(),
             },
             SessionEvent::Notification {
                 key: "notification".to_string(),

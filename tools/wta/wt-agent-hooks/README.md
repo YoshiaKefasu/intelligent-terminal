@@ -39,7 +39,8 @@ wt-agent-hooks/
 
 Every integration dispatches through the native `wtcli agent-hook` command,
 invoked directly from `hooks.json` with no script or batch launcher in between.
-Claude and Copilot share the same non-version plugin metadata and event schema.
+Claude and Copilot share non-version plugin metadata and common lifecycle hooks;
+Copilot additionally subscribes a successful tool-return hook.
 
 Hook versions are independent per provider. Bump only the manifest for the
 provider whose installed payload changes; for Claude and Copilot, also update
@@ -177,6 +178,7 @@ names. Event vocabularies differ per CLI:
 | `agent.notification`    | `Notification`         | `Notification`         | `Notification`   |
 | `agent.prompt.submit`   | `UserPromptSubmit`     | `UserPromptSubmit`     | `BeforeAgent`    |
 | `agent.tool.starting`   | *(not subscribed)*     | *(not subscribed)*     | `BeforeTool`     |
+| `agent.tool.finished`   | *(not subscribed)*     | `PostToolUse`          | *(not emitted)*  |
 | `agent.error`           | `StopFailure`          | `StopFailure`          | *(not emitted)*  |
 | `agent.stop`            | `Stop`                 | `Stop`                 | `AfterAgent`     |
 | `agent.subagent.stop`   | *(not subscribed)*     | *(not subscribed)*     | *(not emitted)*  |
@@ -187,11 +189,19 @@ error" — earlier wta builds shipped an undocumented `ErrorOccurred` name
 which is no longer used. Gemini's manifest has no native equivalents for
 the failure topics, so those rows are silent on Gemini.
 
-Copilot's `shell_completed` notification reports background command completion,
-not a request for input. WTA recognises both `notificationType` and
-`notification_type` for this notification and leaves the session status unchanged.
-It does not clear an existing approval/question wait or add approval-completion
-tracking; other notification and lifecycle behavior remains unchanged.
+Copilot background shell/agent completion notifications are informational and
+leave the existing status unchanged, including an unanswered approval/question.
+Both `notificationType` and `notification_type` are recognised. Its permission
+and question notifications still mark the session Attention (Waiting for input).
+
+**Copilot activity is hook-only once hooks own the session.** `PostToolUse`
+resumes Working (Active) after a tool succeeds; only `Stop` ends the turn as
+Idle. Late tool returns do not reactivate an Idle turn, and failed tools do not
+restore activity. This is deliberately session-level,
+latest-hook behavior, not per-request approval matching. Waiting can persist for
+the whole tool run, and a parallel tool's successful return may replace another
+unanswered wait. No transcript permission events are mixed into a hook-owned
+session. The original hookless file-watcher fallback remains unchanged.
 
 Two topics keep a routing arm in `app.rs` that outlives their subscription in
 the Claude and Copilot bundles: `agent.subagent.stop`, which no shipped manifest
@@ -200,18 +210,15 @@ claims at all, and `agent.tool.starting`, which Gemini still sends as
 described below. The arms stay so a CLI that adds the event later, or a bundle a
 user installed earlier, is routed rather than mis-handled.
 
-**Tool-completion events are deliberately not subscribed.** `app.rs` discards
-`agent.tool.finished` / `agent.tool.failed`: tool completion does not end a
-turn, so `agent.stop` owns the transition back to Idle. Subscribing them cost a
-shell spawn plus a COM round trip *per tool call*, only to be dropped — so
-Copilot's `PostToolUse` / `PostToolUseFailure`, Gemini's `AfterTool`, and
-OpenCode's `tool.execute.after` were removed. The routing arm remains so an
-older installed bundle that still emits them is ignored rather than mis-routed.
+**Other providers keep their existing tool-completion behavior.** `app.rs`
+discards their `agent.tool.finished` / `agent.tool.failed` events because tool
+completion does not end a turn. Copilot deliberately pays the per-tool shell
+spawn and COM round-trip cost to recover activity without reading permission
+records from files; it does not map tool completion to Idle.
 
-**Copilot's `PreToolUse` went the same way, one release later** — note this is
-narrower than the rule above: `agent.tool.starting` is still subscribed by
-Gemini (`BeforeTool`) and OpenCode (`tool.execute.before`), and `app.rs` still
-routes it. Copilot kept it for the Attention path `app.rs` synthesizes when
+**Copilot's `PreToolUse` remains unsubscribed**: `agent.tool.starting` is still
+subscribed by Gemini (`BeforeTool`) and OpenCode (`tool.execute.before`), and
+`app.rs` still routes it. Copilot kept it for the Attention path `app.rs` synthesizes when
 `tool_name` names a user-input tool, which was the only signal available while
 Copilot's `Notification` hook did not cover questions. It does now: on 1.0.81-2
 a single `AskUserQuestion` produces both the tool hook and a `Notification`,

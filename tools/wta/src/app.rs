@@ -541,7 +541,8 @@ pub struct AgentEventFacts {
 #[derive(Debug, Default)]
 pub struct AgentEventPlan {
     /// Session events to apply, in emit order. Empty when the hook is
-    /// deliberately ignored (tool completions, `idle_prompt` notifications).
+    /// deliberately ignored (informational notifications and other providers'
+    /// tool completions).
     pub events: Vec<crate::agent_sessions::SessionEvent>,
     /// Set when a real `agent.session.started` should supersede any
     /// `pane:`-keyed placeholder previously minted for this pane.
@@ -727,38 +728,37 @@ pub fn plan_agent_event(
             key,
             tool_name: "prompt".to_string(),
         },
-        // Tool completion does NOT end the turn. Copilot and Gemini fire a
-        // `tool.finished` per tool — often several per turn, in parallel
-        // batches — but the agent keeps working until it emits `agent.stop`.
-        // Mapping each completion to `ToolCompleted` made multi-tool turns
-        // flicker to Idle and sit there during the agent's between-tool
-        // thinking. The arm stays so an older installed bundle that still
-        // emits them is ignored rather than mis-routed.
-        "agent.tool.completed" | "agent.tool.finished" | "agent.tool.failed" => {
-            plan.events.clear();
-            return plan;
+        // Successful Copilot tool returns resume activity, not Idle. Other providers
+        // retain the legacy no-op; agent.stop still owns the turn-end transition.
+        "agent.tool.completed" | "agent.tool.finished" => {
+            if *cli_source == crate::agent_sessions::CliSource::Copilot {
+                SessionEvent::ToolReturned { key }
+            } else {
+                plan.events.clear();
+                return plan;
+            }
         }
         "agent.stop" | "agent.subagent.stop" => SessionEvent::ToolCompleted { key },
         "agent.notification" => {
-            // Claude's `Notification` hook covers two cases. `permission_prompt`
-            // is genuinely Attention: nothing proceeds until the user acts.
-            // `idle_prompt` fires *after* `agent.stop` already moved the row to
-            // Idle, so treating it as Attention would park every session at
-            // "waiting for your input" between turns. Unknown types stay
-            // Attention on purpose — over-reporting costs a stale badge the
-            // next event clears, under-reporting loses a permission request.
+            // Background work and idle reminders do not block the owning session.
+            // Drop them rather than resetting activity: a pending approval may
+            // still need Attention. Unknown types stay visible as Attention.
             let notification_type = payload
                 .get("notification_type")
                 .and_then(|v| v.as_str())
+                .filter(|value| !value.is_empty())
+                .or_else(|| payload.get("notificationType").and_then(|v| v.as_str()))
                 .unwrap_or("");
-            let copilot_shell_completed =
-                matches!(cli_source, crate::agent_sessions::CliSource::Copilot)
-                    && payload
-                        .get("notificationType")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(notification_type)
-                        == "shell_completed";
-            if notification_type == "idle_prompt" || copilot_shell_completed {
+            if notification_type == "idle_prompt"
+                || (matches!(cli_source, crate::agent_sessions::CliSource::Copilot)
+                    && matches!(
+                        notification_type,
+                        "shell_completed"
+                            | "shell_detached_completed"
+                            | "agent_completed"
+                            | "agent_idle"
+                    ))
+            {
                 plan.events.clear();
                 return plan;
             }
