@@ -36,6 +36,9 @@ D2D
 # tools/wta/build.rs: Rust stdlib char predicate
 \bis_ascii_hexdigit\b
 
+# Axe.Windows artifact file extension
+(?<=\.)a11ytest\b
+
 # tools/wta/src/cli/native_agent.rs: Rust stdlib error variant
 \bstd::io::ErrorKind::NotADirectory\b
 

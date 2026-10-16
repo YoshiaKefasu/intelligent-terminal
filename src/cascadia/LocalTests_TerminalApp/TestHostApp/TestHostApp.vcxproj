@@ -83,6 +83,9 @@
     <ApplicationDefinition Include="UnitTestApp.xaml">
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Content Include="$(OpenConsoleDir)src\cascadia\CascadiaPackage\ProfileGeneratorIcons\PowerShell.png">
+      <Link>taef.png</Link>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">
@@ -191,5 +194,11 @@
           UseHardLinksIfPossible="true"
           SkipUnchangedFiles="true" />
 
+  </Target>
+
+  <Target Name="PrepareAccessibilityHostAssets" AfterTargets="Build">
+    <Copy SourceFiles="$(OpenConsoleDir)src\cascadia\CascadiaPackage\ProfileGeneratorIcons\PowerShell.png"
+          DestinationFiles="$(TargetDir)\taef.png"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>
