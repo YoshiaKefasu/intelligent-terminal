@@ -372,6 +372,10 @@ and returning to nonvertical layout immediately refreshes an already-open helper
 History-query recovery may rebuild only its history-only process. Startup
 discovery retries are separate and retain the existing ACP initialization timeout.
 
+Master allows up to 60 seconds for an ACP `initialize` reply from either a
+native agent or an `npx` adapter, including cold starts. Session creation,
+authentication and model-probe timeouts are separate and unchanged.
+
 ### tmux-like CLI
 
 WTA exposes tmux-equivalent subcommands for controlling Windows Terminal from the shell. Useful for humans and AI agents that can shell out.

@@ -107,6 +107,123 @@ async fn auth_bridge_rejects_unadvertised_method_before_forwarding() {
         .await;
 }
 
+fn client_connection_to_pending_initialize_agent(
+    arrived: mpsc::UnboundedSender<acp::schema::v1::InitializeRequest>,
+    release: Arc<tokio::sync::Notify>,
+) -> conn::ClientLink {
+    let (client_pipe, agent_pipe) = tokio::io::duplex(4096);
+    let (client_read, client_write) = tokio::io::split(client_pipe);
+    let (agent_read, agent_write) = tokio::io::split(agent_pipe);
+    let agent_builder = acp::Agent
+        .builder()
+        .name("native-initialize-agent")
+        .on_receive_request(
+            move |request: acp::schema::v1::InitializeRequest,
+                  responder: acp::Responder<acp::schema::v1::InitializeResponse>,
+                  _cx| {
+                let arrived = arrived.clone();
+                let release = Arc::clone(&release);
+                async move {
+                    arrived.send(request).expect("initialize request receiver");
+                    release.notified().await;
+                    responder.respond(acp::schema::v1::InitializeResponse::new(
+                        acp::schema::ProtocolVersion::V1,
+                    ))
+                }
+            },
+            acp::on_receive_request!(),
+        );
+    let (_agent_connection, agent_io) = conn::spawn_agent(
+        agent_builder,
+        conn::byte_streams(agent_write.compat_write(), agent_read.compat()),
+    );
+    tokio::task::spawn_local(async move {
+        let _ = agent_io.await;
+    });
+    let (connection, client_io) = conn::spawn_client(
+        acp::Client.builder().name("native-initialize-client"),
+        conn::byte_streams(client_write.compat_write(), client_read.compat()),
+    );
+    tokio::task::spawn_local(async move {
+        let _ = client_io.await;
+    });
+    connection
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn native_initialize_remains_pending_after_fifteen_seconds_and_accepts_reply() {
+    LocalSet::new()
+        .run_until(async {
+            let (arrived, mut requests) = mpsc::unbounded_channel();
+            let release = Arc::new(tokio::sync::Notify::new());
+            let connection =
+                client_connection_to_pending_initialize_agent(arrived, Arc::clone(&release));
+            let initialize_connection = connection.clone();
+            let task =
+                tokio::task::spawn_local(
+                    async move { initialize_agent(&initialize_connection).await },
+                );
+            requests
+                .recv()
+                .await
+                .expect("actual initialize RPC arrived");
+
+            tokio::time::advance(std::time::Duration::from_secs(16)).await;
+            tokio::task::yield_now().await;
+            assert!(
+                !task.is_finished(),
+                "native initialize must survive the old 15-second boundary"
+            );
+            release.notify_one();
+            let response = task
+                .await
+                .expect("initialize task")
+                .expect("late reply before the deadline")
+                .expect("successful initialize response");
+            assert_eq!(response.protocol_version, acp::schema::ProtocolVersion::V1);
+            connection.shutdown();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn native_initialize_is_bounded_at_sixty_seconds() {
+    LocalSet::new()
+        .run_until(async {
+            let (arrived, mut requests) = mpsc::unbounded_channel();
+            let release = Arc::new(tokio::sync::Notify::new());
+            let connection =
+                client_connection_to_pending_initialize_agent(arrived, Arc::clone(&release));
+            let initialize_connection = connection.clone();
+            let task =
+                tokio::task::spawn_local(
+                    async move { initialize_agent(&initialize_connection).await },
+                );
+            requests
+                .recv()
+                .await
+                .expect("actual initialize RPC arrived");
+
+            tokio::time::advance(std::time::Duration::from_secs(59)).await;
+            tokio::task::yield_now().await;
+            assert!(
+                !task.is_finished(),
+                "initialize is still pending at 59 seconds"
+            );
+            tokio::time::advance(std::time::Duration::from_secs(1)).await;
+            tokio::task::yield_now().await;
+            let deadline = tokio::time::Instant::now();
+            assert!(task.await.expect("initialize task").is_err());
+            assert_eq!(
+                tokio::time::Instant::now(),
+                deadline,
+                "initialize must finish without advancing past the 60-second deadline"
+            );
+            connection.shutdown();
+        })
+        .await;
+}
+
 fn empty_agent_cell() -> AgentCell {
     Arc::new(OnceCell::new())
 }
