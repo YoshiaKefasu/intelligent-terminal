@@ -1064,7 +1064,8 @@ if (-not $Global:__ShellInteg_Installed) {
             $prefix = ''
             $suffix = ''
 
-            # ── Previous command finished (OSC 133;D with exit code) ──
+)"
+            R"(            # ── Previous command finished (OSC 133;D with exit code) ──
             $historyAdvanced = $entry -and $entry.Id -ne $Global:__ShellInteg_LastHistoryId
             $newErrorRecord = $Global:__ShellInteg_CanInspectErrors -and
                 $null -ne $errorRecord -and
