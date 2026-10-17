@@ -4,6 +4,7 @@ mod codex;
 mod copilot;
 mod gemini;
 mod opencode;
+mod pi;
 
 use super::{UsageCost, UsageDisplayKind};
 
@@ -109,13 +110,14 @@ pub trait ProviderUsageAdapter: Sync {
     ) -> Result<ProviderUsageContribution, ProviderUsageError>;
 }
 
-static PROVIDERS: [&dyn ProviderUsageAdapter; 6] = [
+static PROVIDERS: [&dyn ProviderUsageAdapter; 7] = [
     &copilot::ADAPTER,
     &claude::ADAPTER,
     &codex::ADAPTER,
     &gemini::ADAPTER,
     &opencode::ADAPTER,
     &antigravity::ADAPTER,
+    &pi::ADAPTER,
 ];
 
 pub fn all() -> &'static [&'static dyn ProviderUsageAdapter] {

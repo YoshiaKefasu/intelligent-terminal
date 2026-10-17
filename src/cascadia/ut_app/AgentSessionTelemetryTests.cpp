@@ -80,6 +80,7 @@ namespace TerminalAppUnitTests
         VERIFY_ARE_EQUAL(std::string{ "unknown" }, std::string{ parsed->source });
         VERIFY_ARE_EQUAL(std::string{ "unknown" }, std::string{ parsed->modelSource });
         VERIFY_ARE_EQUAL(std::string{ "unknown" }, std::string{ parsed->yoloControlOwner });
+        VERIFY_ARE_EQUAL(std::string{ "pi" }, std::string{ Telemetry::AgentId("pi") });
         VERIFY_ARE_EQUAL(std::wstring{ L"unknown" }, std::wstring{ Telemetry::Bucket<wchar_t>(L"private-value", { L"auto", L"prompt" }, L"unknown") });
     }
 

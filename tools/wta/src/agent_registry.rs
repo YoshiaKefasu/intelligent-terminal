@@ -13,6 +13,7 @@ pub const CODEX_AGENT_ID: &str = "codex";
 pub const GEMINI_AGENT_ID: &str = "gemini";
 pub const OPENCODE_AGENT_ID: &str = "opencode";
 pub const ANTIGRAVITY_AGENT_ID: &str = "antigravity";
+pub const PI_AGENT_ID: &str = "pi";
 
 /// How the agent CLI accepts a startup prompt in delegate mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +109,24 @@ pub struct AgentProfile {
 }
 
 impl AgentProfile {
+    /// Whether this profile can act as an ACP server. Delegate-only agents
+    /// declare [`AcpAuthFlow::None`] and have no ACP entry point, so callers
+    /// that list or spawn ACP agents must exclude them.
+    ///
+    /// Only meaningful for [`KNOWN_AGENTS`] profiles: custom / unknown ids
+    /// resolve to [`DEFAULT_PROFILE`], which is also delegate-only.
+    pub fn supports_acp(&self) -> bool {
+        self.acp_auth_flow != AcpAuthFlow::None
+    }
+
+    /// Whether this profile can be launched by at least one managed flow: an
+    /// ACP agent pane or an interactive delegate. Availability probes publish
+    /// exactly these profiles, while capability filtering stays with each
+    /// consumer's own ACP / delegate registry list.
+    pub fn supports_managed_launch(&self) -> bool {
+        self.supports_acp() || self.delegate_supported
+    }
+
     pub fn acp_command_override(&self, source: &crate::agent_source::AgentSource) -> &'static str {
         if matches!(source, crate::agent_source::AgentSource::Wsl { .. })
             && !self.wsl_acp_launch_command.is_empty()
@@ -290,6 +309,34 @@ pub const KNOWN_AGENTS: &[AgentProfile] = &[
         cli_can_resume_acp_sessions: false,
         new_session_id_flag: None,
     },
+    AgentProfile {
+        id: PI_AGENT_ID,
+        display_name: "Pi",
+        cli_executable: "pi",
+        exe_search_order: &[".cmd", ".exe"],
+        acp_flags: &[],
+        acp_launch_command: "",
+        wsl_acp_launch_command: "",
+        acp_companion_executable: None,
+        wsl_acp_companion_executable: None,
+        // Pi does not speak ACP yet: no ACP server mode, no ACP model flags.
+        acp_model_flags: &[],
+        acp_auth_flow: AcpAuthFlow::None,
+        byok_mode: ByokMode::Unsupported,
+        delegate_prompt_flag: PromptFlag::Positional,
+        delegate_supported: true,
+        // Pi CLI supports only the long `--model` flag; `-m` is not accepted.
+        model_flags: &["--model"],
+        install_hint: "bun install -g @earendil-works/pi-coding-agent (or npm)",
+        install_url: "https://github.com/earendil-works/pi",
+        auth_check_command: "",
+        auth_hint: "Run 'pi' to configure credentials or providers.",
+        resume_flag: "--session",
+        // No ACP session can exist for a delegate-only agent, so nothing is
+        // resumable through the CLI on the ACP side.
+        cli_can_resume_acp_sessions: false,
+        new_session_id_flag: Some("--session-id"),
+    },
 ];
 
 pub const DEFAULT_PROFILE: AgentProfile = AgentProfile {
@@ -392,7 +439,7 @@ fn adapter_profile_from_tokens(tokens: &[String]) -> Option<&'static AgentProfil
 
 /// Returns `true` iff `id` is a real, selectable agent id present in
 /// [`KNOWN_AGENTS`] (`"copilot"`, `"claude"`, `"codex"`, `"gemini"`,
-/// `"opencode"`, `"antigravity"`).
+/// `"opencode"`, `"antigravity"`, `"pi"`).
 ///
 /// Prefer this over `lookup_profile_by_id(id).id != DEFAULT_PROFILE.id` when
 /// distinguishing a known agent from the unknown/custom fallback: this checks
@@ -413,7 +460,8 @@ pub fn supports_live_model_switch(id: &str) -> bool {
 
 /// Resolve a full agent command line (e.g. the value of `--agent`) into the
 /// canonical agent id known to [`KNOWN_AGENTS`] — `"copilot"`, `"claude"`,
-/// `"codex"`, `"gemini"`, `"opencode"`, `"antigravity"` — or `"unknown"` if nothing matches.
+/// `"codex"`, `"gemini"`, `"opencode"`, `"antigravity"`, `"pi"` — or
+/// `"unknown"` if nothing matches.
 ///
 /// This is the right thing to use whenever we need to *identify* the agent
 /// from a launch command rather than execute it. It handles three input
@@ -685,7 +733,7 @@ mod tests {
             lookup_profile_by_id("opencode").byok_mode,
             ByokMode::OpenCodeConfigContent
         );
-        for agent in ["claude", "codex", "gemini", "unknown"] {
+        for agent in ["claude", "codex", "gemini", "pi", "unknown"] {
             assert_eq!(
                 lookup_profile_by_id(agent).byok_mode,
                 ByokMode::Unsupported,
@@ -953,7 +1001,7 @@ mod tests {
 
     #[test]
     fn pinnable_agents_advertise_session_id_flag() {
-        let pinnable = ["copilot", "claude", "gemini"];
+        let pinnable = ["copilot", "claude", "gemini", "pi"];
         for id in pinnable {
             let p = lookup_profile(id);
             assert_eq!(
@@ -967,5 +1015,71 @@ mod tests {
             None,
             "codex cannot pin"
         );
+    }
+
+    #[test]
+    fn only_delegate_only_profiles_declare_no_acp_support() {
+        // Every shipped agent except Pi provides an ACP entry point. Pi is the
+        // first delegate-only built-in, so it must stay excluded from the ACP
+        // agent lists (picker, history discovery, probes).
+        for profile in KNOWN_AGENTS {
+            assert_eq!(
+                profile.supports_acp(),
+                profile.id != PI_AGENT_ID,
+                "{} ACP capability drifted",
+                profile.id
+            );
+        }
+    }
+
+    #[test]
+    fn every_known_agent_is_reachable_by_at_least_one_managed_flow() {
+        // A profile that is neither ACP-capable nor delegate-capable would be
+        // invisible to every consumer of the availability probes, silently
+        // dropping it from both the agent pane and the Command Palette.
+        for profile in KNOWN_AGENTS {
+            assert!(
+                profile.supports_managed_launch(),
+                "{} would be invisible to every probe consumer",
+                profile.id
+            );
+        }
+        assert!(lookup_profile_by_id("pi").supports_managed_launch());
+    }
+
+    #[test]
+    fn pi_profile_matches_confirmed_spec() {
+        let profile = lookup_profile_by_id("pi");
+        assert_eq!(profile.id, "pi");
+        assert_eq!(profile.display_name, "Pi");
+        assert_eq!(profile.cli_executable, "pi");
+        assert_eq!(profile.exe_search_order, &[".cmd", ".exe"]);
+        assert!(profile.acp_flags.is_empty());
+        // ACP is not implemented yet: no ACP model flags, no ACP auth flow.
+        assert!(profile.acp_model_flags.is_empty());
+        assert_eq!(profile.acp_auth_flow, AcpAuthFlow::None);
+        assert_eq!(profile.byok_mode, ByokMode::Unsupported);
+        assert_eq!(profile.delegate_prompt_flag, PromptFlag::Positional);
+        assert!(profile.delegate_supported);
+        // `-m` is unsupported; only the long flag is advertised.
+        assert_eq!(profile.model_flags, &["--model"]);
+        assert_eq!(profile.resume_flag, "--session");
+        assert!(!profile.cli_can_resume_acp_sessions);
+        assert_eq!(profile.new_session_id_flag, Some("--session-id"));
+        assert!(
+            !profile.supports_acp(),
+            "Pi is delegate-only: ACP callers must not list or spawn it"
+        );
+        assert!(lookup_profile_by_id("copilot").supports_acp());
+
+        assert_eq!(lookup_profile("pi").id, "pi");
+        assert_eq!(lookup_profile(r"C:\Tools\pi.cmd").id, "pi");
+        assert_eq!(lookup_profile("PI.EXE").id, "pi");
+        assert_eq!(resolve_agent_id_from_cmd("pi --model mimo"), "pi");
+        // A delegate-only agent has no ACP launch, so the ACP command builder
+        // returns the bare CLI and drops the model argument.
+        assert_eq!(build_acp_command("pi", None), "pi");
+        assert_eq!(build_acp_command("pi", Some("mimo")), "pi");
+        assert!(supported_delegate_agents().iter().any(|a| a.id == "pi"));
     }
 }

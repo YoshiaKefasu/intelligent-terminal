@@ -1684,6 +1684,7 @@ pub(crate) fn known_cli_id(src: &crate::agent_sessions::CliSource) -> Option<&'s
         CliSource::Gemini => Some("gemini"),
         CliSource::OpenCode => Some("opencode"),
         CliSource::Antigravity => Some("antigravity"),
+        CliSource::Pi => Some("pi"),
         CliSource::Unknown(_) => None,
     }
 }
@@ -2588,8 +2589,11 @@ impl App {
         self.available_agents = crate::agent_registry::KNOWN_AGENTS
             .iter()
             .filter(|profile| {
-                (!self.host_agent_allowlist_present
-                    || self.allowed_agent_ids.iter().any(|id| id == profile.id))
+                // Delegate-only agents have no ACP server: offering one here
+                // would spawn a CLI that cannot answer `initialize`.
+                profile.supports_acp()
+                    && (!self.host_agent_allowlist_present
+                        || self.allowed_agent_ids.iter().any(|id| id == profile.id))
                     && (crate::agent_check::find_acp_exe(profile.id).is_some()
                         || (profile.id == crate::agent_registry::ANTIGRAVITY_AGENT_ID
                             && crate::agent_check::check_host_agent_availability(
@@ -2634,6 +2638,7 @@ impl App {
             use futures::StreamExt;
             let candidates = crate::agent_registry::KNOWN_AGENTS
                 .iter()
+                .filter(|profile| profile.supports_acp())
                 .filter(|profile| {
                     !allowlist_present || allowed_agent_ids.iter().any(|id| id == profile.id)
                 })

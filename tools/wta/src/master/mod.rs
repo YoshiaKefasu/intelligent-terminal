@@ -645,11 +645,15 @@ struct MasterStateInner {
     /// which the C++ side still passes as the global default. This command
     /// is **trusted** (it came from the master's own argv, not the pipe),
     /// so a rejected/unknown helper request safely falls back to it.
+    /// Sanitized by [`sanitized_default_agent_selection`]: a host default that
+    /// names a delegate-only built-in is replaced with
+    /// [`agent_registry::DEFAULT_ACP_COMMAND`] before it lands here.
     pub(crate) default_agent_cmd: String,
     pub(crate) default_agent_id: Option<String>,
     /// Allowlist of agent ids a helper may select over the pipe, from the
     /// host's GPO-filtered set (`--allowed-agent-ids`). `None` = the flag was
-    /// absent (manual runs / older hosts): any *known* agent id is accepted.
+    /// absent (manual runs / older hosts): any *known*, ACP-capable agent id
+    /// is accepted.
     /// `Some(set)` = the flag was supplied, honored fail-closed: only ids in
     /// `set` are honored; any other id (and *every* id when `set` is empty)
     /// falls back to the trusted default. Either way the master reconstructs
@@ -5053,17 +5057,33 @@ async fn run_master_loop(config: MasterConfig, pipe_name: String) -> Result<()> 
     // Installed native host agents are warmed after the pipe is ready.
     // Other selections are spawned by `get_or_spawn_agent` on helper demand.
     // `config.agent` / `config.agent_id` remain the fallback for helpers
-    // that don't declare an agent.
+    // that don't declare an agent, sanitized by
+    // `sanitized_default_agent_selection` so a delegate-only built-in can
+    // never become the default ACP spawn.
     // Host-supplied allowlist (GPO-filtered) of agent ids a helper may
     // select. An *absent* flag means "no allowlist; accept any known id"
     // (`None`); a *present* flag is honored fail-closed even when it filters
     // down to nothing (`Some(empty_set)` ⇒ block all) — see
     // `normalize_allowed_agent_ids` for the absent-vs-present-empty split.
     let allowed_agent_ids = normalize_allowed_agent_ids(&config.allowed_agent_ids);
+    // A host default that cannot serve as an ACP server (delegate-only Pi) is
+    // replaced before it can become every helper's fallback spawn.
+    let (default_agent_cmd, default_agent_id) =
+        sanitized_default_agent_selection(&config.agent, config.agent_id.as_deref());
+    if default_agent_cmd != config.agent || default_agent_id != config.agent_id {
+        tracing::warn!(
+            target: "master",
+            requested_agent_cmd = %config.agent,
+            requested_agent_id = ?config.agent_id,
+            resolved_agent_cmd = %default_agent_cmd,
+            resolved_agent_id = ?default_agent_id,
+            "host default agent cannot serve ACP; using the built-in ACP default"
+        );
+    }
     tracing::info!(
         target: "master",
         allowed_agent_ids = ?allowed_agent_ids,
-        default_agent_id = ?config.agent_id,
+        default_agent_id = ?default_agent_id,
         "agent allowlist resolved"
     );
 
@@ -5099,8 +5119,8 @@ async fn run_master_loop(config: MasterConfig, pipe_name: String) -> Result<()> 
         history_status_gate: Mutex::new(()),
         helper_roles: Mutex::new(HashMap::new()),
         custom_model_generations: Mutex::new(HashMap::new()),
-        default_agent_cmd: config.agent.clone(),
-        default_agent_id: config.agent_id.clone(),
+        default_agent_cmd,
+        default_agent_id,
         allowed_agent_ids,
         helper_meta: Mutex::new(HashMap::new()),
         tab_ownership_gate: Mutex::new(()),
@@ -5304,7 +5324,7 @@ async fn run_master_loop(config: MasterConfig, pipe_name: String) -> Result<()> 
 ///
 /// * **Flag absent** (clap produced an empty argv) ⇒ `None`: "no host
 ///   policy" — manual runs / older hosts. [`resolve_agent_selection`]
-///   then accepts any *known* agent id.
+///   then accepts any *known*, ACP-capable agent id.
 /// * **Flag present** (any argv, even `--allowed-agent-ids ""`) ⇒
 ///   `Some(set)`: the host expressed a policy, so honor it **fail-closed**.
 ///   Each entry is trimmed + lowercased; blanks and unknown/custom ids are
@@ -5343,6 +5363,41 @@ fn normalize_allowed_agent_ids(raw: &[String]) -> Option<std::collections::HashS
     // policy is honored fail-closed (block all) rather than collapsing back to
     // the no-policy `None`.
     Some(set)
+}
+
+/// Sanitize the master's own `--agent` / `--agent-id` defaults before they
+/// become the fallback that every helper without its own selection inherits.
+///
+/// Those argv values are trusted, but a delegate-only built-in (Pi) can never
+/// answer `initialize`: adopting one would bake a non-ACP CLI into the default
+/// ACP spawn. Both halves of the pair are checked so a poisoned id cannot leave
+/// a bare `pi` command behind, and vice versa. A rejected default becomes
+/// [`agent_registry::DEFAULT_ACP_COMMAND`] together with the id that command
+/// belongs to. Unknown / custom ids keep the host's command verbatim — the
+/// master cannot judge those, and custom agents are legitimately outside
+/// [`agent_registry::KNOWN_AGENTS`].
+fn sanitized_default_agent_selection(
+    default_cmd: &str,
+    default_id: Option<&str>,
+) -> (String, Option<String>) {
+    let is_non_acp_builtin = |id: &str| {
+        crate::agent_registry::is_known_id(id)
+            && !crate::agent_registry::lookup_profile_by_id(id).supports_acp()
+    };
+    let id_is_non_acp = default_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .is_some_and(|id| is_non_acp_builtin(&id.to_ascii_lowercase()));
+    let cmd_is_non_acp =
+        is_non_acp_builtin(crate::agent_registry::resolve_agent_id_from_cmd(default_cmd));
+    if !id_is_non_acp && !cmd_is_non_acp {
+        return (default_cmd.to_string(), default_id.map(str::to_string));
+    }
+    let cmd = crate::agent_registry::DEFAULT_ACP_COMMAND;
+    (
+        cmd.to_string(),
+        Some(crate::agent_registry::resolve_agent_id_from_cmd(cmd).to_string()),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -5386,8 +5441,9 @@ fn helper_initialize_error(
 ///
 /// Fallback to the default happens when the helper declared no id, an
 /// *unknown* id (not in [`agent_registry::KNOWN_AGENTS`] — e.g. a
-/// `custom:` agent, which the global default already covers), or an id
-/// the host's GPO allowlist excludes.
+/// `custom:` agent, which the global default already covers), a *known* but
+/// delegate-only id (Pi has no ACP server), or an id the host's GPO allowlist
+/// excludes.
 /// Malformed explicit WSL source metadata is rejected before any fallback.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExplicitAgentSelection {
@@ -5435,11 +5491,15 @@ fn resolve_agent_selection(
         // "unknown" (and drop model folding) the day the default profile's
         // id becomes a real, selectable agent id.
         let known = crate::agent_registry::is_known_id(id);
+        // A known id is not enough: delegate-only agents (Pi) have no ACP
+        // server, so accepting one here would spawn a CLI that can never
+        // answer `initialize`. Such ids fall back like unknown ones.
+        let acp_capable = crate::agent_registry::lookup_profile_by_id(id).supports_acp();
         // `None` allowlist = no host policy supplied (manual run / older
         // host) → trust any known id. `Some(set)` = honor only listed ids.
         let allowed = allowed_ids.map_or(true, |set| set.contains(id));
 
-        if known && allowed {
+        if known && acp_capable && allowed {
             let model = requested_model.map(str::trim).filter(|s| !s.is_empty());
             let launch_model =
                 model.filter(|_| !crate::agent_registry::supports_live_model_switch(id));
@@ -5459,8 +5519,9 @@ fn resolve_agent_selection(
             helper_id = ?helper_id,
             requested_agent_id = %id,
             known,
+            acp_capable,
             allowed,
-            "helper requested an unknown or GPO-blocked agent id; \
+            "helper requested an unknown, non-ACP or GPO-blocked agent id; \
              falling back to the trusted default agent"
         );
     }
@@ -7725,6 +7786,8 @@ fn host_history_agent_ids(
         .iter()
         // Gemini remains available for chat, but must not start solely for sidebar history.
         .filter(|profile| profile.id != crate::agent_registry::GEMINI_AGENT_ID)
+        // Delegate-only agents have no ACP server to answer a history query.
+        .filter(|profile| profile.supports_acp())
         .filter(|profile| allowed_ids.is_none_or(|ids| ids.contains(profile.id)))
         .filter(|profile| is_available(profile.id))
         .map(|profile| profile.id)

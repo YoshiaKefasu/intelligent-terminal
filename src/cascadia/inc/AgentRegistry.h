@@ -45,6 +45,8 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
         ByokMode byokMode;
         bool supportsSessionHooks{ true };
         std::wstring_view cliExecutable{ id };
+        // False for agents that ship without a packaged AgentIcons/<id>.svg.
+        bool hasIconAsset{ true };
     };
 
     // ACP-capable agents. Either the CLI itself speaks the Agent Client
@@ -64,24 +66,28 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
     // Delegate agents. Invoked for `?<prompt>` background delegation and
     // similar flows. The set is broader than ACP because delegation doesn't
     // require an ACP-speaking agent — any CLI agent that accepts a prompt
-    // as input works.
-    inline constexpr std::array<BuiltinAgent, 6> BuiltinDelegateAgents{ {
+    // as input works. Pi participates here and in native profiles; its CLI
+    // does not speak ACP yet, so it stays out of the agent-pane list.
+    inline constexpr std::array<BuiltinAgent, 7> BuiltinDelegateAgents{ {
         { L"copilot", L"GitHub Copilot", ByokMode::CopilotProviderEnvironment },
         { L"claude", L"Claude", ByokMode::Unsupported },
         { L"codex", L"Codex", ByokMode::Unsupported },
         { L"gemini", L"Gemini", ByokMode::Unsupported },
         { L"opencode", L"OpenCode", ByokMode::OpenCodeConfigContent },
         { L"antigravity", L"Google Antigravity", ByokMode::Unsupported, true, L"agy" },
+        // No session hooks yet; AgentIcons/pi.svg is packaged.
+        { L"pi", L"Pi", ByokMode::Unsupported, false },
     } };
 
     // Managed native profiles have a narrower command/schema contract than ACP and delegation.
-    inline constexpr std::array<BuiltinAgent, 6> BuiltinNativeProfileAgents{ {
+    inline constexpr std::array<BuiltinAgent, 7> BuiltinNativeProfileAgents{ {
         { L"copilot", L"GitHub Copilot", ByokMode::CopilotProviderEnvironment },
         { L"claude", L"Claude", ByokMode::Unsupported },
         { L"codex", L"Codex", ByokMode::Unsupported },
         { L"gemini", L"Gemini", ByokMode::Unsupported },
         { L"opencode", L"OpenCode", ByokMode::OpenCodeConfigContent },
         { L"antigravity", L"Google Antigravity", ByokMode::Unsupported, true, L"agy" },
+        { L"pi", L"Pi", ByokMode::Unsupported, false },
     } };
 
     inline constexpr ByokMode GetByokMode(const std::wstring_view agentId) noexcept
@@ -138,6 +144,44 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
         return agentId;
     }
 
+    // Whether the packaged AgentIcons/<id>.svg asset exists for this agent.
+    // Every built-in id appears in BuiltinAcpAgents or
+    // BuiltinNativeProfileAgents, so the first match answers for the agent.
+    inline constexpr bool HasIconAsset(const std::wstring_view agentId) noexcept
+    {
+        for (const auto& agent : BuiltinAcpAgents)
+        {
+            if (AgentIdEquals(agent.id, agentId))
+            {
+                return agent.hasIconAsset;
+            }
+        }
+        for (const auto& agent : BuiltinNativeProfileAgents)
+        {
+            if (AgentIdEquals(agent.id, agentId))
+            {
+                return agent.hasIconAsset;
+            }
+        }
+        return false;
+    }
+
+    // Whether the id is a built-in agent that can be hosted in an agent pane.
+    // Delegate-only builtins (Pi) do not speak ACP; EffectiveAcpAgent uses this
+    // to reject a hand-edited `acpAgent` value instead of launching the raw CLI
+    // as an ACP server.
+    inline constexpr bool SupportsAcp(const std::wstring_view agentId) noexcept
+    {
+        for (const auto& agent : BuiltinAcpAgents)
+        {
+            if (AgentIdEquals(agent.id, agentId))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     inline constexpr bool SupportsDelegate(const std::wstring_view agentId) noexcept
     {
         for (const auto& agent : BuiltinDelegateAgents)
@@ -177,6 +221,19 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
             providerId.find_first_of(L"\r\n\t") == std::wstring_view::npos)
         {
             return providerId;
+        }
+        return {};
+    }
+
+    // The asset id a provider resolves to: the canonical builtin id when its
+    // AgentIcons/<id>.svg + Masks/<id>.png pair is packaged, empty otherwise
+    // (custom/unknown ids and iconless builtins share the generic fallback).
+    inline constexpr std::wstring_view IconAssetId(const std::wstring_view providerId) noexcept
+    {
+        const auto canonical = CanonicalNativeAgentProviderId(providerId);
+        if (!canonical.empty() && HasIconAsset(canonical))
+        {
+            return canonical;
         }
         return {};
     }

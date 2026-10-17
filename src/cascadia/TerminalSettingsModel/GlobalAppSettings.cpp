@@ -16,6 +16,7 @@
 
 namespace AgentPolicy = ::Microsoft::Terminal::Settings::Model::AgentPolicy;
 namespace AgentYoloPolicy = ::Microsoft::Terminal::Settings::Model::AgentYoloPolicy;
+namespace AgentRegistry = ::Microsoft::Terminal::Settings::Model::AgentRegistry;
 using namespace winrt::Microsoft::Terminal::Settings::Model::implementation;
 using namespace winrt::Windows::UI::Xaml;
 using namespace ::Microsoft::Console;
@@ -606,6 +607,15 @@ winrt::hstring GlobalAppSettings::EffectiveAcpAgent() const
 
     // Built-in agents: check AllowedAgents allowlist.
     if (!AgentPolicy::IsAgentAllowed(std::wstring_view{ agent }))
+    {
+        return winrt::hstring{};
+    }
+    // A known id that is not ACP-capable (a hand-edited delegate-only
+    // selection such as pi) must not be launched as an ACP server; treat it
+    // as unset so consumers fall back to detection instead of starting the
+    // raw CLI without an ACP handshake.
+    if (AgentRegistry::SupportsDelegate(std::wstring_view{ agent }) &&
+        !AgentRegistry::SupportsAcp(std::wstring_view{ agent }))
     {
         return winrt::hstring{};
     }

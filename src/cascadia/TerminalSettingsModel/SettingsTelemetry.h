@@ -103,6 +103,10 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
             {
                 return "antigravity";
             }
+            if (value == L"pi")
+            {
+                return "pi";
+            }
             return value.starts_with(L"custom:") ? "custom" : "unknown";
         }
 

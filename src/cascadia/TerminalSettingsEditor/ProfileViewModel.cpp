@@ -9,6 +9,7 @@
 #include "IconPicker.h"
 
 #include "../WinRTUtils/inc/Utils.h"
+#include "../inc/AgentAvailability.h"
 #include "../inc/AgentPaneBackend.h"
 #include "../inc/AgentRegistry.h"
 #include "../inc/AgentProfileUtils.h"
@@ -408,14 +409,18 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
             _availableWslDistro,
             _availableWslAgents,
             Registry::FilteredAcpAgents());
+        // Delegate agents are judged by their own CLI, not by the host probe's
+        // ACP readiness, so the per-profile list matches the global AI Agents
+        // page instead of dropping delegate-only agents such as Pi.
+        const auto allowedDelegateAgents = Registry::FilteredDelegateAgents();
         _RebuildAgentBackendList(
             _commandPaletteAgentList,
             std::wstring_view{ globals.EffectiveDelegateAgent() },
             std::wstring_view{ CommandPaletteAgent() },
-            _availableHostAgents,
+            ::Microsoft::Terminal::AgentAvailability::DelegateHostAvailability(_availableHostAgents, allowedDelegateAgents),
             _availableWslDistro,
             _availableWslAgents,
-            Registry::FilteredDelegateAgents());
+            allowedDelegateAgents);
         _NotifyChanges(
             L"AgentPaneBackendList",
             L"CurrentAgentPaneBackend",

@@ -34,6 +34,10 @@ pub(crate) struct Cli {
     /// bare names but is fragile for adapter-style launches (`npx … claude-
     /// code-acp`) and full-path launches, so the host should always pass
     /// `--agent-id` explicitly.
+    ///
+    /// This id names the ACP default, so a delegate-only built-in (`pi`) is
+    /// not a valid value: the master replaces it — and a bare `--agent pi`
+    /// command line — with the built-in ACP default before the first spawn.
     #[arg(long)]
     pub(crate) agent_id: Option<String>,
 
@@ -56,9 +60,10 @@ pub(crate) struct Cli {
     /// reconstructs a helper's requested agent command from its declared
     /// `agent_id` ONLY when that id is in this set — never executing a
     /// command string sent over the pipe. An id outside the set (or a
-    /// custom/unknown id) falls back to `--agent` / `--agent-id`. An *absent*
-    /// flag means "no host allowlist" (manual runs, older hosts): the master
-    /// accepts any *known* agent id. A *present* flag is honored fail-closed —
+    /// custom/unknown/delegate-only id) falls back to `--agent` / `--agent-id`.
+    /// An *absent* flag means "no host allowlist" (manual runs, older hosts):
+    /// the master accepts any *known*, ACP-capable agent id. A *present* flag
+    /// is honored fail-closed —
     /// even when it filters down to nothing, every helper-selected id is then
     /// blocked (all panes fall back to the default) rather than widening back
     /// to accept-any. Helpers use the same list only to filter `/agent`;

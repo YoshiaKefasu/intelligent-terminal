@@ -9,12 +9,13 @@ namespace Microsoft::Terminal::UI::AgentIcons
 {
     inline winrt::hstring IconPathForProvider(const std::wstring_view providerId)
     {
-        for (const auto& agent : ::Microsoft::Terminal::Settings::Model::AgentRegistry::BuiltinAcpAgents)
+        // IconAssetId resolves through the built-in registries so
+        // delegate-only natives (Pi) map to their own artwork; unknown and
+        // custom ids share the generic fallback.
+        const auto assetId = ::Microsoft::Terminal::Settings::Model::AgentRegistry::IconAssetId(providerId);
+        if (!assetId.empty())
         {
-            if (::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(agent.id, providerId))
-            {
-                return winrt::hstring{ L"ms-appx:///AgentIcons/" } + winrt::hstring{ agent.id } + L".svg";
-            }
+            return winrt::hstring{ L"ms-appx:///AgentIcons/" } + winrt::hstring{ assetId } + L".svg";
         }
         return L"ms-appx:///AgentIcons/generic.svg";
     }
@@ -29,8 +30,10 @@ namespace Microsoft::Terminal::UI::AgentIcons
             return {};
         }
         const auto id = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
-        if (id != L"generic" && std::ranges::none_of(::Microsoft::Terminal::Settings::Model::AgentRegistry::BuiltinAcpAgents,
-                                                    [&](const auto& agent) { return agent.id == id; }))
+        // Masks are packaged per icon asset (every builtin with hasIconAsset,
+        // plus generic); anything else falls through to the plain SVG path.
+        if (id != L"generic" &&
+            ::Microsoft::Terminal::Settings::Model::AgentRegistry::IconAssetId(id).empty())
         {
             return {};
         }

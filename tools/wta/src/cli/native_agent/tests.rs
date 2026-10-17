@@ -8,7 +8,7 @@ fn strings(values: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn native_profile_providers_are_exactly_the_six_managed_clis() {
+fn native_profile_providers_are_exactly_the_managed_clis() {
     assert_eq!(
         native_profiles()
             .map(|profile| profile.id)
@@ -19,7 +19,8 @@ fn native_profile_providers_are_exactly_the_six_managed_clis() {
             "codex",
             "gemini",
             "opencode",
-            "antigravity"
+            "antigravity",
+            "pi"
         ]
     );
     assert!(KNOWN_AGENTS

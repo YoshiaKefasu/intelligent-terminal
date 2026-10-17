@@ -33,6 +33,30 @@ namespace Microsoft::Terminal::AgentAvailability
         return SearchPathW(nullptr, shim.c_str(), nullptr, MAX_PATH, path, nullptr) > 0;
     }
 
+    // Host availability for delegate agents.
+    //
+    // The host probe reports managed-launch readiness, which for adapter-backed
+    // agents includes their ACP adapter. Delegation never needs that adapter, so
+    // a delegate agent is available as soon as its own CLI resolves on PATH —
+    // the same judgment the global AI Agents page makes for its delegate list.
+    // Union the two so a delegate-only agent such as Pi (no ACP support) is not
+    // dropped from the per-profile Command Palette list merely because the
+    // probe describes ACP readiness.
+    inline std::unordered_set<std::wstring> DelegateHostAvailability(
+        const std::unordered_set<std::wstring>& probedHostAgents,
+        const std::vector<::Microsoft::Terminal::Settings::Model::AgentRegistry::BuiltinAgent>& delegateAgents)
+    {
+        auto available = probedHostAgents;
+        for (const auto& agent : delegateAgents)
+        {
+            if (IsAgentCliInstalled(agent.id))
+            {
+                available.insert(std::wstring{ agent.id });
+            }
+        }
+        return available;
+    }
+
     struct HostAgentAvailability
     {
         bool nativeCliFound{ false };

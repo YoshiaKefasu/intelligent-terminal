@@ -629,6 +629,7 @@ fn cli_suffix_for(s: &AgentSession, selected: bool) -> String {
         CliSource::Gemini => Some("gemini"),
         CliSource::OpenCode => Some("opencode"),
         CliSource::Antigravity => Some("antigravity"),
+        CliSource::Pi => Some("pi"),
         CliSource::Unknown(_) => None,
     };
     let distro = match &s.location {

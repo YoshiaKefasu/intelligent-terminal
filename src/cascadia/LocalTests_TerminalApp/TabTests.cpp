@@ -1126,6 +1126,8 @@ namespace TerminalAppLocalTests
         VERIFY_ARE_EQUAL(std::wstring{ L"agent-session-2" }, Restore::ParseResumeCommandline(L"copilot --resume=agent-session-2").sessionId);
         VERIFY_ARE_EQUAL(std::wstring{ L"antigravity" }, Restore::ParseResumeCommandline(L"agy --conversation=agent-session-2").agent);
         VERIFY_ARE_EQUAL(std::wstring{ L"agent-session-2" }, Restore::ParseResumeCommandline(L"  agy --conversation agent-session-2  ").sessionId);
+        VERIFY_ARE_EQUAL(std::wstring{ L"pi" }, Restore::ParseResumeCommandline(L"pi --session=agent-session-2").agent);
+        VERIFY_ARE_EQUAL(std::wstring{ L"agent-session-2" }, Restore::ParseResumeCommandline(L"pi --session agent-session-2").sessionId);
         VERIFY_IS_TRUE(Restore::ParseResumeCommandline(L"agy --conversation=agent-session-2; echo marker").agent.empty());
         VERIFY_IS_TRUE(Restore::ParseResumeCommandline(L"copilot --resume agent-session-2; calc.exe").agent.empty());
         VERIFY_IS_TRUE(Restore::ParseResumeCommandline(L"copilot --resume bad id").agent.empty());
@@ -1151,11 +1153,14 @@ namespace TerminalAppLocalTests
 
         // Every built-in agent whose `resume_flag` is non-empty in
         // `tools/wta/src/agent_registry.rs` has to be spellable here, or a
-        // shell pane running it comes back as a bare prompt. OpenCode is the
-        // one that does not use `--resume`.
+        // shell pane running it comes back as a bare prompt. OpenCode and Pi
+        // are the ones that do not use `--resume`.
         VERIFY_ARE_EQUAL(
             std::wstring{ LR"(cmd.exe /d /s /c "opencode --session agent-session-1")" },
             Restore::BuildResumeCommandline(L"opencode", L"agent-session-1"));
+        VERIFY_ARE_EQUAL(
+            std::wstring{ LR"(cmd.exe /d /s /c "pi --session agent-session-1")" },
+            Restore::BuildResumeCommandline(L"pi", L"agent-session-1"));
         VERIFY_ARE_EQUAL(
             std::wstring{ LR"(cmd.exe /d /s /c "agy --conversation agent-session-1")" },
             Restore::BuildResumeCommandline(L"antigravity", L"agent-session-1"));
@@ -1173,7 +1178,7 @@ namespace TerminalAppLocalTests
         {
             VERIFY_IS_TRUE(Restore::BuildResumeCommandline(backend, L"safe-session", L"/tmp").empty());
         }
-        for (const auto agent : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity" })
+        for (const auto agent : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity", L"pi" })
         {
             const auto built = Restore::BuildResumeCommandline(agent, L"agent-session-1");
             VERIFY_IS_FALSE(built.empty());
@@ -9155,7 +9160,7 @@ namespace TerminalAppLocalTests
         TestOnUIThread([&]() {
             winrt::TerminalApp::TabStrip strip;
             const auto stripImpl = winrt::get_self<winrt::TerminalApp::implementation::TabStrip>(strip);
-            for (const auto provider : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity", L"custom:agent", L"" })
+            for (const auto provider : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity", L"pi", L"custom:agent", L"" })
             {
                 auto item = winrt::make<winrt::TerminalApp::implementation::TabStripHistoryItem>();
                 item.AgentId(provider);
@@ -17371,7 +17376,7 @@ namespace TerminalAppLocalTests
     void TabTests::HorizontalNativeIconSelectionAppliesTemplateAgainWithReusableMasks()
     {
         using namespace winrt::Windows::Graphics::Imaging;
-        for (const auto provider : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"generic" })
+        for (const auto provider : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"pi", L"generic" })
         {
             const auto uri = winrt::Windows::Foundation::Uri{ winrt::hstring{ L"ms-appx:///AgentIcons/Masks/" } + provider + L".png" };
             const auto file = winrt::Windows::Storage::StorageFile::GetFileFromApplicationUriAsync(uri).get();

@@ -607,6 +607,8 @@ $cases = @(
     @{ Line = 'codex resume "resume-test" --yolo'; Agent = 'codex' }
     @{ Line = 'opencode --session=resume-test'; Agent = 'opencode' }
     @{ Line = 'opencode --session resume-test --prompt "--session=other"'; Agent = 'opencode' }
+    @{ Line = 'pi --session=resume-test'; Agent = 'pi' }
+    @{ Line = 'pi --session resume-test --prompt "--session=other"'; Agent = 'pi' }
     @{ Line = 'agy --conversation resume-test'; Agent = 'antigravity' }
     @{ Line = 'agy --prompt-interactive "--conversation=other" --conversation resume-test'; Agent = 'antigravity' }
     @{ Line = 'agy --conversation=resume-test'; Agent = 'antigravity' }
@@ -622,6 +624,7 @@ $cases = @(
     @{ Line = 'gemini "--resume" "resume-test"'; Agent = '' }
     @{ Line = 'codex "resume" resume-test'; Agent = '' }
     @{ Line = 'opencode "--session=resume-test"'; Agent = '' }
+    @{ Line = 'pi "--session=resume-test"'; Agent = '' }
     @{ Line = 'agy "--conversation=resume-test"'; Agent = '' }
     @{ Line = 'agy "--conversation" "resume-test"'; Agent = '' }
     @{ Line = 'copilot --interactive "--resume=resume-test"'; Agent = '' }

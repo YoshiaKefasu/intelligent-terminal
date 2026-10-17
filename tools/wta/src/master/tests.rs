@@ -864,8 +864,8 @@ fn resolve(
 
 #[test]
 fn known_id_with_no_allowlist_is_reconstructed_not_taken_from_pipe() {
-    // No host allowlist (manual run / older host) ⇒ any known id is
-    // honored, and the command is REBUILT from the id.
+    // No host allowlist (manual run / older host) ⇒ any known ACP-capable
+    // id is honored, and the command is REBUILT from the id.
     let (cmd, id) = resolve(None, Some("gemini"), None);
     assert_eq!(cmd, "gemini --acp");
     assert_eq!(id.as_deref(), Some("gemini"));
@@ -1694,15 +1694,18 @@ fn empty_or_missing_id_falls_back_to_default() {
 }
 
 #[test]
-fn every_known_agent_id_is_honored_not_conflated_with_default_fallback() {
+fn every_acp_capable_agent_id_is_honored_not_conflated_with_default_fallback() {
     // Regression guard for the conflation flagged in review: the `known`
     // check must test KNOWN_AGENTS membership directly, NOT
     // `lookup_profile_by_id(id).id != DEFAULT_PROFILE.id`. The latter
     // silently treats a real agent as "unknown" — forcing the default and
     // dropping requested-model folding — the day DEFAULT_PROFILE.id is set
-    // to a genuine, selectable agent id. Every known agent must resolve to
-    // its own rebuilt command and stamp its own id.
-    for profile in crate::agent_registry::KNOWN_AGENTS {
+    // to a genuine, selectable agent id. Every ACP-capable agent must
+    // resolve to its own rebuilt command and stamp its own id.
+    for profile in crate::agent_registry::KNOWN_AGENTS
+        .iter()
+        .filter(|profile| profile.supports_acp())
+    {
         let (cmd, id) = resolve(None, Some(profile.id), None);
         let expected = crate::agent_registry::build_acp_command(profile.id, None);
         assert_eq!(
@@ -1720,6 +1723,100 @@ fn every_known_agent_id_is_honored_not_conflated_with_default_fallback() {
 }
 
 #[test]
+fn delegate_only_known_id_falls_back_to_trusted_default() {
+    // Pi is a known, selectable id whose CLI cannot speak ACP. The master must
+    // refuse it here — never building `pi --model …` as an ACP command — and
+    // run the trusted default instead, without stamping the requested id.
+    let delegate_only: Vec<_> = crate::agent_registry::KNOWN_AGENTS
+        .iter()
+        .filter(|profile| !profile.supports_acp())
+        .collect();
+    assert!(
+        !delegate_only.is_empty(),
+        "this guard is meaningless without a delegate-only built-in"
+    );
+    for profile in delegate_only {
+        let (cmd, id) = resolve(None, Some(profile.id), None);
+        assert_eq!(cmd, DEFAULT_CMD, "{} must fall back", profile.id);
+        assert_eq!(id.as_deref(), Some("copilot"), "{} fallback id", profile.id);
+        // A GPO allowlist naming the refused id must not resurrect it.
+        let (cmd, id) = resolve(Some(&allow_set(&[profile.id])), Some(profile.id), None);
+        assert_eq!(cmd, DEFAULT_CMD, "{} must stay refused", profile.id);
+        assert_eq!(id.as_deref(), Some("copilot"), "{} fallback id", profile.id);
+    }
+}
+
+#[test]
+fn host_default_agent_must_be_acp_capable() {
+    // `--agent` / `--agent-id` are trusted argv, but a delegate-only built-in
+    // can never serve ACP. Either half of the pair carrying one must replace
+    // the whole default with the built-in ACP command and its own id, so a
+    // bare `pi` can never become the fallback spawn.
+    let trusted = (DEFAULT_CMD.to_string(), Some("copilot".to_string()));
+    for (cmd, id) in [
+        ("pi", Some("pi")),
+        ("pi --model mimo", Some("pi")),
+        (DEFAULT_CMD, Some("pi")),
+        ("pi", None),
+        ("PI.EXE", Some("PI")),
+        (r"C:\bun\pi.cmd", Some("pi")),
+    ] {
+        assert_eq!(
+            sanitized_default_agent_selection(cmd, id),
+            trusted,
+            "{cmd} {id:?}"
+        );
+    }
+}
+
+#[test]
+fn acp_capable_and_custom_host_defaults_are_preserved() {
+    // Sanitizing must not rewrite a legitimate default: every ACP-capable
+    // built-in, plus any custom command the master cannot judge.
+    for (cmd, id) in [
+        (DEFAULT_CMD, Some("copilot")),
+        ("claude --acp", Some("claude")),
+        ("gemini --acp", Some("gemini")),
+        ("opencode acp", Some("opencode")),
+        ("agy_acp_server.exe", Some("antigravity")),
+        ("custom:calc.exe", Some("custom:calc.exe")),
+        (r"C:\tools\my-agent.exe --acp", None),
+    ] {
+        assert_eq!(
+            sanitized_default_agent_selection(cmd, id),
+            (cmd.to_string(), id.map(str::to_string)),
+            "{cmd} {id:?}"
+        );
+    }
+}
+
+#[test]
+fn delegate_only_host_default_never_reaches_an_acp_spawn() {
+    // End-to-end through the resolver: launched with `--agent pi --agent-id pi`,
+    // a helper that declares nothing must still resolve to an ACP-capable
+    // default instead of spawning `pi` as an ACP server.
+    let (default_cmd, default_id) = sanitized_default_agent_selection("pi", Some("pi"));
+    let selection = resolve_agent_selection(
+        &default_cmd,
+        default_id.as_deref(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        HelperId(1),
+    )
+    .expect("a sanitized default must still resolve");
+    assert_eq!(selection.command, DEFAULT_CMD);
+    assert_eq!(selection.agent_id.as_deref(), Some("copilot"));
+    assert_eq!(
+        crate::agent_registry::resolve_agent_id_from_cmd(&selection.command),
+        "copilot",
+        "the fallback command must name an ACP-capable agent"
+    );
+}
+
+#[test]
 fn unknown_or_custom_id_falls_back_to_trusted_default() {
     // `custom:` and bogus ids aren't in KNOWN_AGENTS ⇒ the master
     // runs the trusted global default (which is what carries the
@@ -1734,7 +1831,7 @@ fn unknown_or_custom_id_falls_back_to_trusted_default() {
 #[test]
 fn allowed_ids_absent_is_no_policy_present_but_empty_is_block_all() {
     // The flag being *absent* (clap yields `[]`) is the only "no host
-    // policy" case → `None` → accept any known id.
+    // policy" case → `None` → accept any known ACP-capable id.
     assert_eq!(
         normalize_allowed_agent_ids(&[]),
         None,
@@ -1806,7 +1903,8 @@ fn host_empty_allowlist_flag_round_trips_as_block_all() {
     // builder drops empty args — so it emits the combined `--allowed-agent-ids=`
     // token. Verify clap turns that into a PRESENT-but-empty list (`[""]`),
     // which normalizes to block-all, and NOT into an absent flag (which
-    // would mean "no policy / accept any known id" — the bypass we're closing).
+    // would mean "no policy / accept any known ACP-capable id" — the bypass
+    // we're closing).
     use clap::Parser;
     let cli = crate::cli::args::Cli::try_parse_from(["wta", "--allowed-agent-ids="])
         .expect("--allowed-agent-ids= parses");
@@ -13508,10 +13606,8 @@ fn sidebar_history_discovery_excludes_gemini_but_allows_explicit_chat() {
         checked.push(id.to_owned());
         true
     });
-    assert_eq!(
-        ids,
-        ["copilot", "claude", "codex", "opencode", "antigravity"]
-    );
+    // Pi is delegate-only (no ACP server), so sidebar history must not spawn it.
+    assert_eq!(ids, ["copilot", "claude", "codex", "opencode", "antigravity"]);
     assert_eq!(checked, ids);
 
     let allowed = allow_set(&["gemini"]);
@@ -16903,6 +16999,7 @@ fn listing_agent_from(
         Some(crate::agent_sessions::CliSource::Gemini) => "gemini".to_string(),
         Some(crate::agent_sessions::CliSource::OpenCode) => "opencode".to_string(),
         Some(crate::agent_sessions::CliSource::Antigravity) => "antigravity".to_string(),
+        Some(crate::agent_sessions::CliSource::Pi) => "pi".to_string(),
         Some(crate::agent_sessions::CliSource::Unknown(id)) => id.clone(),
         None => "unknown".to_string(),
     };

@@ -87,6 +87,7 @@ namespace SettingsModelUnitTests
         TEST_METHOD(EffectiveAcpAgentBuiltInBlockedWhenMissingFromAllowlist);
         TEST_METHOD(EffectiveAcpAgentBuiltInMatchIsCaseInsensitive);
         TEST_METHOD(EffectiveAcpAgentBuiltInBlockedByEmptyAllowlist);
+        TEST_METHOD(EffectiveAcpAgentDelegateOnlyBuiltinRejected);
         TEST_METHOD(EffectiveAcpAgentCustomPassesWhenNoCustomPolicy);
         TEST_METHOD(EffectiveAcpAgentCustomBlockedByCustomPolicy);
         TEST_METHOD(EffectiveAcpAgentCustomIgnoresAllowedAgentsAllowlist);
@@ -215,7 +216,7 @@ namespace SettingsModelUnitTests
     void CustomAgentAndPolicyTests::AgentTelemetryProviderBuckets()
     {
         using namespace implementation::AgentSettingsTelemetry;
-        for (const auto id : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity" })
+        for (const auto id : { L"copilot", L"claude", L"codex", L"gemini", L"opencode", L"antigravity", L"pi" })
         {
             VERIFY_ARE_EQUAL(winrt::to_string(id), std::string{ ProviderId(id) });
         }
@@ -614,7 +615,17 @@ namespace SettingsModelUnitTests
     void CustomAgentAndPolicyTests::AgentProfileNativeAllowlist()
     {
         namespace Registry = ::Microsoft::Terminal::Settings::Model::AgentRegistry;
-        VERIFY_ARE_EQUAL(size_t{ 6 }, Registry::BuiltinNativeProfileAgents.size());
+        VERIFY_ARE_EQUAL(size_t{ 7 }, Registry::BuiltinNativeProfileAgents.size());
+        // Pi is delegate/native-profile only: its CLI does not speak ACP yet
+        // and it exposes no session hooks. Its icon asset is packaged.
+        VERIFY_IS_FALSE(std::ranges::any_of(Registry::BuiltinAcpAgents, [](const auto& agent) { return agent.id == L"pi"; }));
+        const auto piFlags = [](const auto& agent) { return agent.id == L"pi" && !agent.supportsSessionHooks && agent.hasIconAsset; };
+        VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinDelegateAgents, piFlags));
+        VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinNativeProfileAgents, piFlags));
+        VERIFY_IS_TRUE(Registry::SupportsNativeProfile(L"pi"));
+        VERIFY_IS_FALSE(Registry::SupportsSessionHooks(L"pi"));
+        VERIFY_IS_TRUE(Registry::HasIconAsset(L"pi"));
+        VERIFY_IS_TRUE(Registry::HasIconAsset(L"copilot"));
         VERIFY_IS_TRUE(Registry::CanonicalNativeAgentProviderId(L"antigravity") == L"antigravity");
         VERIFY_IS_TRUE(Registry::CanonicalNativeAgentProviderId(L"ANTIGRAVITY") == L"antigravity");
         VERIFY_IS_TRUE(Registry::SupportsNativeProfile(L"antigravity"));
@@ -888,6 +899,19 @@ namespace SettingsModelUnitTests
         const auto settings = MakeSettings(R"("acpAgent": "copilot")");
         SetPolicy(MakePolicy(std::set<std::wstring, AgentPolicy::CaseInsensitiveLess>{}));
         VERIFY_ARE_EQUAL(winrt::hstring{}, settings->GlobalSettings().EffectiveAcpAgent());
+    }
+
+    void CustomAgentAndPolicyTests::EffectiveAcpAgentDelegateOnlyBuiltinRejected()
+    {
+        // A hand-edited delegate-only builtin must not become an ACP
+        // selection: pi does not speak ACP, so EffectiveAcpAgent collapses it
+        // to empty and consumers fall back instead of launching raw `pi` as
+        // an ACP server.
+        const auto settings = MakeSettings(R"("acpAgent": "pi", "delegateAgent": "pi")");
+        SetPolicy(MakePolicy());
+        VERIFY_ARE_EQUAL(winrt::hstring{}, settings->GlobalSettings().EffectiveAcpAgent());
+        // The same builtin stays valid as a delegate selection.
+        VERIFY_ARE_EQUAL(winrt::hstring{ L"pi" }, settings->GlobalSettings().EffectiveDelegateAgent());
     }
 
     void CustomAgentAndPolicyTests::EffectiveAcpAgentCustomPassesWhenNoCustomPolicy()

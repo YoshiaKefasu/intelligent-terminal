@@ -206,7 +206,11 @@ not an `agy.cmd` shim. It does **not** require ACP adapters or npx, and does
 not inspect WSL. An empty successful list means no matching native executables;
 nonzero exit with stderr means discovery is unknown/failed, not unavailable.
 `launch-agent` resolves the executable afresh on each launch. The existing
-`probe-host-agents` retains its separate ACP prerequisites and behavior.
+`probe-host-agents` retains its separate ACP prerequisites and behavior. Its
+`agents` list reports availability for managed flows, not only ACP: a
+delegate-only CLI such as Pi stays listed because the Command Palette delegate
+list needs it, while ACP consumers intersect the list with their own ACP-only
+registry.
 
 ### Sidebar Agent sessions
 
@@ -231,7 +235,9 @@ access; background startup is not an offline-only operation. See
 and ACP wrapper prerequisites.
 
 The read-only `probe-host-agents` and `probe-agent-sources` availability commands
-only report readiness or bootstrap eligibility; they do not install dependencies.
+only report readiness or bootstrap eligibility; they do not install dependencies,
+and their `agents` lists are availability rather than capability — each consumer
+applies its own ACP or delegate registry list.
 
 WSL ACP launches start Bash directly as the selected distribution's default user.
 The login-shell environment is loaded without sending the generated launch script

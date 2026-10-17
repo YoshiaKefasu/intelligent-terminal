@@ -222,6 +222,7 @@ namespace Microsoft::Terminal::AgentPaneRestore
         { L"gemini", L"--resume" },
         { L"opencode", L"--session" },
         { L"antigravity", L"--conversation" },
+        { L"pi", L"--session" },
     };
 
     inline constexpr std::wstring_view ResumeShellPrefix{ L"cmd.exe /d /s /c \"" };

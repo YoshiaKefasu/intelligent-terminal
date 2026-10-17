@@ -958,7 +958,7 @@ if (-not $Global:__ShellInteg_Installed) {
             $command = $pipeline.PipelineElements[0]
             if ($command -isnot [System.Management.Automation.Language.CommandAst] -or
                 $command.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot) { return }
-            if ($command.GetCommandName() -notmatch '^(?:.*[\\/])?(copilot|claude|gemini|codex|opencode|agy)(?:\.(?:exe|cmd|bat))?$') { return }
+            if ($command.GetCommandName() -notmatch '^(?:.*[\\/])?(copilot|claude|gemini|codex|opencode|agy|pi)(?:\.(?:exe|cmd|bat))?$') { return }
             $resumeAgent = $Matches[1].ToLowerInvariant()
             if ($resumeAgent -eq 'agy') { $resumeAgent = 'antigravity' }
             $arguments = @()
@@ -975,7 +975,7 @@ if (-not $Global:__ShellInteg_Installed) {
                 $resumeSession = $arguments[1].Value
             }
             else {
-                $flag = if ($resumeAgent -eq 'opencode') { '--session' }
+                $flag = if ($resumeAgent -eq 'opencode' -or $resumeAgent -eq 'pi') { '--session' }
                         elseif ($resumeAgent -eq 'antigravity') { '--conversation' }
                         else { '--resume' }
                 for ($i = 0; $i -lt $arguments.Count; $i++) {

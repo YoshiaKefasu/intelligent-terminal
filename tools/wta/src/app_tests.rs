@@ -26882,6 +26882,7 @@ fn known_cli_id_returns_some_for_all_first_party_clis() {
     assert_eq!(known_cli_id(&CliSource::Gemini), Some("gemini"));
     assert_eq!(known_cli_id(&CliSource::OpenCode), Some("opencode"));
     assert_eq!(known_cli_id(&CliSource::Antigravity), Some("antigravity"));
+    assert_eq!(known_cli_id(&CliSource::Pi), Some("pi"));
 }
 
 #[test]

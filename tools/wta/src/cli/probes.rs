@@ -119,6 +119,14 @@ pub(crate) fn run_host_agents() -> Result<()> {
     let agents = availability
         .iter()
         .filter(|status| status.launch_ready || status.acp_bootstrap_available)
+        // Availability for every managed flow, not just ACP: the Command
+        // Palette delegate list (`FilteredDelegateAgents()`) needs
+        // delegate-only CLIs such as Pi, while ACP consumers intersect this
+        // set with their own ACP-only registry list. Keeping only
+        // `supports_acp()` here would silently hide Pi from the palette.
+        .filter(|status| {
+            crate::agent_registry::lookup_profile_by_id(status.id).supports_managed_launch()
+        })
         .map(|status| AgentSourceProbeEntry {
             id: status.id,
             display_name: status.display_name,
@@ -142,19 +150,24 @@ pub(crate) async fn run_agent_sources(wsl_distro: &str) -> Result<()> {
     anyhow::ensure!(!distro.is_empty(), "--wsl-distro must not be empty");
 
     use futures::StreamExt as _;
-    let agents = futures::stream::iter(crate::agent_registry::KNOWN_AGENTS)
-        .map(|profile| async move {
-            crate::agent_check::wsl_agent_available(distro, profile.id)
-                .await
-                .then_some(AgentSourceProbeEntry {
-                    id: profile.id,
-                    display_name: profile.display_name,
-                })
-        })
-        .buffer_unordered(crate::agent_registry::KNOWN_AGENTS.len())
-        .filter_map(async move |entry| entry)
-        .collect()
-        .await;
+    let agents = futures::stream::iter(
+        crate::agent_registry::KNOWN_AGENTS
+            .iter()
+            // Same availability contract as `run_host_agents`.
+            .filter(|profile| profile.supports_managed_launch()),
+    )
+    .map(|profile| async move {
+        crate::agent_check::wsl_agent_available(distro, profile.id)
+            .await
+            .then_some(AgentSourceProbeEntry {
+                id: profile.id,
+                display_name: profile.display_name,
+            })
+    })
+    .buffer_unordered(crate::agent_registry::KNOWN_AGENTS.len())
+    .filter_map(async move |entry| entry)
+    .collect()
+    .await;
 
     println!(
         "{}",

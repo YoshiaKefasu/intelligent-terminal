@@ -56,6 +56,7 @@ pub enum CliSource {
     Gemini,
     OpenCode,
     Antigravity,
+    Pi,
     Unknown(String),
 }
 
@@ -68,13 +69,15 @@ impl CliSource {
             "gemini" => Self::Gemini,
             "opencode" => Self::OpenCode,
             "antigravity" => Self::Antigravity,
+            "pi" => Self::Pi,
             "" => Self::Unknown(String::new()),
             other => Self::Unknown(other.to_string()),
         }
     }
 
-    /// Map an `agent_registry` agent id (`"copilot"`, `"claude"`, `"codex"`, `"gemini"`,
-    /// ...) to the matching `CliSource` variant. Returns `None` for agents
+    /// Map an `agent_registry` agent id (`"copilot"`, `"claude"`, `"codex"`,
+    /// `"gemini"`, `"opencode"`, `"antigravity"`, `"pi"`) to the matching
+    /// `CliSource` variant. Returns `None` for agents
     /// the session registry does not track (e.g. `"unknown"`, or
     /// an empty string), which the session-management view treats as
     /// "no filter — show all rows".
@@ -86,6 +89,7 @@ impl CliSource {
             "gemini" => Some(Self::Gemini),
             "opencode" => Some(Self::OpenCode),
             "antigravity" => Some(Self::Antigravity),
+            "pi" => Some(Self::Pi),
             _ => None,
         }
     }
@@ -98,6 +102,7 @@ impl CliSource {
             Self::Gemini => "gemini",
             Self::OpenCode => "opencode",
             Self::Antigravity => "antigravity",
+            Self::Pi => "pi",
             Self::Unknown(id) => id.trim(),
         };
         (!id.is_empty()).then(|| id.to_ascii_lowercase())
@@ -2851,6 +2856,7 @@ mod tests {
             CliSource::from_agent_id("opencode"),
             Some(CliSource::OpenCode)
         );
+        assert_eq!(CliSource::from_agent_id("pi"), Some(CliSource::Pi));
         // Case-insensitive — `current_agent_id` is conventionally lowercase
         // but mixed-case must not silently drop the filter.
         assert_eq!(
@@ -2887,6 +2893,12 @@ mod tests {
     fn cli_source_parse_round_trips_opencode() {
         assert_eq!(CliSource::parse(Some("OpenCode")), CliSource::OpenCode);
         assert_eq!(CliSource::parse(Some("opencode")), CliSource::OpenCode);
+    }
+
+    #[test]
+    fn cli_source_parse_round_trips_pi() {
+        assert_eq!(CliSource::parse(Some("pi")), CliSource::Pi);
+        assert_eq!(CliSource::parse(Some("PI")), CliSource::Pi);
     }
 
     #[test]

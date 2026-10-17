@@ -4,6 +4,7 @@ mod codex;
 mod copilot;
 mod gemini;
 mod opencode;
+mod pi;
 
 use agent_client_protocol as acp;
 
@@ -140,13 +141,14 @@ pub(super) trait NativeYoloProvider: Sync {
     fn observe_current_mode(&self, _state: &mut ProviderSessionState, _current_mode_id: &str) {}
 }
 
-static PROVIDERS: [&dyn NativeYoloProvider; 6] = [
+static PROVIDERS: [&dyn NativeYoloProvider; 7] = [
     &copilot::ADAPTER,
     &claude::ADAPTER,
     &codex::ADAPTER,
     &gemini::ADAPTER,
     &opencode::ADAPTER,
     &antigravity::ADAPTER,
+    &pi::ADAPTER,
 ];
 
 pub(super) fn lookup(family_id: &str) -> Option<&'static dyn NativeYoloProvider> {

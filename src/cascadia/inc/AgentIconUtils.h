@@ -10,7 +10,10 @@ namespace Microsoft::Terminal
     {
         const auto uri = source.UriSource().AbsoluteUri();
         winrt::hstring originalPath;
-        for (const auto provider : { L"copilot", L"claude", L"codex", L"opencode", L"antigravity" })
+        // Agents that ship both AgentIcons/<id>.svg and <id>-light.svg, so the
+        // icon can follow the element theme. Pi and the generic fallback are
+        // rendered straight from their SVG (no packaged monochrome mask).
+        for (const auto provider : { L"copilot", L"claude", L"codex", L"opencode", L"antigravity", L"pi", L"generic" })
         {
             const auto path = winrt::hstring{ L"ms-appx:///AgentIcons/" } + provider;
             if (uri == path + L".svg" || uri == path + L"-light.svg")

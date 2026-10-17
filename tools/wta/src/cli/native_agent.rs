@@ -13,9 +13,12 @@ use crate::agent_registry::{AgentProfile, KNOWN_AGENTS};
 
 fn native_profiles() -> impl Iterator<Item = &'static AgentProfile> {
     KNOWN_AGENTS.iter().filter(|profile| {
+        // Pi is delegate-only (no ACP), so the interactive launcher is its
+        // only entry point; the reviewed argument validation below owns its
+        // supported flags.
         matches!(
             profile.id,
-            "copilot" | "claude" | "codex" | "gemini" | "opencode" | "antigravity"
+            "copilot" | "claude" | "codex" | "gemini" | "opencode" | "antigravity" | "pi"
         )
     })
 }
