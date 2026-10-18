@@ -331,9 +331,8 @@ pub const KNOWN_AGENTS: &[AgentProfile] = &[
         auth_check_command: "",
         auth_hint: "Run 'pi' to configure credentials or providers.",
         resume_flag: "--session",
-        // Pi ACP sessions live in their own store; the CLI's `--session`
-        // resume cannot load conversations created through ACP.
-        cli_can_resume_acp_sessions: false,
+        // Pi's `--session` resume can reload conversations created through ACP.
+        cli_can_resume_acp_sessions: true,
         new_session_id_flag: Some("--session-id"),
     },
 ];
@@ -1080,7 +1079,7 @@ mod tests {
         // `-m` is unsupported; only the long flag is advertised.
         assert_eq!(profile.model_flags, &["--model"]);
         assert_eq!(profile.resume_flag, "--session");
-        assert!(!profile.cli_can_resume_acp_sessions);
+        assert!(profile.cli_can_resume_acp_sessions);
         assert_eq!(profile.new_session_id_flag, Some("--session-id"));
         assert!(profile.supports_acp());
 
