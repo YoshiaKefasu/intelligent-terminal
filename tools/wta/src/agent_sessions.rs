@@ -130,6 +130,55 @@ pub(crate) fn title_is_placeholder(cli: &CliSource, title: &str) -> bool {
         && crate::session_history::parse_iso_to_system_time(timestamp).is_some()
 }
 
+/// Agent roles Pi launches as *sub-agents*. A sub-agent conversation is an
+/// implementation detail of the parent's turn, never a session the user opens.
+const PI_SUBAGENT_ROLES: &[&str] = &[
+    "advisor",
+    "code-reviewer",
+    "executor",
+    "explore",
+    "explorer",
+    "image-viewer",
+    "writer",
+];
+
+/// Whether `title` is a Pi *sub-agent* session name rather than a user-facing
+/// chat name.
+///
+/// Pi names a sub-agent conversation `<role>#<instance>#<task>#<8 hex nonce>`
+/// and a plain spawn simply `<role>#<8 hex nonce>`; a chat the user opened (and
+/// possibly renamed) carries no `#` at all. Two independent signals are checked
+/// so a rename of either convention cannot silently resurface sub-agents in the
+/// picker:
+///
+/// 1. a known role followed by `#` — catches the shape even if the nonce
+///    changes, and is what [`PI_SUBAGENT_ROLES`] exists for;
+/// 2. a trailing `#<8 hex>` nonce — catches roles not in the list above.
+///
+/// Deliberately NOT "contains a `#`": a user is free to name a chat
+/// `bug#1234 triage`, and hiding that would be a data-visibility bug rather
+/// than a tidy-up. Callers must additionally treat this as advisory — the
+/// authoritative sub-agent signal is `parentSession` in the session file
+/// header (see `crate::pi_disk_sessions`).
+pub(crate) fn title_is_pi_subagent(title: &str) -> bool {
+    let title = title.trim();
+    if title.is_empty() {
+        return false;
+    }
+    if PI_SUBAGENT_ROLES.iter().any(|role| {
+        title
+            .strip_prefix(role)
+            .is_some_and(|rest| rest.starts_with('#'))
+    }) {
+        return true;
+    }
+    title.rsplit_once('#').is_some_and(|(head, nonce)| {
+        !head.trim().is_empty()
+            && nonce.len() == 8
+            && nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AgentStatus {
     Idle,
@@ -1732,6 +1781,43 @@ mod tests {
             &CliSource::Copilot,
             "New session - 2026-07-23T01:14:00.422Z"
         ));
+    }
+
+    #[test]
+    fn pi_subagent_titles_are_recognized() {
+        // Real names taken from `~/.pi/agent/sessions` sub-agent files.
+        for title in [
+            "executor#02778eee",
+            "explorer#67d7351b",
+            "code-reviewer#01aa9e36",
+            "executor#executor#rust-pi-disk-scanner#68d293db",
+            "explore#explore-10#explore-subagent-filter#8b193dc8",
+            "code-reviewer#code-reviewer-2#code-reviewer-deepseek#ea88e527",
+            // Role prefix only — a future nonce shape must not leak them.
+            "advisor#session-7",
+        ] {
+            assert!(title_is_pi_subagent(title), "{title:?}");
+        }
+    }
+
+    #[test]
+    fn user_chat_titles_are_not_pi_subagents() {
+        for title in [
+            "Pi担当",
+            "DennouAibou担当",
+            "Youtubeコンテンツ担当",
+            "",
+            "   ",
+            // A `#` in a user-chosen name is not a sub-agent marker.
+            "bug#1234 triage",
+            "release#1 planning",
+            "#deadbeef",
+            "executor",
+            "executor task",
+            "explore the codebase",
+        ] {
+            assert!(!title_is_pi_subagent(title), "{title:?}");
+        }
     }
 
     #[test]

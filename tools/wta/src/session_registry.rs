@@ -1827,6 +1827,12 @@ pub(crate) fn title_is_displayable(cli: Option<&CliSource>, title: &str) -> bool
     !title.is_empty()
         && !title_is_injected_context_echo(title)
         && !cli.is_some_and(|cli| crate::agent_sessions::title_is_placeholder(cli, title))
+        // A Pi sub-agent's name is `<role>#<nonce>`, not a chat title. Letting
+        // one through here would `adopt_agent_title` it onto a row and undo the
+        // filtering done where those rows are created.
+        && !cli.is_some_and(|cli| {
+            matches!(cli, CliSource::Pi) && crate::agent_sessions::title_is_pi_subagent(title)
+        })
 }
 
 #[async_trait::async_trait]
@@ -3784,6 +3790,20 @@ mod tests {
             title_is_displayable(Some(&CliSource::Copilot), placeholder),
             "another CLI's placeholder shape is a real title here"
         );
+    }
+
+    #[test]
+    fn title_is_displayable_rejects_pi_subagent_names_only_for_pi() {
+        let subagent = "executor#executor#rust-pi-disk-scanner#68d293db";
+        assert!(!title_is_displayable(Some(&CliSource::Pi), subagent));
+        assert!(!title_is_displayable(
+            Some(&CliSource::Pi),
+            "explore#67d7351b"
+        ));
+        // A Pi chat the user named is still a title.
+        assert!(title_is_displayable(Some(&CliSource::Pi), "Pi担当"));
+        // Another CLI never opted into Pi's naming convention.
+        assert!(title_is_displayable(Some(&CliSource::Copilot), subagent));
     }
 
     #[tokio::test]

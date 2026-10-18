@@ -69,6 +69,17 @@ pub(crate) fn classify_and_map(
                 .as_deref()
                 .is_some_and(|title| crate::agent_sessions::title_is_placeholder(cli, title))
         })
+        // Pi spawns a sub-agent conversation per delegated task, and those live
+        // in the same on-disk session store as the user's own chats, so
+        // `session/list` returns them as ordinary rows. They are internal
+        // machinery, not sessions the user can open, so drop them here — the
+        // one place every host-history path funnels through.
+        .filter(|s| {
+            !(matches!(cli, CliSource::Pi)
+                && s.title
+                    .as_deref()
+                    .is_some_and(crate::agent_sessions::title_is_pi_subagent))
+        })
         .map(|s| acp_session_to_agent_session(s, location.clone(), cli))
         .filter(|s| !agent_pane_index.contains(&provider_id, &location, &s.key))
         .collect()
@@ -269,6 +280,26 @@ mod tests {
             1,
             "the placeholder shape is OpenCode-specific"
         );
+    }
+
+    #[test]
+    fn classify_drops_pi_subagent_rows_only() {
+        let mut chat = info("chat-1", "D:/repo");
+        chat.title = Some("Pi担当".into());
+        let mut sub = info("sub-1", "D:/repo");
+        sub.title = Some("executor#executor#rust-pi-disk-scanner#68d293db".into());
+        let rows = vec![chat, sub];
+        let empty = crate::agent_pane_origin::OriginIndex::default();
+
+        let pi = classify_and_map(&rows, &empty, SessionLocation::Host, &CliSource::Pi);
+        assert_eq!(pi.len(), 1);
+        assert_eq!(pi[0].key, "chat-1");
+
+        // The predicate is Pi-specific: another CLI may legitimately title a
+        // session after its own sub-agent convention and must not be pruned by
+        // a rule it never opted into.
+        let copilot = classify_and_map(&rows, &empty, SessionLocation::Host, &CliSource::Copilot);
+        assert_eq!(copilot.len(), 2);
     }
 
     #[test]

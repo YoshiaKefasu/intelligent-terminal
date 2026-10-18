@@ -31,6 +31,7 @@ mod logging;
 mod master;
 mod osc52;
 mod pane_context;
+mod pi_disk_sessions;
 mod protocol;
 mod rtl;
 mod runtime_paths;

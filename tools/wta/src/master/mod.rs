@@ -5260,6 +5260,9 @@ async fn run_master_loop(config: MasterConfig, pipe_name: String) -> Result<()> 
         "named pipe listening; awaiting helper connections"
     );
     let _pipe_discovery_guard = MasterPipeDiscoveryGuard::write(&pipe_name);
+    // Disk-first seed for Pi: its session files are readable immediately, so
+    // the first `sessions/list` can answer without waiting for `pi-acp`.
+    start_pi_disk_session_seed(&inner);
     tracing::info!(target: "master_history", "starting host agent discovery at master startup");
     request_host_history_refresh(&inner);
     start_history_refresh_loop(&inner);
@@ -7699,6 +7702,68 @@ fn history_sync_status(failures: &[HistoryRefreshFailure]) -> HistorySyncStatus 
             .all(|failure| *failure == HistoryRefreshFailure::Timeout)
             .then_some(HistoryErrorKind::Timeout),
     }
+}
+
+/// Seed the registry with Pi's **main** sessions straight off disk.
+///
+/// The only other route to those rows is ACP `session/list`, which cannot
+/// answer until `npx -y pi-acp` has cold-started and completed `initialize` —
+/// seconds at best, a timeout at worst. Reading the session files directly is
+/// a few hundred milliseconds of small reads, so the sessions view has Pi rows
+/// on its very first `sessions/list` instead of an empty list and a shimmer.
+///
+/// `upsert_if_absent` (never `upsert`) is load-bearing: the ACP listing arrives
+/// later and reconciles onto these exact identities, so a disk row must never
+/// overwrite a live row that a helper already bound to a pane.
+///
+/// Best-effort and startup-only. A missing store, an unreadable file, or a
+/// disabled Pi simply seeds nothing and the ACP path still owns the list.
+///
+/// Note: a disk row is NOT pruned by reconcile, because
+/// [`is_stale_host_history_row`] only drops ids the listing agent itself
+/// returned on an earlier pass (`listed_ever`) — a row only this scan ever
+/// invented never qualifies. That is the safe direction (no data loss), and in
+/// practice `pi-acp` walks the same directory so it reports the same ids. It
+/// also covers a `pi-acp` quirk: its `listSessions` narrows to
+/// `lastSessionCwd` once any session has been created or loaded, which would
+/// otherwise hide every other project's Pi sessions from the picker.
+fn start_pi_disk_session_seed(state: &Arc<MasterStateInner>) {
+    if state
+        .allowed_agent_ids
+        .as_ref()
+        .is_some_and(|ids| !ids.contains(crate::agent_registry::PI_AGENT_ID))
+    {
+        // A host policy excluded Pi: its rows must not appear at all.
+        return;
+    }
+    let state = Arc::downgrade(state);
+    tokio::task::spawn_local(async move {
+        let started = std::time::Instant::now();
+        let Ok(rows) =
+            tokio::task::spawn_blocking(crate::pi_disk_sessions::scan_pi_disk_sessions).await
+        else {
+            tracing::warn!(target: "master_history", "pi disk session scan task failed");
+            return;
+        };
+        let Some(state) = state.upgrade() else { return };
+        let scanned = rows.len();
+        for row in rows {
+            state.registry.upsert_if_absent(row).await;
+        }
+        tracing::info!(
+            target: "master_history",
+            sessions = scanned,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "seeded Pi sessions from disk before ACP history was available"
+        );
+        if scanned > 0 {
+            broadcast_ext_to_helpers(
+                &state,
+                crate::session_registry::build_sessions_changed_notification(),
+            )
+            .await;
+        }
+    });
 }
 
 fn start_history_refresh_loop(state: &Arc<MasterStateInner>) {
