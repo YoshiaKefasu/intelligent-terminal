@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "AgentProfileGenerator.h"
 #include "DynamicProfileUtils.h"
+#include "../../inc/DefaultSettings.h"
 #include "../inc/AgentProfileUtils.h"
 #include "../inc/AgentRegistry.h"
 #include <mutex>
@@ -71,6 +72,7 @@ void AgentProfileGenerator::GenerateProfiles(std::vector<winrt::com_ptr<implemen
         profile->Icon(winrt::hstring{ L"ms-appx:///AgentIcons/" + iconId + L".svg" });
         profile->AgentProfileId(winrt::hstring{ agent.id });
         profile->Commandline(winrt::hstring{ AgentProfiles::BuildCommand(found->second.native(), agent.id, {}, {}, {}) });
+        profile->StartingDirectory(winrt::hstring{ DEFAULT_STARTING_DIRECTORY });
         profiles.emplace_back(std::move(profile));
     }
 }

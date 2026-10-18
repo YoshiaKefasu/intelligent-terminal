@@ -421,6 +421,11 @@ fn spawn_host_agent_process(
     // pre-0.1.5 `wt-agent-hooks` bundle installed.
     cmd.env("WTA_HOOK_LOG_DIR", crate::logging::log_dir());
 
+    // Tell pi-acp to invoke `pi` directly rather than defaulting to `pi.cmd` on
+    // Windows, so environments where Pi is installed via Bun (creating `pi.exe`
+    // without a `.cmd` wrapper) can still be resolved through PATH.
+    cmd.env("PI_ACP_PI_COMMAND", "pi");
+
     // Forward the user's locale to the agent process via standard POSIX
     // environment variables. Many agent CLIs (and the large language models
     // they speak to) honor `LANG` / `LC_ALL` to choose their response
