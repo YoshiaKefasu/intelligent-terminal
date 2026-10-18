@@ -119,11 +119,9 @@ pub(crate) fn run_host_agents() -> Result<()> {
     let agents = availability
         .iter()
         .filter(|status| status.launch_ready || status.acp_bootstrap_available)
-        // Availability for every managed flow, not just ACP: the Command
-        // Palette delegate list (`FilteredDelegateAgents()`) needs
-        // delegate-only CLIs such as Pi, while ACP consumers intersect this
-        // set with their own ACP-only registry list. Keeping only
-        // `supports_acp()` here would silently hide Pi from the palette.
+        // Availability for every managed flow: the Command Palette delegate
+        // list (`FilteredDelegateAgents()`) needs all available CLIs, while
+        // ACP consumers intersect this set with their own ACP-only registry list.
         .filter(|status| {
             crate::agent_registry::lookup_profile_by_id(status.id).supports_managed_launch()
         })

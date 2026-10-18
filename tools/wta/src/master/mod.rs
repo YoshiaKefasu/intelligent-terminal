@@ -5066,7 +5066,7 @@ async fn run_master_loop(config: MasterConfig, pipe_name: String) -> Result<()> 
     // down to nothing (`Some(empty_set)` ⇒ block all) — see
     // `normalize_allowed_agent_ids` for the absent-vs-present-empty split.
     let allowed_agent_ids = normalize_allowed_agent_ids(&config.allowed_agent_ids);
-    // A host default that cannot serve as an ACP server (delegate-only Pi) is
+    // A host default that cannot serve as an ACP server is
     // replaced before it can become every helper's fallback spawn.
     let (default_agent_cmd, default_agent_id) =
         sanitized_default_agent_selection(&config.agent, config.agent_id.as_deref());
@@ -5368,10 +5368,10 @@ fn normalize_allowed_agent_ids(raw: &[String]) -> Option<std::collections::HashS
 /// Sanitize the master's own `--agent` / `--agent-id` defaults before they
 /// become the fallback that every helper without its own selection inherits.
 ///
-/// Those argv values are trusted, but a delegate-only built-in (Pi) can never
+/// Those argv values are trusted, but a delegate-only built-in can never
 /// answer `initialize`: adopting one would bake a non-ACP CLI into the default
 /// ACP spawn. Both halves of the pair are checked so a poisoned id cannot leave
-/// a bare `pi` command behind, and vice versa. A rejected default becomes
+/// a bare command behind, and vice versa. A rejected default becomes
 /// [`agent_registry::DEFAULT_ACP_COMMAND`] together with the id that command
 /// belongs to. Unknown / custom ids keep the host's command verbatim — the
 /// master cannot judge those, and custom agents are legitimately outside
@@ -5442,7 +5442,7 @@ fn helper_initialize_error(
 /// Fallback to the default happens when the helper declared no id, an
 /// *unknown* id (not in [`agent_registry::KNOWN_AGENTS`] — e.g. a
 /// `custom:` agent, which the global default already covers), a *known* but
-/// delegate-only id (Pi has no ACP server), or an id the host's GPO allowlist
+/// delegate-only id, or an id the host's GPO allowlist
 /// excludes.
 /// Malformed explicit WSL source metadata is rejected before any fallback.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -5491,7 +5491,7 @@ fn resolve_agent_selection(
         // "unknown" (and drop model folding) the day the default profile's
         // id becomes a real, selectable agent id.
         let known = crate::agent_registry::is_known_id(id);
-        // A known id is not enough: delegate-only agents (Pi) have no ACP
+        // A known id is not enough: delegate-only agents have no ACP
         // server, so accepting one here would spawn a CLI that can never
         // answer `initialize`. Such ids fall back like unknown ones.
         let acp_capable = crate::agent_registry::lookup_profile_by_id(id).supports_acp();

@@ -39,9 +39,8 @@ namespace Microsoft::Terminal::AgentAvailability
     // agents includes their ACP adapter. Delegation never needs that adapter, so
     // a delegate agent is available as soon as its own CLI resolves on PATH —
     // the same judgment the global AI Agents page makes for its delegate list.
-    // Union the two so a delegate-only agent such as Pi (no ACP support) is not
-    // dropped from the per-profile Command Palette list merely because the
-    // probe describes ACP readiness.
+    // Union the two so the per-profile Command Palette list never drops an
+    // installed delegate CLI merely because the probe describes ACP readiness.
     inline std::unordered_set<std::wstring> DelegateHostAvailability(
         const std::unordered_set<std::wstring>& probedHostAgents,
         const std::vector<::Microsoft::Terminal::Settings::Model::AgentRegistry::BuiltinAgent>& delegateAgents)
@@ -262,7 +261,8 @@ namespace Microsoft::Terminal::AgentAvailability
     {
         if (!snapshot ||
             (!::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(agentId, L"claude") &&
-             !::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(agentId, L"codex")))
+             !::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(agentId, L"codex") &&
+             !::Microsoft::Terminal::Settings::Model::AgentRegistry::AgentIdEquals(agentId, L"pi")))
         {
             return false;
         }

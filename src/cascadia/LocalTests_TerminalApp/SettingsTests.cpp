@@ -1812,6 +1812,13 @@ namespace TerminalAppLocalTests
                     "native_cli_found": false,
                     "launch_ready": false,
                     "requires_npx": false
+                },
+                {
+                    "id": "pi",
+                    "display_name": "Pi",
+                    "native_cli_found": false,
+                    "launch_ready": false,
+                    "requires_npx": true
                 }
             ],
             "npx_found": false
@@ -1864,7 +1871,8 @@ namespace TerminalAppLocalTests
                 { "id": "codex", "native_cli_found": false, "launch_ready": false, "requires_npx": true },
                 { "id": "gemini", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
                 { "id": "opencode", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
-                { "id": "antigravity", "native_cli_found": false, "launch_ready": false, "requires_npx": false }
+                { "id": "antigravity", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
+                { "id": "pi", "native_cli_found": false, "launch_ready": false, "requires_npx": true }
             ],
             "npx_found": false
         })")
@@ -1876,7 +1884,8 @@ namespace TerminalAppLocalTests
                 { "id": "codex", "native_cli_found": false, "launch_ready": false, "requires_npx": true },
                 { "id": "gemini", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
                 { "id": "opencode", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
-                { "id": "antigravity", "native_cli_found": false, "launch_ready": false, "requires_npx": false }
+                { "id": "antigravity", "native_cli_found": false, "launch_ready": false, "requires_npx": false },
+                { "id": "pi", "native_cli_found": false, "launch_ready": false, "requires_npx": true }
             ],
             "npx_found": false
         })")
@@ -1954,8 +1963,12 @@ namespace TerminalAppLocalTests
         snapshot.npxFound = false;
         snapshot.availability.emplace(L"claude", HostAgentAvailability{ true, false, true });
         VERIFY_IS_TRUE(NeedsFreNodeBootstrap(snapshot, L"CLAUDE"));
+        // Pi's ACP surface is the npx-distributed pi-acp adapter.
+        snapshot.availability.emplace(L"pi", HostAgentAvailability{ true, false, true });
+        VERIFY_IS_TRUE(NeedsFreNodeBootstrap(snapshot, L"PI"));
         snapshot.npxFound = true;
         VERIFY_IS_FALSE(NeedsFreNodeBootstrap(snapshot, L"claude"));
+        VERIFY_IS_FALSE(NeedsFreNodeBootstrap(snapshot, L"pi"));
     }
 
     void SettingsTests::TestAgentSettingsFocusGate()

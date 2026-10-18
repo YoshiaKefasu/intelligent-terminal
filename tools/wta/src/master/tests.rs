@@ -1724,17 +1724,13 @@ fn every_acp_capable_agent_id_is_honored_not_conflated_with_default_fallback() {
 
 #[test]
 fn delegate_only_known_id_falls_back_to_trusted_default() {
-    // Pi is a known, selectable id whose CLI cannot speak ACP. The master must
-    // refuse it here — never building `pi --model …` as an ACP command — and
-    // run the trusted default instead, without stamping the requested id.
+    // If any known agent cannot speak ACP, the master must refuse it here —
+    // never building its command as an ACP server — and run the trusted
+    // default instead, without stamping the requested id.
     let delegate_only: Vec<_> = crate::agent_registry::KNOWN_AGENTS
         .iter()
         .filter(|profile| !profile.supports_acp())
         .collect();
-    assert!(
-        !delegate_only.is_empty(),
-        "this guard is meaningless without a delegate-only built-in"
-    );
     for profile in delegate_only {
         let (cmd, id) = resolve(None, Some(profile.id), None);
         assert_eq!(cmd, DEFAULT_CMD, "{} must fall back", profile.id);
@@ -1743,29 +1739,6 @@ fn delegate_only_known_id_falls_back_to_trusted_default() {
         let (cmd, id) = resolve(Some(&allow_set(&[profile.id])), Some(profile.id), None);
         assert_eq!(cmd, DEFAULT_CMD, "{} must stay refused", profile.id);
         assert_eq!(id.as_deref(), Some("copilot"), "{} fallback id", profile.id);
-    }
-}
-
-#[test]
-fn host_default_agent_must_be_acp_capable() {
-    // `--agent` / `--agent-id` are trusted argv, but a delegate-only built-in
-    // can never serve ACP. Either half of the pair carrying one must replace
-    // the whole default with the built-in ACP command and its own id, so a
-    // bare `pi` can never become the fallback spawn.
-    let trusted = (DEFAULT_CMD.to_string(), Some("copilot".to_string()));
-    for (cmd, id) in [
-        ("pi", Some("pi")),
-        ("pi --model mimo", Some("pi")),
-        (DEFAULT_CMD, Some("pi")),
-        ("pi", None),
-        ("PI.EXE", Some("PI")),
-        (r"C:\bun\pi.cmd", Some("pi")),
-    ] {
-        assert_eq!(
-            sanitized_default_agent_selection(cmd, id),
-            trusted,
-            "{cmd} {id:?}"
-        );
     }
 }
 
@@ -1779,6 +1752,7 @@ fn acp_capable_and_custom_host_defaults_are_preserved() {
         ("gemini --acp", Some("gemini")),
         ("opencode acp", Some("opencode")),
         ("agy_acp_server.exe", Some("antigravity")),
+        ("npx -y pi-acp@0.0.34", Some("pi")),
         ("custom:calc.exe", Some("custom:calc.exe")),
         (r"C:\tools\my-agent.exe --acp", None),
     ] {
@@ -1788,32 +1762,6 @@ fn acp_capable_and_custom_host_defaults_are_preserved() {
             "{cmd} {id:?}"
         );
     }
-}
-
-#[test]
-fn delegate_only_host_default_never_reaches_an_acp_spawn() {
-    // End-to-end through the resolver: launched with `--agent pi --agent-id pi`,
-    // a helper that declares nothing must still resolve to an ACP-capable
-    // default instead of spawning `pi` as an ACP server.
-    let (default_cmd, default_id) = sanitized_default_agent_selection("pi", Some("pi"));
-    let selection = resolve_agent_selection(
-        &default_cmd,
-        default_id.as_deref(),
-        None,
-        None,
-        None,
-        None,
-        None,
-        HelperId(1),
-    )
-    .expect("a sanitized default must still resolve");
-    assert_eq!(selection.command, DEFAULT_CMD);
-    assert_eq!(selection.agent_id.as_deref(), Some("copilot"));
-    assert_eq!(
-        crate::agent_registry::resolve_agent_id_from_cmd(&selection.command),
-        "copilot",
-        "the fallback command must name an ACP-capable agent"
-    );
 }
 
 #[test]
@@ -13606,8 +13554,14 @@ fn sidebar_history_discovery_excludes_gemini_but_allows_explicit_chat() {
         checked.push(id.to_owned());
         true
     });
-    // Pi is delegate-only (no ACP server), so sidebar history must not spawn it.
-    assert_eq!(ids, ["copilot", "claude", "codex", "opencode", "antigravity"]);
+    // Gemini remains excluded from sidebar history discovery, while all other
+    // known ACP-capable agents (including Pi via pi-acp adapter) are probed.
+    assert_eq!(
+        ids,
+        [
+            "copilot", "claude", "codex", "opencode", "antigravity", "pi"
+        ]
+    );
     assert_eq!(checked, ids);
 
     let allowed = allow_set(&["gemini"]);

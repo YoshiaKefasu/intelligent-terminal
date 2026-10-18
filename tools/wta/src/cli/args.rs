@@ -34,10 +34,6 @@ pub(crate) struct Cli {
     /// bare names but is fragile for adapter-style launches (`npx … claude-
     /// code-acp`) and full-path launches, so the host should always pass
     /// `--agent-id` explicitly.
-    ///
-    /// This id names the ACP default, so a delegate-only built-in (`pi`) is
-    /// not a valid value: the master replaces it — and a bare `--agent pi`
-    /// command line — with the built-in ACP default before the first spawn.
     #[arg(long)]
     pub(crate) agent_id: Option<String>,
 

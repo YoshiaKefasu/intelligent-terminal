@@ -207,10 +207,9 @@ not inspect WSL. An empty successful list means no matching native executables;
 nonzero exit with stderr means discovery is unknown/failed, not unavailable.
 `launch-agent` resolves the executable afresh on each launch. The existing
 `probe-host-agents` retains its separate ACP prerequisites and behavior. Its
-`agents` list reports availability for managed flows, not only ACP: a
-delegate-only CLI such as Pi stays listed because the Command Palette delegate
-list needs it, while ACP consumers intersect the list with their own ACP-only
-registry.
+`agents` list reports availability for managed flows: installed CLIs stay
+listed because the Command Palette delegate list needs them, while ACP
+consumers intersect the list with their own ACP-only registry.
 
 ### Sidebar Agent sessions
 

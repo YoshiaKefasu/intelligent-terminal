@@ -52,22 +52,24 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
     // ACP-capable agents. Either the CLI itself speaks the Agent Client
     // Protocol (copilot, gemini, opencode), or an npm-distributed adapter does
     // (claude via @agentclientprotocol/claude-agent-acp, codex via
-    // @agentclientprotocol/codex-acp), or a separate native server does (Antigravity).
-    // Only these agents can be hosted in an agent pane.
-    inline constexpr std::array<BuiltinAgent, 6> BuiltinAcpAgents{ {
+    // @agentclientprotocol/codex-acp, pi via pi-acp), or a separate native
+    // server does (Antigravity). Only these agents can be hosted in an agent
+    // pane.
+    inline constexpr std::array<BuiltinAgent, 7> BuiltinAcpAgents{ {
         { L"copilot", L"GitHub Copilot", ByokMode::CopilotProviderEnvironment },
         { L"claude", L"Claude", ByokMode::Unsupported },
         { L"codex", L"Codex", ByokMode::Unsupported },
         { L"gemini", L"Gemini", ByokMode::Unsupported },
         { L"opencode", L"OpenCode", ByokMode::OpenCodeConfigContent },
         { L"antigravity", L"Google Antigravity", ByokMode::Unsupported, true, L"agy" },
+        // ACP via the pi-acp adapter; no session hooks yet.
+        { L"pi", L"Pi", ByokMode::Unsupported, false, L"pi", true },
     } };
 
     // Delegate agents. Invoked for `?<prompt>` background delegation and
     // similar flows. The set is broader than ACP because delegation doesn't
     // require an ACP-speaking agent — any CLI agent that accepts a prompt
-    // as input works. Pi participates here and in native profiles; its CLI
-    // does not speak ACP yet, so it stays out of the agent-pane list.
+    // as input works.
     inline constexpr std::array<BuiltinAgent, 7> BuiltinDelegateAgents{ {
         { L"copilot", L"GitHub Copilot", ByokMode::CopilotProviderEnvironment },
         { L"claude", L"Claude", ByokMode::Unsupported },
@@ -167,9 +169,9 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
     }
 
     // Whether the id is a built-in agent that can be hosted in an agent pane.
-    // Delegate-only builtins (Pi) do not speak ACP; EffectiveAcpAgent uses this
-    // to reject a hand-edited `acpAgent` value instead of launching the raw CLI
-    // as an ACP server.
+    // EffectiveAcpAgent uses this to reject a hand-edited selection that names
+    // a builtin without ACP support, instead of launching its raw CLI as an
+    // ACP server.
     inline constexpr bool SupportsAcp(const std::wstring_view agentId) noexcept
     {
         for (const auto& agent : BuiltinAcpAgents)

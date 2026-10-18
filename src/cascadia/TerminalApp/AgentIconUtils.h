@@ -9,9 +9,9 @@ namespace Microsoft::Terminal::UI::AgentIcons
 {
     inline winrt::hstring IconPathForProvider(const std::wstring_view providerId)
     {
-        // IconAssetId resolves through the built-in registries so
-        // delegate-only natives (Pi) map to their own artwork; unknown and
-        // custom ids share the generic fallback.
+        // IconAssetId resolves through the built-in registries so builtin
+        // natives (e.g. Pi) map to their own artwork; unknown and custom ids
+        // share the generic fallback.
         const auto assetId = ::Microsoft::Terminal::Settings::Model::AgentRegistry::IconAssetId(providerId);
         if (!assetId.empty())
         {

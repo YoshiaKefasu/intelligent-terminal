@@ -610,10 +610,9 @@ winrt::hstring GlobalAppSettings::EffectiveAcpAgent() const
     {
         return winrt::hstring{};
     }
-    // A known id that is not ACP-capable (a hand-edited delegate-only
-    // selection such as pi) must not be launched as an ACP server; treat it
-    // as unset so consumers fall back to detection instead of starting the
-    // raw CLI without an ACP handshake.
+    // A builtin without ACP support must not be launched as an ACP server
+    // from a hand-edited value; treat it as unset so consumers fall back to
+    // detection instead of starting the raw CLI without an ACP handshake.
     if (AgentRegistry::SupportsDelegate(std::wstring_view{ agent }) &&
         !AgentRegistry::SupportsAcp(std::wstring_view{ agent }))
     {

@@ -87,7 +87,7 @@ namespace SettingsModelUnitTests
         TEST_METHOD(EffectiveAcpAgentBuiltInBlockedWhenMissingFromAllowlist);
         TEST_METHOD(EffectiveAcpAgentBuiltInMatchIsCaseInsensitive);
         TEST_METHOD(EffectiveAcpAgentBuiltInBlockedByEmptyAllowlist);
-        TEST_METHOD(EffectiveAcpAgentDelegateOnlyBuiltinRejected);
+        TEST_METHOD(EffectiveAcpAgentAcpCapableBuiltinPasses);
         TEST_METHOD(EffectiveAcpAgentCustomPassesWhenNoCustomPolicy);
         TEST_METHOD(EffectiveAcpAgentCustomBlockedByCustomPolicy);
         TEST_METHOD(EffectiveAcpAgentCustomIgnoresAllowedAgentsAllowlist);
@@ -616,12 +616,13 @@ namespace SettingsModelUnitTests
     {
         namespace Registry = ::Microsoft::Terminal::Settings::Model::AgentRegistry;
         VERIFY_ARE_EQUAL(size_t{ 7 }, Registry::BuiltinNativeProfileAgents.size());
-        // Pi is delegate/native-profile only: its CLI does not speak ACP yet
-        // and it exposes no session hooks. Its icon asset is packaged.
-        VERIFY_IS_FALSE(std::ranges::any_of(Registry::BuiltinAcpAgents, [](const auto& agent) { return agent.id == L"pi"; }));
+        // Pi hosts ACP through the pi-acp adapter; it exposes no session
+        // hooks and its icon asset is packaged.
         const auto piFlags = [](const auto& agent) { return agent.id == L"pi" && !agent.supportsSessionHooks && agent.hasIconAsset; };
+        VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinAcpAgents, piFlags));
         VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinDelegateAgents, piFlags));
         VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinNativeProfileAgents, piFlags));
+        VERIFY_IS_TRUE(Registry::SupportsAcp(L"pi"));
         VERIFY_IS_TRUE(Registry::SupportsNativeProfile(L"pi"));
         VERIFY_IS_FALSE(Registry::SupportsSessionHooks(L"pi"));
         VERIFY_IS_TRUE(Registry::HasIconAsset(L"pi"));
@@ -901,16 +902,15 @@ namespace SettingsModelUnitTests
         VERIFY_ARE_EQUAL(winrt::hstring{}, settings->GlobalSettings().EffectiveAcpAgent());
     }
 
-    void CustomAgentAndPolicyTests::EffectiveAcpAgentDelegateOnlyBuiltinRejected()
+    void CustomAgentAndPolicyTests::EffectiveAcpAgentAcpCapableBuiltinPasses()
     {
-        // A hand-edited delegate-only builtin must not become an ACP
-        // selection: pi does not speak ACP, so EffectiveAcpAgent collapses it
-        // to empty and consumers fall back instead of launching raw `pi` as
-        // an ACP server.
+        // Pi hosts ACP through the pi-acp adapter, so the non-ACP rejection in
+        // EffectiveAcpAgent (which guards a hand-edited builtin without ACP
+        // support) must not collapse it: it stays a valid ACP selection.
         const auto settings = MakeSettings(R"("acpAgent": "pi", "delegateAgent": "pi")");
         SetPolicy(MakePolicy());
-        VERIFY_ARE_EQUAL(winrt::hstring{}, settings->GlobalSettings().EffectiveAcpAgent());
-        // The same builtin stays valid as a delegate selection.
+        VERIFY_ARE_EQUAL(winrt::hstring{ L"pi" }, settings->GlobalSettings().EffectiveAcpAgent());
+        // The same builtin remains a valid delegate selection.
         VERIFY_ARE_EQUAL(winrt::hstring{ L"pi" }, settings->GlobalSettings().EffectiveDelegateAgent());
     }
 

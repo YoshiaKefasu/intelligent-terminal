@@ -411,7 +411,7 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
             Registry::FilteredAcpAgents());
         // Delegate agents are judged by their own CLI, not by the host probe's
         // ACP readiness, so the per-profile list matches the global AI Agents
-        // page instead of dropping delegate-only agents such as Pi.
+        // page instead of dropping installed delegate CLIs.
         const auto allowedDelegateAgents = Registry::FilteredDelegateAgents();
         _RebuildAgentBackendList(
             _commandPaletteAgentList,

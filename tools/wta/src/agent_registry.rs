@@ -315,13 +315,12 @@ pub const KNOWN_AGENTS: &[AgentProfile] = &[
         cli_executable: "pi",
         exe_search_order: &[".cmd", ".exe"],
         acp_flags: &[],
-        acp_launch_command: "",
+        acp_launch_command: "npx -y pi-acp@0.0.34",
         wsl_acp_launch_command: "",
         acp_companion_executable: None,
         wsl_acp_companion_executable: None,
-        // Pi does not speak ACP yet: no ACP server mode, no ACP model flags.
         acp_model_flags: &[],
-        acp_auth_flow: AcpAuthFlow::None,
+        acp_auth_flow: AcpAuthFlow::External,
         byok_mode: ByokMode::Unsupported,
         delegate_prompt_flag: PromptFlag::Positional,
         delegate_supported: true,
@@ -332,8 +331,8 @@ pub const KNOWN_AGENTS: &[AgentProfile] = &[
         auth_check_command: "",
         auth_hint: "Run 'pi' to configure credentials or providers.",
         resume_flag: "--session",
-        // No ACP session can exist for a delegate-only agent, so nothing is
-        // resumable through the CLI on the ACP side.
+        // Pi ACP sessions live in their own store; the CLI's `--session`
+        // resume cannot load conversations created through ACP.
         cli_can_resume_acp_sessions: false,
         new_session_id_flag: Some("--session-id"),
     },
@@ -414,6 +413,7 @@ const ACP_LAUNCH_COMMAND_ALIASES: &[(&str, &str)] = &[
     ),
     ("npx -y @agentclientprotocol/codex-acp", CODEX_AGENT_ID),
     ("npx -y @zed-industries/codex-acp", CODEX_AGENT_ID),
+    ("npx -y pi-acp", PI_AGENT_ID),
 ];
 
 fn adapter_profile_from_tokens(tokens: &[String]) -> Option<&'static AgentProfile> {
@@ -791,6 +791,14 @@ mod tests {
             resolve_agent_id_from_cmd("npx -y @zed-industries/codex-acp"),
             "codex",
         );
+        assert_eq!(
+            resolve_agent_id_from_cmd("npx -y pi-acp@0.0.34"),
+            "pi",
+        );
+        assert_eq!(
+            resolve_agent_id_from_cmd("npx -y pi-acp"),
+            "pi",
+        );
         // Adapter prefix with extra trailing args still resolves.
         assert_eq!(
             resolve_agent_id_from_cmd(
@@ -801,6 +809,14 @@ mod tests {
         assert_eq!(
             resolve_agent_id_from_cmd("npx -y @zed-industries/codex-acp --debug"),
             "codex",
+        );
+        assert_eq!(
+            resolve_agent_id_from_cmd("npx -y pi-acp@0.0.34 --debug"),
+            "pi",
+        );
+        assert_eq!(
+            resolve_agent_id_from_cmd("npx -y pi-acp --debug"),
+            "pi",
         );
     }
 
@@ -1018,18 +1034,18 @@ mod tests {
     }
 
     #[test]
-    fn only_delegate_only_profiles_declare_no_acp_support() {
-        // Every shipped agent except Pi provides an ACP entry point. Pi is the
-        // first delegate-only built-in, so it must stay excluded from the ACP
-        // agent lists (picker, history discovery, probes).
+    fn all_known_agents_declare_acp_support() {
+        // Every shipped agent CLI now provides an ACP entry point (native or
+        // via adapter). Custom/unknown fallbacks (DEFAULT_PROFILE) declare
+        // AcpAuthFlow::None and remain delegate-only.
         for profile in KNOWN_AGENTS {
-            assert_eq!(
+            assert!(
                 profile.supports_acp(),
-                profile.id != PI_AGENT_ID,
-                "{} ACP capability drifted",
+                "{} must declare ACP support",
                 profile.id
             );
         }
+        assert!(!DEFAULT_PROFILE.supports_acp());
     }
 
     #[test]
@@ -1055,9 +1071,9 @@ mod tests {
         assert_eq!(profile.cli_executable, "pi");
         assert_eq!(profile.exe_search_order, &[".cmd", ".exe"]);
         assert!(profile.acp_flags.is_empty());
-        // ACP is not implemented yet: no ACP model flags, no ACP auth flow.
+        assert_eq!(profile.acp_launch_command, "npx -y pi-acp@0.0.34");
         assert!(profile.acp_model_flags.is_empty());
-        assert_eq!(profile.acp_auth_flow, AcpAuthFlow::None);
+        assert_eq!(profile.acp_auth_flow, AcpAuthFlow::External);
         assert_eq!(profile.byok_mode, ByokMode::Unsupported);
         assert_eq!(profile.delegate_prompt_flag, PromptFlag::Positional);
         assert!(profile.delegate_supported);
@@ -1066,20 +1082,28 @@ mod tests {
         assert_eq!(profile.resume_flag, "--session");
         assert!(!profile.cli_can_resume_acp_sessions);
         assert_eq!(profile.new_session_id_flag, Some("--session-id"));
-        assert!(
-            !profile.supports_acp(),
-            "Pi is delegate-only: ACP callers must not list or spawn it"
-        );
-        assert!(lookup_profile_by_id("copilot").supports_acp());
+        assert!(profile.supports_acp());
 
         assert_eq!(lookup_profile("pi").id, "pi");
         assert_eq!(lookup_profile(r"C:\Tools\pi.cmd").id, "pi");
         assert_eq!(lookup_profile("PI.EXE").id, "pi");
         assert_eq!(resolve_agent_id_from_cmd("pi --model mimo"), "pi");
-        // A delegate-only agent has no ACP launch, so the ACP command builder
-        // returns the bare CLI and drops the model argument.
-        assert_eq!(build_acp_command("pi", None), "pi");
-        assert_eq!(build_acp_command("pi", Some("mimo")), "pi");
+        assert_eq!(resolve_agent_id_from_cmd("npx -y pi-acp@0.0.34"), "pi");
+        assert_eq!(resolve_agent_id_from_cmd("npx -y pi-acp"), "pi");
+        // Pi ACP launches via adapter, so build_acp_command returns the adapter command.
+        assert_eq!(build_acp_command("pi", None), "npx -y pi-acp@0.0.34");
+        assert_eq!(
+            build_acp_command("pi", Some("mimo")),
+            "npx -y pi-acp@0.0.34"
+        );
+        assert_eq!(
+            strip_acp_flags_for_delegate("npx -y pi-acp@0.0.34"),
+            Some("pi".to_string())
+        );
+        assert_eq!(
+            strip_acp_flags_for_delegate("npx -y pi-acp"),
+            Some("pi".to_string())
+        );
         assert!(supported_delegate_agents().iter().any(|a| a.id == "pi"));
     }
 }
