@@ -20,7 +20,9 @@ mod coordinator;
 mod custom_model_provider;
 mod cwd_util;
 mod event;
+mod git_files;
 mod helper;
+mod herdr;
 #[cfg(test)]
 #[path = "hook_contract_tests.rs"]
 mod hook_contract_tests;
@@ -57,7 +59,7 @@ use clap::Parser;
 
 use cli::args::{Cli, Command, HooksAction, InitialView};
 #[cfg(test)]
-use cli::args::{HooksCliFilter, SessionsAction, SessionsOriginArg};
+use cli::args::{HerdrAction, HooksCliFilter, SessionsAction, SessionsOriginArg};
 
 include!(concat!(env!("OUT_DIR"), "/locale_codegen.rs"));
 

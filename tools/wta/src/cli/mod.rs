@@ -9,7 +9,7 @@ pub(crate) mod wt;
 
 use anyhow::Result;
 
-use args::{Command, HooksAction, SessionsAction};
+use args::{Command, FsAction, GitAction, GitSectionArg, HerdrAction, HooksAction, SessionsAction};
 
 async fn open_named_pipe(
     pipe_name: &str,
@@ -159,6 +159,29 @@ pub(crate) async fn run(command: Command, json_mode: bool) -> Result<()> {
                 )
                 .await
             }
+        },
+        Command::Herdr { action } => match action {
+            HerdrAction::Snapshot { socket, session } => {
+                crate::herdr::run_snapshot(socket, session.as_deref()).await
+            }
+        },
+        Command::Git { action } => match action {
+            GitAction::Status { path } => crate::git_files::run_status(path),
+            GitAction::Log { path, limit } => crate::git_files::run_log(path, limit),
+            GitAction::Diff {
+                path,
+                file,
+                from,
+                section,
+            } => crate::git_files::run_diff(
+                path,
+                &file,
+                from,
+                section.map(GitSectionArg::to_section),
+            ),
+        },
+        Command::Fs { action } => match action {
+            FsAction::Tree { path, depth } => crate::git_files::run_tree(path, depth),
         },
         Command::Hooks { action } => match action {
             HooksAction::Install { cli, force } => hooks::run_install(cli, force, json_mode),

@@ -460,6 +460,57 @@ a specific window's tab; an explicit `-t` without `-w` queries across windows.
 For pane-targeting commands such as `capture-pane` and `kill-pane`, omitting `-t`
 uses the active pane automatically.
 
+### Herdr session snapshot
+
+Read a running herdr server's session snapshot — the folder of the pane it has
+focused, and its agents — over herdr's named pipe. Useful for agents and
+scripts that need to know where the human is working.
+
+```bash
+wta herdr snapshot                    # %APPDATA%\herdr\herdr.sock, or HERDR_SOCKET_PATH
+wta herdr snapshot --session work     # a named session
+wta herdr snapshot --socket C:\D\herdr.sock
+```
+
+Output is a JSON `SessionSnapshot` (`focused_pane_id`, `panes`, `agents`). When
+herdr is not running the command prints a note on stderr, nothing on stdout,
+and exits 0 — a missing server is not an error.
+
+Socket resolution matches herdr's own client: `--session`, then
+`HERDR_SOCKET_PATH`, then `HERDR_SESSION`, then `%APPDATA%\herdr\herdr.sock`
+(`XDG_CONFIG_HOME\herdr` when set). Herdr names its pipe after the socket path
+as written, so the pipe is `\\.\pipe\<socket path>`.
+
+### Git state and the file tree
+
+Read the Git panel and Files panel data for a folder — the changed files, the
+commit list, one file's diff, and the folder tree with its Git marks. Ported
+from ELYTerminal's `src/git.rs`, `src/git/diff.rs` and `src/files.rs`.
+
+```bash
+wta git status --path .                          # branch, HEAD, changed files
+wta git log --path . --limit 20                   # newest commits from HEAD
+wta git diff --path . --file src/main.rs          # one changed file's hunks
+wta git diff --path . --file a.txt --section staged
+wta fs tree --path . --depth 2                    # folder tree with Git marks
+```
+
+`git status` prints a `RepoChanges` object (`top`, `branch`, `commit`, and the
+`conflicted` / `staged` / `unstaged` / `untracked` lists), or `null` outside a
+Git work tree. `git log` prints `null` outside a work tree and an empty list
+before the first commit. `git diff` prints `top`, `path`, an optional `from`
+for a staged rename, the `section`, and `hunks` — `null` for a binary file, and
+an empty list for a rename that changes no line. Without `--section` the
+section that holds the file is chosen, staged first, as the panel groups it.
+
+`--file` is read relative to the work tree's top or to `--path`. `--path`
+defaults to the current folder, and `--depth` defaults to 1 so a tree of a large
+repository stays small.
+
+Git runs with English messages (`LC_ALL=C`), literal pathspecs
+(`--literal-pathspecs`), no optional locks (`--no-optional-locks`), and
+`CREATE_NO_WINDOW` on Windows, matching ELYTerminal's invocation.
+
 ### Protocol Discovery & Environment Setup
 
 WTA finds Windows Terminal via the `WT_COM_CLSID` environment variable, which

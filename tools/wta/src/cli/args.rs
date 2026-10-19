@@ -517,6 +517,25 @@ pub(crate) enum Command {
         #[arg(long)]
         agent: String,
     },
+    /// Read a running herdr server's session snapshot (focused pane folder and
+    /// agents) and print it as JSON. Prints nothing to stdout and exits 0 when
+    /// herdr is not running.
+    Herdr {
+        #[command(subcommand)]
+        action: HerdrAction,
+    },
+    /// Read Git state for a folder: its changed files, its commits, and one
+    /// file's diff. Ported from ELYTerminal's Git panel core.
+    Git {
+        #[command(subcommand)]
+        action: GitAction,
+    },
+    /// Read a folder's file tree with its Git marks. Ported from ELYTerminal's
+    /// Files panel core.
+    Fs {
+        #[command(subcommand)]
+        action: FsAction,
+    },
     /// Submit a typed terminal-action proposal directly to the Helper that
     /// owns the current turn. Intended to be run by an agent session using
     /// the exact canonical command injected into its prompt.
@@ -530,6 +549,98 @@ pub(crate) enum Command {
         #[arg(long)]
         payload_json: String,
     },
+}
+
+/// Subcommands for `wta herdr`.
+#[derive(Subcommand, Debug)]
+pub(crate) enum HerdrAction {
+    /// Print the session snapshot a running herdr server reports.
+    Snapshot {
+        /// Herdr socket path. Defaults to HERDR_SOCKET_PATH, then
+        /// %APPDATA%\herdr\herdr.sock.
+        #[arg(long, value_name = "PATH")]
+        socket: Option<std::path::PathBuf>,
+        /// Named herdr session; resolves under <herdr dir>\sessions\<NAME>.
+        #[arg(long, conflicts_with = "socket", value_name = "NAME")]
+        session: Option<String>,
+    },
+}
+
+/// Subcommands for `wta git`.
+#[derive(Subcommand, Debug)]
+pub(crate) enum GitAction {
+    /// Print the work tree's branch, HEAD commit and changed files (staged,
+    /// unstaged, untracked, conflicted). Prints `null` outside a work tree.
+    Status {
+        /// Folder to read. Defaults to the current folder.
+        #[arg(long, value_name = "DIR")]
+        path: Option<std::path::PathBuf>,
+    },
+    /// Print the newest commits from HEAD as JSON. Prints `null` outside a work
+    /// tree, and an empty list before the first commit.
+    Log {
+        /// Folder to read. Defaults to the current folder.
+        #[arg(long, value_name = "DIR")]
+        path: Option<std::path::PathBuf>,
+        /// How many commits to list.
+        #[arg(long, value_name = "N", default_value_t = 20)]
+        limit: usize,
+    },
+    /// Print one changed file's diff as hunks of lines. A binary file prints
+    /// `"hunks": null`.
+    Diff {
+        /// Folder to read. Defaults to the current folder.
+        #[arg(long, value_name = "DIR")]
+        path: Option<std::path::PathBuf>,
+        /// The changed file, relative to the work tree's top or to `--path`.
+        #[arg(long, value_name = "FILE")]
+        file: std::path::PathBuf,
+        /// A staged rename's old path.
+        #[arg(long, value_name = "FILE")]
+        from: Option<std::path::PathBuf>,
+        /// Which side of the change to read. Defaults to the section that
+        /// holds the file.
+        #[arg(long, value_enum)]
+        section: Option<GitSectionArg>,
+    },
+}
+
+/// Subcommands for `wta fs`.
+#[derive(Subcommand, Debug)]
+pub(crate) enum FsAction {
+    /// Print a folder's entries as a tree, each with its Git mark.
+    Tree {
+        /// Folder to read. Defaults to the current folder.
+        #[arg(long, value_name = "DIR")]
+        path: Option<std::path::PathBuf>,
+        /// How many folder levels to read below `--path`. 0 lists the top
+        /// level only.
+        #[arg(long, value_name = "N", default_value_t = 1)]
+        depth: usize,
+    },
+}
+
+/// CLI value for `wta git diff --section`. Mirrors
+/// [`crate::git_files::ChangeSection`] but lives in `cli::args` so the clap
+/// derive can attach `ValueEnum` without polluting the runtime module with
+/// clap types.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GitSectionArg {
+    Staged,
+    Unstaged,
+    Untracked,
+    Conflicted,
+}
+
+impl GitSectionArg {
+    pub(crate) fn to_section(self) -> crate::git_files::ChangeSection {
+        match self {
+            GitSectionArg::Staged => crate::git_files::ChangeSection::Staged,
+            GitSectionArg::Unstaged => crate::git_files::ChangeSection::Unstaged,
+            GitSectionArg::Untracked => crate::git_files::ChangeSection::Untracked,
+            GitSectionArg::Conflicted => crate::git_files::ChangeSection::Conflicted,
+        }
+    }
 }
 
 /// Subcommands for `wta sessions`.

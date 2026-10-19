@@ -724,3 +724,54 @@ fn propose_terminal_actions_cli_requires_channel_and_payload() {
 // `wta delegate`'s own launch checks (explicit `--delegate-source`, never
 // auto-routed) are covered by the module-private tests in `cli/delegate.rs`,
 // alongside its `parse_delegate_source` / `select_wsl_delegate_cwd` coverage.
+
+#[test]
+fn herdr_snapshot_cli_parses_socket_and_session() {
+    let cli = Cli::try_parse_from(["wta", "herdr", "snapshot"]).expect("herdr snapshot");
+    match cli.command {
+        Some(Command::Herdr {
+            action: HerdrAction::Snapshot { socket, session },
+        }) => {
+            assert_eq!(socket, None);
+            assert_eq!(session, None);
+        }
+        other => panic!("expected herdr snapshot, got {other:?}"),
+    }
+
+    let cli = Cli::try_parse_from(["wta", "herdr", "snapshot", "--session", "work"])
+        .expect("a named session");
+    match cli.command {
+        Some(Command::Herdr {
+            action: HerdrAction::Snapshot { socket, session },
+        }) => {
+            assert_eq!(socket, None);
+            assert_eq!(session.as_deref(), Some("work"));
+        }
+        other => panic!("expected herdr snapshot, got {other:?}"),
+    }
+
+    let cli = Cli::try_parse_from(["wta", "herdr", "snapshot", "--socket", r"C:\D\herdr.sock"])
+        .expect("an explicit socket");
+    match cli.command {
+        Some(Command::Herdr {
+            action: HerdrAction::Snapshot { socket, session },
+        }) => {
+            assert_eq!(socket, Some(std::path::PathBuf::from(r"C:\D\herdr.sock")));
+            assert_eq!(session, None);
+        }
+        other => panic!("expected herdr snapshot, got {other:?}"),
+    }
+
+    // One socket is one server: naming both a path and a session is ambiguous.
+    Cli::try_parse_from([
+        "wta",
+        "herdr",
+        "snapshot",
+        "--socket",
+        r"C:\D\herdr.sock",
+        "--session",
+        "work",
+    ])
+    .expect_err("--socket and --session conflict");
+    Cli::try_parse_from(["wta", "herdr"]).expect_err("an action is required");
+}
