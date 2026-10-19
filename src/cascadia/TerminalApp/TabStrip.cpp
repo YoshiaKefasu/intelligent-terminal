@@ -819,7 +819,7 @@ namespace winrt::TerminalApp::implementation
                                     RS_(L"VerticalTabsFilterStatusSingle") :
                                     winrt::hstring{ RS_fmt(L"VerticalTabsFilterStatusPlural", visibleTabCount) });
         HiddenCurrentTabIndicator().Visibility(selectedTabVisible ? Visibility::Collapsed : Visibility::Visible);
-        FilterStatusBar().Visibility(_sidebarFilters.AgentsOnlyEffective() ?
+        FilterStatusBar().Visibility(_isVerticalPresentation && _sidebarFilters.AgentsOnlyEffective() ?
                                          Visibility::Visible :
                                          Visibility::Collapsed);
     }
@@ -1473,7 +1473,7 @@ namespace winrt::TerminalApp::implementation
         if (_tabsVisible != value)
         {
             _tabsVisible = value;
-            const auto historyVisible = _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
+            const auto historyVisible = _isVerticalPresentation && _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
             ItemsList().Visibility(value || historyVisible ? Visibility::Visible : Visibility::Collapsed);
         }
     }
@@ -1927,6 +1927,63 @@ namespace winrt::TerminalApp::implementation
         _displayItems.RemoveAt(from);
         _displayItems.InsertAt(to, display);
         _syncViewportItems();
+    }
+
+    // Horizontal layout: the MUX TabView keeps the canonical collection and
+    // the rail renders the same tabs beside it. The rail's ListView is bound
+    // to display descriptors, so it never parents the TabViewItems.
+    void TabStrip::MirrorTabItems(winrt::Windows::Foundation::Collections::IVector<IInspectable> const& items)
+    {
+        const auto sourceSize = items ? items.Size() : 0u;
+        // Selection changes call this on every switch; skip the rebuild when the
+        // rail already holds exactly these items in this order.
+        if (sourceSize == _tabItems.Size())
+        {
+            bool identical = true;
+            for (uint32_t index = 0; index < sourceSize; ++index)
+            {
+                if (winrt::get_abi(items.GetAt(index)) != winrt::get_abi(_tabItems.GetAt(index)))
+                {
+                    identical = false;
+                    break;
+                }
+            }
+            if (identical)
+            {
+                return;
+            }
+        }
+
+        const auto previousSelection = SelectedItem();
+        std::vector<IInspectable> mirrored;
+        mirrored.reserve(sourceSize);
+        for (uint32_t index = 0; index < sourceSize; ++index)
+        {
+            mirrored.emplace_back(items.GetAt(index));
+        }
+        _tabItems.ReplaceAll(mirrored);
+        _syncDisplayItems();
+        SelectedItem(previousSelection);
+    }
+
+    void TabStrip::SyncSelectedTabItem(MUX::Controls::TabViewItem const& item)
+    {
+        uint32_t index{};
+        if (!item || !_tabItems.IndexOf(item, index))
+        {
+            return;
+        }
+
+        _syncingHostSelection = true;
+        const auto endSync = wil::scope_exit([&]() noexcept {
+            _syncingHostSelection = false;
+        });
+        SelectedItem(item);
+    }
+
+    void TabStrip::RefreshRailChrome()
+    {
+        _applyRailState();
     }
 
     void TabStrip::SetVerticalPresentation(const bool vertical)
@@ -2415,10 +2472,14 @@ namespace winrt::TerminalApp::implementation
         VerticalTabsHeader().Visibility(expandedVisibility);
         SearchTabsButton().IsHitTestVisible(true);
         SearchTabsButton().IsEnabled(_projectionControlsEnabled);
-        FilterTabsButton().Visibility(_richTabMetadataControlsVisible ? expandedVisibility : Visibility::Collapsed);
-        FilterTabsButton().IsHitTestVisible(!_isRailCollapsed);
-        FilterTabsButton().IsEnabled(_projectionControlsEnabled && !_isRailCollapsed);
-        FilterStatusBar().IsHitTestVisible(!_isRailCollapsed);
+        // Search and filter are sidebar (vertical) projection controls. The
+        // horizontal side rail is a plain tab browser, so hide them there
+        // instead of leaving buttons that cannot filter anything.
+        SearchTabsButton().Visibility(_isVerticalPresentation ? Visibility::Visible : Visibility::Collapsed);
+        FilterTabsButton().Visibility(_isVerticalPresentation && _richTabMetadataControlsVisible ? expandedVisibility : Visibility::Collapsed);
+        FilterTabsButton().IsHitTestVisible(_isVerticalPresentation && !_isRailCollapsed);
+        FilterTabsButton().IsEnabled(_projectionControlsEnabled && _isVerticalPresentation && !_isRailCollapsed);
+        FilterStatusBar().IsHitTestVisible(_isVerticalPresentation && !_isRailCollapsed);
         ItemsList().AllowDrop(ItemsList().CanDragItems() && !_isRailCollapsed);
         TabsToolbar().Padding(_isRailCollapsed ? WUX::Thickness{} : WUX::Thickness{ 12, 0, 8, 0 });
         WUX::Controls::Grid::SetColumn(SearchTabsButton(), _isRailCollapsed ? 0 : 1);
@@ -2629,7 +2690,7 @@ namespace winrt::TerminalApp::implementation
         SearchTabsButton().IsChecked(_searchActive);
         _syncingSearchState = false;
 
-        const auto expanded = _searchActive && !_isRailCollapsed;
+        const auto expanded = _searchActive && !_isRailCollapsed && _isVerticalPresentation;
         _setSearchPanelExpanded(expanded, _searchAnimationEnabled && !_isRailCollapsed);
     }
 
@@ -2836,7 +2897,7 @@ namespace winrt::TerminalApp::implementation
 
     void TabStrip::_updateHistoryVisualState()
     {
-        const auto visible = _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
+        const auto visible = _isVerticalPresentation && _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
         const auto expanded = _historyExpanded || _sidebarFilters.HasSearchQuery();
         const auto section = HistorySection();
         if (section)
@@ -2850,7 +2911,7 @@ namespace winrt::TerminalApp::implementation
         WUX::Automation::AutomationProperties::SetName(FilterTabsButton(), detailsLabel);
         WUX::Automation::AutomationProperties::SetHelpText(FilterTabsButton(), detailsLabel);
         ItemsList().Visibility(visible || _tabsVisible ? Visibility::Visible : Visibility::Collapsed);
-        FilterStatusBar().Visibility(_sidebarFilters.AgentsOnlyEffective() ?
+        FilterStatusBar().Visibility(_isVerticalPresentation && _sidebarFilters.AgentsOnlyEffective() ?
                                          Visibility::Visible :
                                          Visibility::Collapsed);
         ItemsList().IsItemClickEnabled(visible && !_historyActivating && !_historyLoading);
@@ -2901,7 +2962,9 @@ namespace winrt::TerminalApp::implementation
 
     void TabStrip::_syncViewportItems()
     {
-        const auto combined = _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
+        // Recent agent sessions are a sidebar (vertical) projection; the
+        // horizontal side rail is a plain tab browser.
+        const auto combined = _isVerticalPresentation && _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
         const auto selection = SelectedItem();
         const auto previousSync = std::exchange(_syncingViewportSelection, true);
         const auto endSync = wil::scope_exit([&]() noexcept { _syncingViewportSelection = previousSync; });
@@ -3371,6 +3434,30 @@ namespace winrt::TerminalApp::implementation
         {
             return;
         }
+        if (_syncingHostSelection)
+        {
+            // The host mirrored its own selection into the rail. Update the
+            // row visuals only; the host already owns the canonical state.
+            for (const auto& removed : e.RemovedItems())
+            {
+                if (const auto display = removed.try_as<TerminalApp::TabStripDisplayItem>())
+                {
+                    display.SelectionVisibility(Visibility::Collapsed);
+                    _updatePaneSelection(display, false);
+                    _refreshDisplayItemVisuals(display);
+                }
+            }
+            for (const auto& added : e.AddedItems())
+            {
+                if (const auto display = added.try_as<TerminalApp::TabStripDisplayItem>())
+                {
+                    display.SelectionVisibility(Visibility::Visible);
+                    _updatePaneSelection(display, true);
+                    _refreshDisplayItemVisuals(display);
+                }
+            }
+            return;
+        }
         if (e.AddedItems().Size() && !_tabFromItem(e.AddedItems().GetAt(0)))
         {
             // Focusing/resuming history must not change the canonical tab selection.
@@ -3381,11 +3468,17 @@ namespace winrt::TerminalApp::implementation
         }
         // Keep TabViewItem selection synchronized for close-button and
         // accessibility behavior. ListView renders the interaction states.
+        // In horizontal layout the TabView owns those items, so the page
+        // forwards the click instead of letting the rail write selection.
+        const auto ownsSelection = _isVerticalPresentation;
         for (const auto& removed : e.RemovedItems())
         {
-            if (auto item = _tabFromItem(removed))
+            if (ownsSelection)
             {
-                item.IsSelected(false);
+                if (auto item = _tabFromItem(removed))
+                {
+                    item.IsSelected(false);
+                }
             }
             if (const auto display = removed.try_as<TerminalApp::TabStripDisplayItem>())
             {
@@ -3396,9 +3489,12 @@ namespace winrt::TerminalApp::implementation
         }
         for (const auto& added : e.AddedItems())
         {
-            if (auto item = _tabFromItem(added))
+            if (ownsSelection)
             {
-                item.IsSelected(true);
+                if (auto item = _tabFromItem(added))
+                {
+                    item.IsSelected(true);
+                }
             }
             if (const auto display = added.try_as<TerminalApp::TabStripDisplayItem>())
             {
@@ -3674,7 +3770,7 @@ namespace winrt::TerminalApp::implementation
                 const auto item = _tabItems.GetAt(sourceIndex);
                 _tabItems.RemoveAt(sourceIndex);
                 _tabItems.InsertAt(*destinationIndex, item);
-                if (_sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed)
+                if (_isVerticalPresentation && _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed)
                 {
                     const auto display = _displayItems.GetAt(sourceIndex);
                     _displayItems.RemoveAt(sourceIndex);

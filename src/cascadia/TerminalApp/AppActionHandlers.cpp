@@ -718,6 +718,11 @@ namespace winrt::TerminalApp::implementation
         {
             _ToggleSidebarHotkey();
         }
+        else if (!_isVerticalLayout)
+        {
+            // Horizontal layout: the palette command shows or hides the rail.
+            _SetHorizontalRailVisible(!_horizontalRailVisible);
+        }
         else
         {
             _OnVerticalRailCollapseRequested(nullptr, nullptr);
@@ -1763,38 +1768,10 @@ namespace winrt::TerminalApp::implementation
     void TerminalPage::_HandleOpenAgentPane(const IInspectable& /*sender*/,
                                             const ActionEventArgs& args)
     {
-        OutputDebugStringW(L"[AgentPane] _HandleOpenAgentPane called\n");
-        const auto activeTabPre = _GetFocusedTabImpl();
-        const auto agentPanePre = activeTabPre ? activeTabPre->FindAgentPane() : nullptr;
-        const bool stashedPre = agentPanePre && agentPanePre->IsHidden();
-        _agentPaneLog(std::string{ "_HandleOpenAgentPane fired hasPane=" } + (agentPanePre ? "yes" : "no") + " stashed=" + (stashedPre ? "yes" : "no"));
-
-        // Per-tab. Three cases (in priority order):
-        //   * Pane stashed (hidden) → fall through to _OpenOrReuseAgentPane
-        //     which unstashes via wta. Don't switch view here — restore in
-        //     whatever view it had when hidden.
-        //   * Pane visible, sessions view → switch to chat view.
-        //   * Pane visible, chat view OR no pane → fall through.
-        const auto activeTab = _GetFocusedTabImpl();
-        if (activeTab)
-        {
-            const auto agentPane = activeTab->FindAgentPane();
-            const bool isStashed = agentPane && agentPane->IsHidden();
-            if (!isStashed)
-            {
-                if (const auto agentContent = activeTab->FindAgentPaneContent())
-                {
-                    if (agentContent.IsSessionsView())
-                    {
-                        _RequestAgentStateForTab(activeTab, "chat", std::nullopt);
-                        args.Handled(true);
-                        return;
-                    }
-                }
-            }
-        }
-
-        _OpenOrReuseAgentPane(false, L"Action");
+        // DEBLOAT: the agent chat pane is retired. The open/toggle hotkey
+        // (Ctrl+Shift+.) and the command-palette entry are no-ops now.
+        // _OpenOrReuseAgentPane additionally blocks chat requests, so any
+        // user-bound keychord stays harmless too.
         args.Handled(true);
     }
 
@@ -1893,64 +1870,9 @@ namespace winrt::TerminalApp::implementation
     void TerminalPage::_HandleTriggerAutofix(const IInspectable& /*sender*/,
                                              const ActionEventArgs& args)
     {
-        // Per-tab: read autofix state from the active tab's AgentPaneContent.
-        const auto activeTab = _GetFocusedTabImpl();
-        if (!activeTab)
-        {
-            return;
-        }
-        const auto agentContent = activeTab->FindAgentPaneContent();
-        if (!agentContent)
-        {
-            return;
-        }
-        const auto impl = winrt::get_self<winrt::TerminalApp::implementation::AgentPaneContent>(agentContent);
-        if (!impl)
-        {
-            return;
-        }
-        using AS = winrt::TerminalApp::implementation::AgentPaneContent::AutofixState;
-        const auto state = impl->GetAutofixState();
-        // Open or focus the active tab's agent pane (shared by Detected and
-        // Review). Opening the pane dismisses Review, not Detected.
-        const auto openAgentPaneForReview = [&]() {
-            const auto agentPane = activeTab->FindAgentPane();
-            if (agentPane && !agentPane->IsHidden())
-            {
-                if (agentContent.IsSessionsView())
-                {
-                    _RequestAgentStateForTab(activeTab, "chat", std::nullopt);
-                }
-            }
-            else
-            {
-                _OpenOrReuseAgentPane(/*intoSessionsView*/ false, L"Autofix");
-            }
-        };
-        if (state == AS::Detected)
-        {
-            // "Ask the agent for a fix": open the pane, then fire the LLM.
-            openAgentPaneForReview();
-            Json::Value evt;
-            evt["type"] = "event";
-            evt["method"] = "autofix_execute_from_detected";
-            Json::Value params;
-            params["pane_id"] = winrt::to_string(impl->GetLastErrorPaneId());
-            params["tab_id"] = winrt::to_string(activeTab->StableId());
-            evt["params"] = params;
-            Json::StreamWriterBuilder wb;
-            wb["indentation"] = "";
-            ProtocolVtSequenceReceived.raise(
-                *this,
-                winrt::to_hstring(Json::writeString(wb, evt)));
-            args.Handled(true);
-        }
-        else if (state == AS::Review)
-        {
-            // Result is ready in the pane chat — just open it for review.
-            openAgentPaneForReview();
-            args.Handled(true);
-        }
+        // DEBLOAT: autofix surfaced its diagnosis/review in the agent chat
+        // pane, which is retired. The command is a no-op now.
+        args.Handled(true);
     }
 
     // Bundle WTA / Intelligent Terminal diagnostic logs into a timestamped zip on the

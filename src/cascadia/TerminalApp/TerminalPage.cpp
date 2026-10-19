@@ -547,6 +547,34 @@ namespace winrt::TerminalApp::implementation
         _tabStrip = this->VerticalTabStrip();
         _ApplySidebarFilterSettings();
         auto tabRowImpl = winrt::get_self<implementation::TabRowControl>(_tabRow);
+
+        // Tab-row toggles: the bottom bar's session toggle relocated next
+        // to the [+] button, plus the sidebar ("Show/Hide Git and Files")
+        // toggle which replaced the retired agent chat pane toggle.
+        // Bind the same handlers and labels so both copies behave identically.
+        if (const auto sessionToggle = tabRowImpl->SessionToggleTabRowButton())
+        {
+            sessionToggle.Click({ this, &TerminalPage::_SessionToggleButtonOnClick });
+            // Keep the XAML tooltip (label + Ctrl+Shift+/ shortcut) and just
+            // localize its label; SetToolTip would replace the whole content.
+            if (const auto sessionLabel = tabRowImpl->SessionToggleTabRowLabel())
+            {
+                sessionLabel.Text(sessionsLabel);
+            }
+            Automation::AutomationProperties::SetName(sessionToggle, sessionsLabel);
+        }
+        if (const auto sidebarToggle = tabRowImpl->SidebarToggleTabRowButton())
+        {
+            // Same path as the Ctrl+Shift+G hotkey and the vertical rail toggle.
+            sidebarToggle.Click([weakThis = get_weak()](auto&&, auto&&) {
+                if (const auto self = weakThis.get())
+                {
+                    self->_ToggleSidebarHotkey();
+                }
+            });
+            const auto sidebarLabel = L"Show/Hide Git and Files";
+            Automation::AutomationProperties::SetName(sidebarToggle, sidebarLabel);
+        }
         _rearranging = false;
         _hasTitlebarHost = _settings.GlobalSettings().ShowTabsInTitlebar();
 
@@ -1955,7 +1983,12 @@ namespace winrt::TerminalApp::implementation
         }
 
         const auto intoSessionsView = fields.view == ::Microsoft::Terminal::AgentPaneRestore::SessionsView;
-        const auto stashed = ::Microsoft::Terminal::AgentPaneRestore::StashedPaneType == std::wstring_view{ contentArgs.Type() };
+        // DEBLOAT: the agent chat pane is retired — a restored pane that was
+        // saved in (or defaults to) chat view comes back stashed (kept alive
+        // but hidden) instead of popping up on screen. Sessions-view restores
+        // stay visible as before.
+        const auto stashed = ::Microsoft::Terminal::AgentPaneRestore::StashedPaneType == std::wstring_view{ contentArgs.Type() } ||
+                             !intoSessionsView;
 
         // The saved split geometry is the pane's own, not the configured
         // default: the user may have dragged the splitter, or moved this one
@@ -3159,9 +3192,13 @@ namespace winrt::TerminalApp::implementation
         }
 
         _TeardownAgentPane(tab);
+        // DEBLOAT: the agent chat pane is retired, so a recreated pane always
+        // comes back in sessions view. Passing false here would spawn a
+        // visible chat pane and bypass the chat block in
+        // _OpenOrReuseAgentPane.
         _AutoCreateHiddenAgentPaneShared(
             tab,
-            /*intoSessionsView*/ false,
+            /*intoSessionsView*/ true,
             options.autoStash,
             {},
             {},
@@ -4694,38 +4731,18 @@ namespace winrt::TerminalApp::implementation
     //   - AgentPaneContent::StateChanged when the firing pane is the active tab
     //   - pane creation/teardown
     //
-    // The bottom bar is hidden on non-terminal tabs (Settings, etc.); for a
-    // terminal tab with no agent pane the bar shows the "open agent" affordance
-    // with diagnostics disabled.
-    // Visibility-only refresh — sets the bottom bar to Visible on
-    // terminal/agent tabs and Collapsed on Settings/etc. Factored out
-    // of `_UpdateBottomBarState` so `_UpdatedSelectedTab` can call it
-    // synchronously on tab switch without also recomputing the
-    // agent-state-dependent parts of the bar (toggle lit-state,
-    // diagnostics) from the local AgentPaneContent mirror — those
-    // remain owned by the wta-driven `OnAgentStateChanged` callback
-    // path so the bar always reflects authoritative state.
-    //
-    // Hiding the bar collapses it (lets TabContent / Grid.Row=2 fill
-    // the recovered space). The bar contains terminal-pane-oriented
-    // controls (agent toggle, diagnostics, sessions) that have no
-    // meaningful target on a non-terminal tab anyway.
+    // The toggles go dark on non-terminal tabs (Settings, etc.) and when
+    // the active tab has no agent pane.
+    // Visibility-only refresh — the bottom bar is RETIRED: it is forced
+    // Collapsed in every state so TabContent (Grid.Row=2) fills the window
+    // down to the bottom edge. Its two main toggles moved next to the tab
+    // row's [+] button (TabRowControl.xaml, wired in Create). The bar's
+    // XAML is kept, collapsed, so restoring it is a one-line change here.
     void TerminalPage::_UpdateBottomBarVisibility()
     {
-        const auto focusedTabImpl = _GetFocusedTabImpl();
-        bool isTerminalTab = true;
-        if (focusedTabImpl)
-        {
-            if (const auto content = focusedTabImpl->GetActiveContent())
-            {
-                const bool isTerm = content.try_as<TerminalApp::TerminalPaneContent>() != nullptr;
-                const bool isAgent = content.try_as<TerminalApp::AgentPaneContent>() != nullptr;
-                isTerminalTab = isTerm || isAgent;
-            }
-        }
         if (auto barRoot = BottomBarRoot())
         {
-            barRoot.Visibility(isTerminalTab ? Visibility::Visible : Visibility::Collapsed);
+            barRoot.Visibility(Visibility::Collapsed);
         }
     }
 
@@ -4748,8 +4765,27 @@ namespace winrt::TerminalApp::implementation
                 isTerminalTab = isTerm || isAgent;
             }
         }
+        // Lit-state brushes, defined before the early return below so the
+        // tab-row toggles can go dark there too.
+        const auto kLitOverlay = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
+            winrt::Windows::UI::ColorHelper::FromArgb(30, 255, 255, 255)
+        };
+        const auto kTransparent = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
+            winrt::Windows::UI::Colors::Transparent()
+        };
         if (!isTerminalTab)
         {
+            // The tab-row toggles are always-visible chrome (unlike the
+            // bottom bar, which hides entirely), so go dark here to keep
+            // them in sync with the hidden bar.
+            if (_tabRow)
+            {
+                const auto tabRowImpl = winrt::get_self<implementation::TabRowControl>(_tabRow);
+                if (const auto rowSessions = tabRowImpl->SessionToggleTabRowButton())
+                {
+                    rowSessions.Background(kTransparent);
+                }
+            }
             return;
         }
 
@@ -4764,12 +4800,6 @@ namespace winrt::TerminalApp::implementation
         }
 
         // Each toggle is highlighted only while its view is visible.
-        const auto kLitOverlay = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
-            winrt::Windows::UI::ColorHelper::FromArgb(30, 255, 255, 255)
-        };
-        const auto kTransparent = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
-            winrt::Windows::UI::Colors::Transparent()
-        };
         // "Pane open" for the bar means visible-and-in-tree. A stashed
         // (hidden) pane still exists in the tab tree (so its helper +
         // ACP session stay alive) but the bar should show "closed" so
@@ -4794,6 +4824,15 @@ namespace winrt::TerminalApp::implementation
         if (auto sessionsBtn = SessionToggleButton())
         {
             sessionsBtn.Background(sessionsView ? kLitOverlay : kTransparent);
+        }
+        // Mirror the lit state onto the tab-row toggles.
+        if (_tabRow)
+        {
+            const auto tabRowImpl = winrt::get_self<implementation::TabRowControl>(_tabRow);
+            if (const auto rowSessions = tabRowImpl->SessionToggleTabRowButton())
+            {
+                rowSessions.Background(sessionsView ? kLitOverlay : kTransparent);
+            }
         }
 
         // Swap the toggle icon to match the current pane position.
@@ -5519,6 +5558,17 @@ namespace winrt::TerminalApp::implementation
     {
         _agentPaneLog(std::string{ "_OpenOrReuseAgentPane called, intoSessionsView=" } + (intoSessionsView ? "true" : "false"));
 
+        // DEBLOAT: the agent chat pane is retired. Every chat-oriented
+        // request (toggle hotkey, bottom-bar toggle, autofix, FRE, settings
+        // reload, agent switch, focus) is blocked at the door so no UI path
+        // can open the pane in chat view. The sessions-view request path
+        // (SessionToggleTabRowButton / OpenAgentSessions) stays fully live.
+        if (!intoSessionsView)
+        {
+            _agentPaneLog(std::string{ "_OpenOrReuseAgentPane: chat blocked (pane retired), trigger=" } + winrt::to_string(winrt::hstring{ triggerSource }));
+            return;
+        }
+
         const auto emitAgentPaneOpened = [&]() {
 #if defined(WT_BRANDING_RELEASE)
             constexpr uint8_t branding = 3;
@@ -5902,6 +5952,9 @@ namespace winrt::TerminalApp::implementation
     {
         _CancelRailSplitterDrag();
         _SetVerticalRailColumnWidth(0);
+        // Layout only: the user's show/hide preference survives. Callers that
+        // retire the horizontal rail for good clear the preference themselves.
+        _horizontalRailShown = false;
 
         Grid::SetRow(_tabRow, 0);
         Grid::SetRowSpan(_tabRow, 1);
@@ -5925,6 +5978,98 @@ namespace winrt::TerminalApp::implementation
 
         _tabStrip.Visibility(Visibility::Collapsed);
         _tabRow.Visibility(Visibility::Visible);
+    }
+
+    // Horizontal layout keeps the tab row across the top and runs the rail
+    // beneath it on the leading edge, so the same sidebar toggle works in both
+    // layouts. Only the column assignment differs from the vertical reshape:
+    // the tab row keeps spanning both columns.
+    void TerminalPage::_ApplyHorizontalRailLayout()
+    {
+        const uint32_t railColumn = _isRightToLeft ? 1 : 0;
+        const uint32_t contentColumn = _isRightToLeft ? 0 : 1;
+
+        Grid::SetRow(_tabStrip, 1);
+        Grid::SetRowSpan(_tabStrip, 3);
+        Grid::SetColumn(_tabStrip, railColumn);
+        Grid::SetColumnSpan(_tabStrip, 1);
+
+        Grid::SetColumn(InfoBarsPanel(), contentColumn);
+        Grid::SetColumnSpan(InfoBarsPanel(), 1);
+
+        Grid::SetColumn(_tabContent, contentColumn);
+        Grid::SetColumnSpan(_tabContent, 1);
+
+        Grid::SetColumn(BottomBarRoot(), contentColumn);
+        Grid::SetColumnSpan(BottomBarRoot(), 1);
+
+        _SetVerticalRailColumnWidth(_verticalRailWidth);
+    }
+
+    void TerminalPage::_SetHorizontalRailVisible(const bool visible)
+    {
+        if (_isVerticalLayout || !_tabStrip)
+        {
+            return;
+        }
+
+        const auto changed = _horizontalRailVisible != visible;
+        _horizontalRailVisible = visible;
+
+        // The chrome conditions (focus mode, full screen) can hide the rail
+        // without forgetting the user's preference. Mirror the items before
+        // showing so the first frame already has rows.
+        if (changed && visible)
+        {
+            _SyncRailFromTabView();
+        }
+
+        const auto chromeAllows = !_isInFocusMode && (!_isFullscreen || _showTabsFullscreen);
+        _SetHorizontalRailShown(visible && chromeAllows);
+    }
+
+    void TerminalPage::_SetHorizontalRailShown(const bool shown)
+    {
+        if (_isVerticalLayout || !_tabStrip || _horizontalRailShown == shown)
+        {
+            return;
+        }
+        _horizontalRailShown = shown;
+
+        if (shown)
+        {
+            // The horizontal rail is a browsing surface: always expanded, at the
+            // persisted width. Collapsed-rail behaviour stays vertical-only.
+            _tabStrip.IsRailCollapsed(false);
+            _tabStrip.TabsVisible(true);
+            _ApplyHorizontalRailLayout();
+            _tabStrip.Visibility(Visibility::Visible);
+            winrt::get_self<implementation::TabStrip>(_tabStrip)->RefreshRailChrome();
+            _ApplyTabListProjection();
+        }
+        else
+        {
+            _ClearTabSearch();
+            _tabStrip.Visibility(Visibility::Collapsed);
+            _ApplyHorizontalLayoutReshape();
+        }
+    }
+
+    // Copies the canonical TabView collection and selection into the rail. The
+    // rail renders display descriptors, so this never reparents the tab items.
+    void TerminalPage::_SyncRailFromTabView()
+    {
+        if (!_tabStrip || _isVerticalLayout || !_tabView)
+        {
+            return;
+        }
+
+        const auto strip = winrt::get_self<implementation::TabStrip>(_tabStrip);
+        strip->MirrorTabItems(_tabView.TabItems());
+        if (const auto selected = _tabView.SelectedItem().try_as<MUX::Controls::TabViewItem>())
+        {
+            strip->SyncSelectedTabItem(selected);
+        }
     }
 
     void TerminalPage::_UpdateTabLayoutHost()
@@ -5967,7 +6112,12 @@ namespace winrt::TerminalApp::implementation
         }
         else if (_hasTitlebarHost)
         {
-            _tabStrip.Visibility(Visibility::Collapsed);
+            // The horizontal side rail keeps the strip visible; only a rail the
+            // user has not opened collapses it.
+            if (!_horizontalRailShown)
+            {
+                _tabStrip.Visibility(Visibility::Collapsed);
+            }
             if (tabRowInRoot)
             {
                 Root().Children().RemoveAt(rootIndex);
@@ -5976,7 +6126,10 @@ namespace winrt::TerminalApp::implementation
         }
         else if (!tabRowInRoot)
         {
-            _tabStrip.Visibility(Visibility::Collapsed);
+            if (!_horizontalRailShown)
+            {
+                _tabStrip.Visibility(Visibility::Collapsed);
+            }
             Root().Children().Append(_tabRow);
         }
     }
@@ -6069,6 +6222,11 @@ namespace winrt::TerminalApp::implementation
             }
             _DismissTabContextMenus();
             _CancelRailSplitterDrag();
+            // The horizontal side rail is a layout-specific surface: retire both
+            // its visibility and the remembered preference across a layout
+            // change so neither layout inherits the other's rail state.
+            _horizontalRailShown = false;
+            _horizontalRailVisible = false;
             _tabItemMiddleClickPointerEntered.revoke();
             _tabItemMiddleClickPointerExited.revoke();
             _tabItemMiddleClickPointerCaptureLost.revoke();
@@ -6561,7 +6719,16 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_ToggleSidebarHotkey()
     {
-        if (!_isVerticalLayout || !_isVerticalRailVisible)
+        // Horizontal layout: the rail sits beside the content under the tab
+        // row, and the toggle simply shows or hides it. No search focus is
+        // involved because the horizontal rail is a browsing surface here.
+        if (!_isVerticalLayout)
+        {
+            _SetHorizontalRailVisible(!_horizontalRailVisible);
+            return;
+        }
+
+        if (!_isVerticalRailVisible)
         {
             return;
         }
@@ -7965,61 +8132,12 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_CompletePendingFreAgentPaneVisibility()
     {
-        if (!_pendingFreEnsureAgentPaneVisible || _startupActionReplayDepth > 0)
-        {
-            return;
-        }
-
-        // Consume the visibility request before any pane operation can re-enter
-        // page state. The separate installation request is either reserved to
-        // this focused tab or expired below.
+        // DEBLOAT: the agent chat pane is retired — the FRE "make sure the
+        // agent pane is visible" request is consumed and dropped without
+        // opening anything (no unstash, no pane spawn, no auto-install).
         _pendingFreEnsureAgentPaneVisible = false;
-        const bool requestAutoInstall = std::exchange(_pendingFreAutoInstallCopilot, false);
+        _pendingFreAutoInstallCopilot = false;
         _freAutoInstallTargetTabId = {};
-
-        if (_tabs.Size() == 0)
-        {
-            CloseWindowRequested.raise(*this, nullptr);
-            return;
-        }
-
-        const auto focusedTab = _GetFocusedTabImpl();
-        if (!focusedTab)
-        {
-            return;
-        }
-
-        if (const auto existingPane = focusedTab->FindAgentPane())
-        {
-            if (existingPane->IsHidden())
-            {
-                const auto splitDirection = _AgentPanePositionToSplitDirection(
-                    focusedTab->EffectiveAgentPanePosition(_settings.GlobalSettings().AgentPanePosition()));
-                if (focusedTab->RestoreStashedAgentPane(splitDirection))
-                {
-                    _RequestAgentStateForTab(focusedTab, std::nullopt, /*pane_open*/ true);
-                    _UpdateBottomBarState();
-                }
-            }
-            return;
-        }
-
-        if (requestAutoInstall)
-        {
-            const auto binding = _ResolveAgentPaneSettingsBindingForTab(focusedTab);
-            if (binding.followsGlobalAgent &&
-                binding.agentId == L"copilot" &&
-                binding.agentSource == L"host")
-            {
-                _freAutoInstallTargetTabId = focusedTab->StableId();
-            }
-        }
-
-        _OpenOrReuseAgentPane(false, L"FirstRunExperience");
-        if (!_freAutoInstallTargetTabId.empty() && !focusedTab->FindAgentPane())
-        {
-            _freAutoInstallTargetTabId = {};
-        }
     }
 
     safe_void_coroutine TerminalPage::CreateTabFromConnection(ITerminalConnection connection)
@@ -12821,7 +12939,7 @@ namespace winrt::TerminalApp::implementation
                     page->_UpdateTitle(*tab);
                     page->_ApplyTabListProjection(*tab, false);
                 }
-                else if ((propertyName == L"Icon" || propertyName == L"ToolTip") && page->_isVerticalLayout)
+                else if ((propertyName == L"Icon" || propertyName == L"ToolTip") && (page->_isVerticalLayout || page->_horizontalRailShown))
                 {
                     const auto strip = winrt::get_self<TabStrip>(page->_tabStrip);
                     if (const auto display = strip->DisplayItemForTab(tab->TabViewItem()))
@@ -13707,7 +13825,7 @@ namespace winrt::TerminalApp::implementation
     {
         if (const auto tab{ _GetTabImpl(sender) })
         {
-            const auto tabStrip = _isVerticalLayout && _tabStrip ?
+            const auto tabStrip = (_isVerticalLayout || _horizontalRailShown) && _tabStrip ?
                                       winrt::get_self<implementation::TabStrip>(_tabStrip) :
                                       nullptr;
             const auto display = tabStrip ? tabStrip->DisplayItemForTab(tab->TabViewItem()) : nullptr;
@@ -13743,7 +13861,7 @@ namespace winrt::TerminalApp::implementation
         const winrt::com_ptr<Tab>& tab,
         const TerminalApp::TabStripDisplayItem& projectedDisplay)
     {
-        if (!_tabStrip || !_isVerticalLayout || !tab)
+        if (!_tabStrip || !(_isVerticalLayout || _horizontalRailShown) || !tab)
         {
             return;
         }
@@ -15333,7 +15451,7 @@ namespace winrt::TerminalApp::implementation
     // Both wrappers unpack the TabViewItem and dispatch to the shared core.
     void TerminalPage::_OnTabStripCloseRequested(const IInspectable& sender, const TerminalApp::TabStripCloseRequestedEventArgs& eventArgs)
     {
-        if (_changingTabLayout || !_IsActiveTabControl(sender))
+        if (_changingTabLayout || !_IsRailInteractionSender(sender))
         {
             return;
         }

@@ -352,6 +352,12 @@ namespace winrt::TerminalApp::implementation
         bool _tabLayoutTransitionPreviousVertical{ false };
         bool _isVerticalRailVisible{ true };
         bool _isVerticalRailCollapsed{ false };
+        // Horizontal layout keeps its tab row on top; this is the user's
+        // show/hide preference for the rail that runs beside it.
+        bool _horizontalRailVisible{ false };
+        // What the rail is actually showing right now (the preference can be
+        // true while focus mode or full screen hides the chrome).
+        bool _horizontalRailShown{ false };
         winrt::weak_ref<Microsoft::Terminal::Control::TermControl> _sidebarHotkeyReturnControl;
         TerminalApp::TabStripFilterMode _tabFilterMode{ TerminalApp::TabStripFilterMode::AllTabs };
         bool _tabSearchActive{ false };
@@ -1350,6 +1356,7 @@ namespace winrt::TerminalApp::implementation
         void _OnTabStripCloseRequested(const IInspectable& sender, const TerminalApp::TabStripCloseRequestedEventArgs& eventArgs);
         void _HandleTabCloseRequestedCore(const Microsoft::UI::Xaml::Controls::TabViewItem& tabViewItem);
         bool _IsActiveTabControl(const IInspectable& sender) const noexcept;
+        bool _IsRailInteractionSender(const IInspectable& sender) const noexcept;
         void _OnFirstLayout(const IInspectable& sender, const IInspectable& eventArgs);
         void _ApplyVerticalLayoutReshape(bool initializeWidth = false);
         void _ApplyHorizontalLayoutReshape();
@@ -1362,6 +1369,12 @@ namespace winrt::TerminalApp::implementation
         void _ApplyPendingTabLayout();
         void _InstallVerticalRailSplitter();
         void _SetVerticalRailVisibility(bool visible);
+        // Horizontal layout keeps the tab row on top and runs the rail beside
+        // the content, so the same toggle works in both layouts.
+        void _ApplyHorizontalRailLayout();
+        void _SetHorizontalRailVisible(bool visible);
+        void _SetHorizontalRailShown(bool shown);
+        void _SyncRailFromTabView();
         void _ToggleSidebarHotkey();
         void _OnVerticalRailCollapseRequested(const IInspectable& sender, const IInspectable& eventArgs);
         void _CancelRailSplitterDrag();

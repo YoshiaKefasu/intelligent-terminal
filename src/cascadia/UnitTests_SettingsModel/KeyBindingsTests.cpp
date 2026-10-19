@@ -914,7 +914,9 @@ namespace SettingsModelUnitTests
             VERIFY_ARE_EQUAL(winrt::hstring{ expectedId }, cmd.ID());
         };
 
-        verifyBinding(L"ctrl+shift+period", L"Terminal.OpenAgentPane");
+        // DEBLOAT: ctrl+shift+period (OpenAgentPane) and ctrl+alt+period
+        // (TriggerAutofix) are retired along with the agent chat pane and
+        // intentionally no longer bound in defaults.json.
         verifyBinding(L"ctrl+shift+i", L"Terminal.FocusAgentPane");
         verifyBinding(L"ctrl+shift+/", L"Terminal.OpenAgentSessions");
         verifyBinding(L"alt+shift+b", L"Terminal.OpenBackgroundAgent");

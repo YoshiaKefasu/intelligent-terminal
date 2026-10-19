@@ -348,6 +348,17 @@ namespace winrt::TerminalApp::implementation
         bool IsRailCollapsed() const noexcept { return _isRailCollapsed; }
         void IsRailCollapsed(bool value);
         void PrepareTabItem(winrt::Microsoft::UI::Xaml::Controls::TabViewItem const& item);
+        // Horizontal layout keeps the canonical items in the MUX TabView and
+        // lets the rail render the same tabs as a read-mostly mirror. The rail
+        // renders display descriptors, never the TabViewItems themselves, so
+        // mirroring cannot reparent them out of the TabView.
+        void MirrorTabItems(winrt::Windows::Foundation::Collections::IVector<winrt::Windows::Foundation::IInspectable> const& items);
+        // Mirrors the canonical selection into the rail without echoing it back
+        // through SelectionChanged, so the host stays the selection owner.
+        void SyncSelectedTabItem(winrt::Microsoft::UI::Xaml::Controls::TabViewItem const& item);
+        // Re-applies rail chrome after the host shows the rail in a layout that
+        // does not drive IsRailCollapsed (horizontal keeps it always expanded).
+        void RefreshRailChrome();
         void RefreshTabColor(winrt::Microsoft::UI::Xaml::Controls::TabViewItem const& item);
         TerminalApp::TabStripFilterMode FilterMode() const noexcept { return _sidebarFilters.ShowAgentsOnly() ? TerminalApp::TabStripFilterMode::AgentsOnly : TerminalApp::TabStripFilterMode::AllTabs; }
         void FilterMode(TerminalApp::TabStripFilterMode value);
@@ -553,6 +564,9 @@ namespace winrt::TerminalApp::implementation
         bool _tabsVisible{ true };
         bool _isRailCollapsed{ false };
         bool _isVerticalPresentation{ true };
+        // Set while the host mirrors its own selection into the rail, so the
+        // resulting ListView change does not bounce back as a user selection.
+        bool _syncingHostSelection{ false };
         bool _searchActive{ false };
         bool _syncingSearchState{ false };
         bool _searchPanelExpanded{ false };

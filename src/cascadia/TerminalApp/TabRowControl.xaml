@@ -89,13 +89,22 @@
 
         <mux:TabView.TabStripFooter>
             <Grid x:Name="HorizontalChromeFooter">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <!--  Remove this border after WinUI 2.8  -->
                 <Border Height="1"
                         VerticalAlignment="Bottom"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="4"
                         Background="{ThemeResource CardStrokeColorDefaultBrush}" />
 
                 <mux:SplitButton x:Name="NewTabButton"
                                  x:Uid="NewTabSplitButton"
+                                 Grid.Column="0"
                                  Height="24"
                                  Margin="0,4"
                                  Padding="0"
@@ -174,6 +183,86 @@
                         </ResourceDictionary>
                     </mux:SplitButton.Resources>
                 </mux:SplitButton>
+
+                <!--  Tab-row mirrors of the bottom bar's main toggles:
+                      session list + sidebar ("Show/Hide Git and Files").
+                      The old agent chat pane toggle was retired (DEBLOAT):
+                      its button is now the sidebar toggle. Click handlers are
+                      bound in TerminalPage::Create; lit state is mirrored in
+                      TerminalPage::_UpdateBottomBarState.  -->
+                <Button x:Name="SessionToggleTabRowButton"
+                        Grid.Column="1"
+                        Width="32"
+                        Height="24"
+                        Margin="4,4,0,4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderBrush="Transparent">
+                    <ToolTipService.ToolTip>
+                        <ToolTip>
+                            <StackPanel>
+                                <TextBlock x:Name="SessionToggleTabRowLabel"
+                                           FontFamily="Segoe UI Variable"
+                                           FontSize="12"
+                                           FontWeight="Normal"
+                                           LineHeight="16" />
+                                <TextBlock Text="Ctrl+Shift+/"
+                                           FontFamily="Segoe UI Variable"
+                                           FontSize="12"
+                                           FontWeight="Normal"
+                                           LineHeight="16"
+                                           Opacity="0.7" />
+                            </StackPanel>
+                        </ToolTip>
+                    </ToolTipService.ToolTip>
+                    <Image Width="16"
+                           Height="16"
+                           Stretch="Uniform">
+                        <Image.Source>
+                            <SvgImageSource UriSource="ms-appx:///AgentIcons/session.svg"
+                                            RasterizePixelWidth="32"
+                                            RasterizePixelHeight="32" />
+                        </Image.Source>
+                    </Image>
+                </Button>
+
+                <!--  Sidebar (Git & Files rail) open/close. Wired to the same
+                      ToggleSidebar action as the Ctrl+Shift+G hotkey and the
+                      vertical rail toggle. The shortcut TextBlock is filled
+                      from TerminalPage via SidebarToggleKeyChordText.  -->
+                <Button x:Name="SidebarToggleTabRowButton"
+                        Grid.Column="2"
+                        Width="32"
+                        Height="24"
+                        Margin="4,4,0,4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderBrush="Transparent">
+                    <ToolTipService.ToolTip>
+                        <ToolTip>
+                            <StackPanel>
+                                <TextBlock Text="Show/Hide Git and Files"
+                                           FontFamily="Segoe UI Variable"
+                                           FontSize="12"
+                                           FontWeight="Normal"
+                                           LineHeight="16" />
+                                <TextBlock x:Name="SidebarToggleTabRowShortcut"
+                                           FontFamily="Segoe UI Variable"
+                                           FontSize="12"
+                                           FontWeight="Normal"
+                                           LineHeight="16"
+                                           Opacity="0.7"
+                                           Visibility="Collapsed" />
+                            </StackPanel>
+                        </ToolTip>
+                    </ToolTipService.ToolTip>
+                    <!--  U+E8A0 is the panel / split-view "OpenPane" glyph.  -->
+                    <FontIcon x:Name="SidebarToggleTabRowIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="16"
+                              Glyph="&#xE8A0;"
+                              Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                </Button>
             </Grid>
         </mux:TabView.TabStripFooter>
 

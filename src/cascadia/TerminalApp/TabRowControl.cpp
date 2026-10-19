@@ -260,6 +260,14 @@ namespace winrt::TerminalApp::implementation
             keyStart = character == L'+';
         }
         _sidebarToggleKeyChordText = display;
+
+        // Mirror the chord into the sidebar tab-row button's tooltip (the
+        // "Show/Hide Git and Files" button next to the [+] button).
+        if (const auto shortcut = SidebarToggleTabRowShortcut())
+        {
+            shortcut.Text(display);
+            shortcut.Visibility(display.empty() ? WUX::Visibility::Collapsed : WUX::Visibility::Visible);
+        }
     }
 
     void TabRowControl::SetVerticalRailState(const bool visible, const bool collapsed, const double width)

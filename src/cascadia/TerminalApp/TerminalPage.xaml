@@ -97,18 +97,20 @@
             </Grid.Background>
         </Grid>
 
-        <!-- Bottom Bar: window-level AI agent toolbar. Always visible as
-             window chrome, but its state reflects the *active tab*'s agent
-             pane (toggle lit when active tab has an AgentPaneContent,
-             diagnostics from the active tab's autofix state, etc.).
-             The top border uses the TabViewBackground theme resource. -->
+        <!-- Bottom Bar: RETIRED. Forced Collapsed (see
+             _UpdateBottomBarVisibility) so TabContent fills the window down
+             to the bottom edge. Its two main toggles moved next to the tab
+             row's [+] button (TabRowControl.xaml), reusing the same click
+             handlers. The bar's XAML is kept, hidden, so a revert is a
+             one-line change. -->
         <Border x:Name="BottomBarRoot"
                 Grid.Row="3"
                 Grid.ColumnSpan="2"
                 Background="#000000"
                 BorderBrush="{ThemeResource TabViewBackground}"
                 BorderThickness="0,1,0,0"
-                VerticalAlignment="Top">
+                VerticalAlignment="Top"
+                Visibility="Collapsed">
         <Grid x:Name="BottomBar"
               Height="40"
               Padding="12,0,12,0"

@@ -20,7 +20,7 @@ if not defined MSBUILD (
 )
 rem Strip any surrounding/literal quotes a caller may have baked into the
 rem MSBUILD env var (e.g. set MSBUILD="C:\...\MSBuild.exe"). A path can't
-rem contain a double-quote, so dropping them all is safe — and it stops the
+rem contain a double-quote, so dropping them all is safe - and it stops the
 rem existence check and the quoted call sites below from seeing doubled
 rem quotes (`""C:\...""`), which would spuriously fail.
 set MSBUILD=%MSBUILD:"=%
@@ -38,6 +38,15 @@ rem MSIX build keeps the cached file list and silently drops freshly-added
 rem files from the package.
 if exist "src\cascadia\CascadiaPackage\obj\x64\Release" rmdir /s /q "src\cascadia\CascadiaPackage\obj\x64\Release"
 if exist "src\cascadia\CascadiaPackage\bin\x64\Release\AppX" rmdir /s /q "src\cascadia\CascadiaPackage\bin\x64\Release\AppX"
+
+rem Build Host.Proxy first: it generates ITerminalHandoff.h consumed by
+rem TerminalConnection (IntDir..\OpenConsoleProxy). Direct vcxproj builds
+rem don't resolve the slnx BuildDependency graph, so pin it here.
+"%MSBUILD%" src\host\proxy\Host.Proxy.vcxproj %COMMON% >> _build_msix_x64.log 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Host.Proxy build failed: %ERRORLEVEL%
+    exit /b %ERRORLEVEL%
+)
 
 rem Build Settings Model first. Its winmd is the source-of-truth for the
 rem Profile / Globals WinRT projection. If we don't pin its build ahead

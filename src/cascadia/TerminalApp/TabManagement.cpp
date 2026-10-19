@@ -582,6 +582,11 @@ namespace winrt::TerminalApp::implementation
             // NaN is the special value XAML uses for "Auto" sizing.
             _tabRow.Height(isVisible ? NAN : 0);
         }
+
+        // The horizontal side rail follows the same chrome rules as the tab
+        // row. Focus mode and full screen hide it without forgetting the
+        // user's preference, so leaving them brings it back.
+        _SetHorizontalRailShown(_horizontalRailVisible && isVisible);
     }
 
     // Method Description:
@@ -1369,6 +1374,20 @@ namespace winrt::TerminalApp::implementation
                    winrt::get_abi(sender) == winrt::get_abi(_tabView);
     }
 
+    // Row-level interactions (close, focus, rename, pane activation) may come
+    // from the horizontal side rail, which is a browsing surface rather than
+    // the collection owner. Collection and drag events keep using
+    // _IsActiveTabControl so the rail never becomes a second owner.
+    bool TerminalPage::_IsRailInteractionSender(const IInspectable& sender) const noexcept
+    {
+        if (_IsActiveTabControl(sender))
+        {
+            return true;
+        }
+        return !_isVerticalLayout && _horizontalRailShown && _tabStrip && sender &&
+               winrt::get_abi(sender) == winrt::get_abi(_tabStrip);
+    }
+
     IInspectable TerminalPage::_selectedTabItem() const
     {
         if (_changingTabLayout && _tabLayoutTransitionSelectedItem)
@@ -1928,6 +1947,12 @@ namespace winrt::TerminalApp::implementation
             p.Visibility(Visibility::Collapsed);
         }
         _UpdateTabView();
+        // Keep the horizontal side rail's copy of the collection current. The
+        // rail only renders display descriptors, so this cannot reparent items.
+        if (_horizontalRailShown)
+        {
+            _SyncRailFromTabView();
+        }
         if (!_rearranging &&
             eventArgs.CollectionChange() == Windows::Foundation::Collections::CollectionChange::ItemInserted &&
             eventArgs.Index() < _tabs.Size())
@@ -2134,6 +2159,10 @@ namespace winrt::TerminalApp::implementation
         }
         _OnSelectionChangedCore();
         _UpdateTabFilterStatus();
+        if (!_isVerticalLayout && _horizontalRailShown && _tabStrip)
+        {
+            _SyncRailFromTabView();
+        }
     }
 
     void TerminalPage::_ApplyTabListProjection(
@@ -2158,7 +2187,9 @@ namespace winrt::TerminalApp::implementation
         const auto policy = ::TerminalApp::TabListViewModel{ std::span<const ::TerminalApp::TabListViewModel::OwnerEntry>{}, criteria }.Policy();
         const bool positionOperationsBlocked = policy.positionOperationsBlocked;
         const auto highlightQuery = policy.searchEffective ? winrt::hstring{ criteria.query } : winrt::hstring{};
-        const auto tabStrip = _isVerticalLayout ?
+        // The rail renders tab rows in both layouts now: vertical hosts it as
+        // the only strip, horizontal shows it beside the TabView.
+        const auto tabStrip = (_isVerticalLayout || _horizontalRailShown) ?
                                   winrt::get_self<implementation::TabStrip>(_tabStrip) :
                                   nullptr;
 
@@ -2181,7 +2212,7 @@ namespace winrt::TerminalApp::implementation
                 header.SearchText(highlightQuery);
             }
             const auto tabImpl = _GetTabImpl(tab);
-            if (tabImpl && _isVerticalLayout && refreshPaneItems)
+            if (tabImpl && (_isVerticalLayout || _horizontalRailShown) && refreshPaneItems)
             {
                 _RefreshTabStripPaneItems(tabImpl, display);
             }
@@ -2280,7 +2311,11 @@ namespace winrt::TerminalApp::implementation
         {
             _UpdateTabFilterStatus(&list);
         }
-        const auto canDragDrop = CanDragDrop() &&
+        // Reorder/drag stay vertical-only: the horizontal rail renders a copy of
+        // the TabView collection, so letting its ListView reorder would desync
+        // the rail from the canonical tab order.
+        const auto canDragDrop = _isVerticalLayout &&
+                                 CanDragDrop() &&
                                  !positionOperationsBlocked &&
                                  !_IsCollapsedVerticalRail();
         _tabStrip.CanReorderTabs(canDragDrop);
@@ -2295,7 +2330,7 @@ namespace winrt::TerminalApp::implementation
     {
         std::vector<::TerminalApp::TabListViewModel::OwnerEntry> owners;
         owners.reserve(_tabs.Size());
-        const auto strip = _isVerticalLayout && _tabStrip ?
+        const auto strip = (_isVerticalLayout || _horizontalRailShown) && _tabStrip ?
                                winrt::get_self<implementation::TabStrip>(_tabStrip) :
                                nullptr;
         for (uint32_t index = 0; index < _tabs.Size(); ++index)
@@ -2346,7 +2381,7 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_UpdateTabFilterStatus(const ::TerminalApp::TabListViewModel* preparedList)
     {
-        if (!_tabStrip || !_isVerticalLayout)
+        if (!_tabStrip || !(_isVerticalLayout || _horizontalRailShown))
         {
             return;
         }
@@ -2390,7 +2425,7 @@ namespace winrt::TerminalApp::implementation
         owner.isAgent = tab.IsAgentTab() || _TabHasCliAgent(tab);
         const auto title = tab.Title();
         owner.title.assign(title.c_str(), title.size());
-        const auto tabStrip = _isVerticalLayout && _tabStrip ?
+        const auto tabStrip = (_isVerticalLayout || _horizontalRailShown) && _tabStrip ?
                                   winrt::get_self<implementation::TabStrip>(_tabStrip) :
                                   nullptr;
         const auto display = projectedDisplay ? projectedDisplay :
@@ -2496,7 +2531,28 @@ namespace winrt::TerminalApp::implementation
     // which uses the routing helpers instead of asking sender for its selection.
     void TerminalPage::_OnTabStripSelectionChanged(const IInspectable& sender, const TerminalApp::TabStripSelectionChangedEventArgs& /*eventArgs*/)
     {
-        if (_changingTabLayout || !_IsActiveTabControl(sender))
+        if (_changingTabLayout)
+        {
+            return;
+        }
+
+        // Horizontal layout: the MUX TabView stays the selection owner. A rail
+        // click is forwarded to it so both surfaces agree, and the rail's own
+        // selection is then re-mirrored from the TabView.
+        if (!_isVerticalLayout)
+        {
+            if (!_horizontalRailShown || !_tabStrip || !_tabView)
+            {
+                return;
+            }
+            if (const auto selected = _tabStrip.SelectedItem())
+            {
+                _tabView.SelectedItem(selected);
+            }
+            return;
+        }
+
+        if (!_IsActiveTabControl(sender))
         {
             return;
         }

@@ -768,13 +768,11 @@
         { "keys": "alt+shift+b", "id": "Terminal.OpenBackgroundAgent" },
         { "keys": "win+sc(41)", "id": "Terminal.QuakeMode" },
         { "keys": "alt+space", "id": "Terminal.OpenSystemMenu" },
-        { "keys": "ctrl+shift+period", "id": "Terminal.OpenAgentPane" },
         { "keys": "ctrl+shift+i", "id": "Terminal.FocusAgentPane" },
         { "keys": "ctrl+shift+/", "id": "Terminal.OpenAgentSessions" },
         { "keys": "ctrl+shift+s", "id": "Terminal.ToggleSidebar" },
         { "keys": "ctrl+shift+g", "id": "Terminal.ToggleSidebarAgentsOnly" },
         { "keys": "ctrl+shift+r", "id": "Terminal.ToggleSidebarRecentAgentSessions" },
-        { "keys": "ctrl+alt+period", "id": "Terminal.TriggerAutofix" },
 
         // Tab Management
         // "command": "closeTab" is unbound by default.
