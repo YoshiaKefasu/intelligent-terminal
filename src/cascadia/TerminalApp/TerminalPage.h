@@ -377,6 +377,12 @@ namespace winrt::TerminalApp::implementation
         std::chrono::seconds _historyRetryDelay{ 0 };
         std::chrono::steady_clock::time_point _historyNextRefresh{};
         std::optional<std::chrono::steady_clock::time_point> _historyMasterUnavailableSince;
+        // Workspace footer refresh: its own generation and timer so it never
+        // contends with the agent-session history refresh above.
+        uint64_t _railWorkspaceGeneration{ 0 };
+        bool _railWorkspaceInFlight{ false };
+        bool _railWorkspacePending{ false };
+        Windows::UI::Xaml::DispatcherTimer _railWorkspaceRefreshTimer{ nullptr };
         bool _tabDragReorderAuthorized{ false };
         Windows::Foundation::IInspectable _tabDragSelectedItem{ nullptr };
         winrt::weak_ref<Tab> _pendingPinTab;
@@ -1065,6 +1071,56 @@ namespace winrt::TerminalApp::implementation
         void _CloseSidebarHistory(bool restoreFocus);
         void _RequestSidebarHistoryRefresh(bool initialLoad);
         void _UpdateSidebarHistoryCurrentSession();
+
+        // ── Workspace footer (Herdr agents + Git state of the focused tab) ──
+        // The rail renders what these capture; nothing here touches the tab
+        // list, so a refresh can never disturb selection or drag order.
+        //
+        // One footer row as the capture produces it, before the UI thread turns
+        // it into a TabStripRailItem and resolves the accent style.
+        struct _RailRow
+        {
+            winrt::hstring badge;
+            winrt::hstring title;
+            winrt::hstring detail;
+            winrt::hstring tooltip;
+            // Chooses the badge style; see _RailAccentStyleKey.
+            winrt::hstring accent;
+        };
+        // What one footer section shows: its rows plus the one-line summary and
+        // the message that stands in when there are no rows to draw.
+        struct _RailSection
+        {
+            std::vector<_RailRow> rows;
+            winrt::hstring summary;
+            winrt::hstring message;
+        };
+        static _RailSection _ParseRailHerdrSnapshot(const std::optional<std::string>& output);
+        static _RailSection _ParseRailGitStatus(const std::optional<std::string>& output, winrt::hstring const& directory);
+        static winrt::hstring _RailCountSummary(size_t total, size_t shown);
+        static winrt::hstring _RailAgentStatusLabel(std::string_view status);
+        bool _IsRailWorkspaceVisible() const
+        {
+            // The strip's own Visibility is the single truth: the vertical and
+            // horizontal layouts park it in different hosts, and focus mode can
+            // hide it without touching either preference flag.
+            if (!_tabStrip || _tabStrip.Visibility() != winrt::Windows::UI::Xaml::Visibility::Visible)
+            {
+                return false;
+            }
+            // A collapsed (icon-only) rail has no room for the footer, so it
+            // must not keep the 20s capture poll alive behind a hidden surface.
+            return !_isVerticalLayout || (!_isVerticalRailCollapsed && _isVerticalRailVisible);
+        }
+        void _RequestRailWorkspaceRefresh();
+        safe_void_coroutine _LoadRailWorkspace(uint64_t generation);
+        void _CompleteRailWorkspace(uint64_t generation,
+                                    _RailSection herdr,
+                                    _RailSection git);
+        static std::wstring_view _RailAccentStyleKey(std::string_view status);
+        winrt::hstring _FocusedTabWorkingDirectory() const;
+        void _StartRailWorkspaceRefreshTimer();
+        void _StopRailWorkspaceRefreshTimer();
         static winrt::hstring _SidebarHistoryStatusText(std::string_view status);
         static winrt::hstring _FormatLocalizedPercentValue(uint32_t progressValue, std::wstring_view languageTag = {});
         bool _ApplyAgentSessionStatusDelta(std::string_view sessionId,

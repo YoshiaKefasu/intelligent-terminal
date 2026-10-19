@@ -24,6 +24,7 @@
 #include "TabStripItemTemplateSelector.g.cpp"
 #include "TabStripHistoryHeader.g.cpp"
 #include "TabStripHistoryHeaderAutomationPeer.g.cpp"
+#include "TabStripRailItem.g.cpp"
 
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
@@ -626,6 +627,8 @@ namespace winrt::TerminalApp::implementation
         _tabItems = single_threaded_observable_vector<IInspectable>();
         _displayItems = single_threaded_observable_vector<TerminalApp::TabStripDisplayItem>();
         _historyItems = single_threaded_observable_vector<TerminalApp::TabStripHistoryItem>();
+        _herdrRailItems = single_threaded_observable_vector<TerminalApp::TabStripRailItem>();
+        _gitRailItems = single_threaded_observable_vector<TerminalApp::TabStripRailItem>();
         _viewportItems = single_threaded_observable_vector<IInspectable>();
 
         InitializeComponent();
@@ -1482,6 +1485,8 @@ namespace winrt::TerminalApp::implementation
         if (_isRailCollapsed != value)
         {
             _isRailCollapsed = value;
+            // _applyRailState ends by re-running the history and workspace
+            // footer visual states, so a collapse hides both in one pass.
             _applyRailState();
             _updateHistoryAgeTimer();
         }
@@ -2509,6 +2514,7 @@ namespace winrt::TerminalApp::implementation
 
         _updateSearchVisualState();
         _updateHistoryVisualState();
+        _updateRailWorkspaceVisualState();
     }
 
     void TabStrip::_applyTabItemRailState(MUX::Controls::TabViewItem const& item)
@@ -2958,6 +2964,73 @@ namespace winrt::TerminalApp::implementation
         {
             _syncViewportItems();
         }
+    }
+
+    void TabStrip::CommitRailSection(TerminalApp::TabStripRailSection section,
+                                     IVector<TerminalApp::TabStripRailItem> const& items,
+                                     winrt::hstring const& summary,
+                                     winrt::hstring const& message)
+    {
+        const auto git = section == TerminalApp::TabStripRailSection::Git;
+        const auto& target = git ? _gitRailItems : _herdrRailItems;
+        if (items)
+        {
+            std::vector<TerminalApp::TabStripRailItem> rows;
+            rows.reserve(items.Size());
+            for (const auto& item : items)
+            {
+                rows.push_back(item);
+            }
+            // ReplaceAll resets the ItemsControl; the footer holds at most a
+            // couple dozen rows, so that is cheaper than diffing slots.
+            target.ReplaceAll(rows);
+        }
+        else
+        {
+            target.Clear();
+        }
+        (git ? _gitRailSummary : _herdrRailSummary) = summary;
+        (git ? _gitRailMessage : _herdrRailMessage) = message;
+        _updateRailWorkspaceVisualState();
+    }
+
+    void TabStrip::SetRailWorkspaceVisible(const bool visible)
+    {
+        if (_railWorkspaceVisible != visible)
+        {
+            _railWorkspaceVisible = visible;
+            _updateRailWorkspaceVisualState();
+        }
+    }
+
+    void TabStrip::_updateRailWorkspaceVisualState()
+    {
+        // A section that has neither rows nor a message is only its own header,
+        // which reads as an empty section; hide the whole header instead.
+        const auto show = [](const TextBlock& header,
+                             const TextBlock& summaryText,
+                             const TextBlock& messageText,
+                             const winrt::hstring& summary,
+                             const winrt::hstring& message,
+                             const uint32_t rows) {
+            summaryText.Text(summary);
+            summaryText.Visibility(summary.empty() ? Visibility::Collapsed : Visibility::Visible);
+            messageText.Text(message);
+            messageText.Visibility(message.empty() ? Visibility::Collapsed : Visibility::Visible);
+            const auto any = rows != 0 || !message.empty() || !summary.empty();
+            header.Visibility(any ? Visibility::Visible : Visibility::Collapsed);
+            return any;
+        };
+        const auto herdrAny = show(HerdrRailHeader(), HerdrRailSummary(), HerdrRailMessage(), _herdrRailSummary, _herdrRailMessage, _herdrRailItems.Size());
+        const auto gitAny = show(GitRailHeader(), GitRailSummary(), GitRailMessage(), _gitRailSummary, _gitRailMessage, _gitRailItems.Size());
+
+        // The footer is a browsing surface, so it follows the rail's visibility
+        // rather than the Agents filter: a collapsed (icon-only) rail has no
+        // room for rows, and the horizontal rail shows it like the vertical one.
+        // With nothing captured yet it would draw only its top border, so it
+        // stays collapsed until a section has something to say.
+        const auto shown = _railWorkspaceVisible && !_isRailCollapsed && (herdrAny || gitAny);
+        RailWorkspaceFooter().Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
     }
 
     void TabStrip::_syncViewportItems()

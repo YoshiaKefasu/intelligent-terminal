@@ -84,6 +84,25 @@ namespace TerminalApp
         TabStripHistoryItem Item { get; };
     };
 
+    enum TabStripRailSection
+    {
+        Herdr = 0,
+        Git = 1,
+    };
+
+    // One row of the workspace footer: a Herdr agent or a changed file.
+    // Values are set once before the row joins its section, so no property
+    // change is ever raised; INotifyPropertyChanged only satisfies the
+    // binding surface the shared row template expects.
+    [default_interface] runtimeclass TabStripRailItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
+    {
+        String Badge;
+        String Title;
+        String Detail;
+        String ToolTip;
+        Windows.UI.Xaml.Style AccentStyle;
+    };
+
     [default_interface] runtimeclass TabStripPaneItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
     {
         Microsoft.UI.Xaml.Controls.TabViewItem Tab { get; };
@@ -230,6 +249,15 @@ namespace TerminalApp
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripPaneEventArgs> PaneCloseRequested;
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripCloseRequestedEventArgs> TabRenameRequested;
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripCloseRequestedEventArgs> TabFocusRequested;
+
+        // Workspace footer: Herdr agents and the focused tab folder's Git state.
+        // The host owns capture and parsing; the strip only renders.
+        void CommitRailSection(TabStripRailSection section, Windows.Foundation.Collections.IVector<TabStripRailItem> items, String summary, String message);
+        void SetRailWorkspaceVisible(Boolean visible);
+        // Getter-only and stable, like HistoryItems: XAML binds once and the
+        // strip mutates these in place.
+        Windows.Foundation.Collections.IObservableVector<TabStripRailItem> HerdrRailItems { get; };
+        Windows.Foundation.Collections.IObservableVector<TabStripRailItem> GitRailItems { get; };
 
         Boolean HistoryActivating;
         Boolean RichTabRepositoryVisible;

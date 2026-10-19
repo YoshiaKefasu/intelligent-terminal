@@ -526,6 +526,11 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalTabFilterPreservesMetadataOptions);
         TEST_METHOD(RichTabMetadataFlyoutDismissalBehavior);
         TEST_METHOD(VerticalTabHistoryStatusText);
+        TEST_METHOD(RailHerdrSnapshotListsKnownAgents);
+        TEST_METHOD(RailHerdrSnapshotReportsNotRunningAndEmpty);
+        TEST_METHOD(RailGitStatusListsSectionsInOrder);
+        TEST_METHOD(RailGitStatusTruncatedSummaryKeepsHeadline);
+        TEST_METHOD(RailGitStatusReportsNonRepositoryAndClean);
         TEST_METHOD(VerticalTabProgressPercentUsesLocaleFormatting);
         TEST_METHOD(AgentBillingUsesLocaleCurrencyFormatting);
         TEST_METHOD(SessionRegistryStatusDeltaUpdatesCaches);
@@ -8011,6 +8016,159 @@ namespace TerminalAppLocalTests
                 VERIFY_IS_FALSE(text.empty());
                 VERIFY_ARE_EQUAL(resources.GetValue(resource).ValueAsString(), text);
             }
+        });
+    }
+
+    void TabTests::RailHerdrSnapshotListsKnownAgents()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // Two agents with a known state and one herdr reports as unknown;
+            // the unknown one is herdr's "nothing to say", not a state to draw.
+            const auto parsed = Page::_ParseRailHerdrSnapshot(std::optional<std::string>{
+                R"({"focused_pane_id":"w1:p1","panes":[
+                    {"pane_id":"w1:p1","cwd":"D:\\work\\alpha"},
+                    {"pane_id":"w1:p2","cwd":"D:\\work\\beta"}],
+                    "agents":[
+                    {"pane_id":"w1:p1","agent_status":"working","agent":"pi","terminal_title_stripped":"alpha title"},
+                    {"pane_id":"w1:p2","agent_status":"idle","display_agent":"copilot","terminal_title_stripped":"beta title"},
+                    {"pane_id":"w1:p3","agent_status":"unknown","agent":"ignored"}]})" });
+            VERIFY_ARE_EQUAL(2u, parsed.rows.size());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"alpha" }, parsed.rows[0].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"pi" }, parsed.rows[0].detail);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"working" }, parsed.rows[0].accent);
+            VERIFY_IS_FALSE(parsed.rows[0].badge.empty());
+            // display_agent wins over agent, and the folder basename wins over
+            // the terminal title.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"beta" }, parsed.rows[1].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"copilot" }, parsed.rows[1].detail);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"idle" }, parsed.rows[1].accent);
+            // A truncated section says how many it left out.
+            VERIFY_IS_TRUE(parsed.summary.empty());
+            VERIFY_IS_TRUE(parsed.message.empty());
+        });
+    }
+
+    void TabTests::RailHerdrSnapshotReportsNotRunningAndEmpty()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // herdr prints nothing and exits 0 when its server is not running.
+            const auto silent = Page::_ParseRailHerdrSnapshot(std::optional<std::string>{ std::string{} });
+            VERIFY_IS_TRUE(silent.rows.empty());
+            VERIFY_IS_FALSE(silent.message.empty());
+
+            // A wta that did not complete has no output at all.
+            const auto missing = Page::_ParseRailHerdrSnapshot(std::nullopt);
+            VERIFY_IS_TRUE(missing.rows.empty());
+            VERIFY_IS_FALSE(missing.message.empty());
+
+            const auto running = Page::_ParseRailHerdrSnapshot(
+                std::optional<std::string>{ R"({"panes":[],"agents":[]})" });
+            VERIFY_IS_TRUE(running.rows.empty());
+            VERIFY_IS_FALSE(running.message.empty());
+
+            const auto malformed = Page::_ParseRailHerdrSnapshot(
+                std::optional<std::string>{ R"({"agents":)" });
+            VERIFY_IS_TRUE(malformed.rows.empty());
+            VERIFY_IS_FALSE(malformed.message.empty());
+        });
+    }
+
+    void TabTests::RailGitStatusListsSectionsInOrder()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            const auto parsed = Page::_ParseRailGitStatus(
+                std::optional<std::string>{ R"({
+                    "top":"D:/work/repo","branch":"main","commit":"abc1234567",
+                    "conflicted":[{"path":"c.txt","status":"conflicted"}],
+                    "staged":[{"path":"s.txt","status":"modified"},{"path":"r.txt","from":"o.txt","status":"renamed"}],
+                    "unstaged":[{"path":"u.txt","status":"modified"}],
+                    "untracked":[{"path":"n.txt","status":"untracked"}]})" },
+                winrt::hstring{ L"D:\\work\\repo" });
+            // Conflicted, staged, unstaged, untracked: the order a reader needs
+            // to decide what to commit.
+            VERIFY_ARE_EQUAL(5u, parsed.rows.size());
+            const wchar_t* expected[] = { L"c.txt", L"s.txt", L"r.txt", L"u.txt", L"n.txt" };
+            for (size_t index = 0; index < parsed.rows.size(); ++index)
+            {
+                VERIFY_ARE_EQUAL(winrt::hstring{ expected[index] }, parsed.rows[index].title);
+                VERIFY_IS_FALSE(parsed.rows[index].badge.empty());
+                // The right column names the change itself (modified, renamed, ...).
+                VERIFY_IS_FALSE(parsed.rows[index].detail.empty());
+            }
+            // A rename keeps its origin in the tooltip, not in the detail column.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"renamed" }, parsed.rows[2].detail);
+            // The repository and its HEAD head the section, and with nothing
+            // truncated the summary stays exactly that pair.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"repo \u00B7 main" }, parsed.summary);
+            VERIFY_IS_TRUE(parsed.message.empty());
+        });
+    }
+
+    void TabTests::RailGitStatusTruncatedSummaryKeepsHeadline()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // 25 changes: more than the row cap, so the section truncates.
+            std::string staged;
+            for (int index = 0; index < 25; ++index)
+            {
+                if (!staged.empty())
+                {
+                    staged += ",";
+                }
+                staged += "{\"path\":\"f" + std::to_string(index) + ".txt\",\"status\":\"modified\"}";
+            }
+            const auto json = std::string{ "{\"top\":\"D:/work/repo\",\"branch\":\"main\",\"commit\":\"abc1234567\"," } +
+                              "\"conflicted\":[],\"staged\":[" + staged +
+                              "],\"unstaged\":[],\"untracked\":[]}";
+            const auto parsed = Page::_ParseRailGitStatus(std::optional<std::string>{ json },
+                                                          winrt::hstring{ L"D:\\work\\repo" });
+            // A clean parse leaves the message empty and caps the rows.
+            VERIFY_IS_TRUE(parsed.message.empty());
+            VERIFY_ARE_EQUAL(20u, parsed.rows.size());
+            // The repository and HEAD survive truncation, and the count is
+            // appended after them rather than replacing them.
+            const std::wstring_view summary{ parsed.summary };
+            VERIFY_IS_TRUE(summary.find(L"repo") != std::wstring_view::npos);
+            VERIFY_IS_TRUE(summary.find(L"main") != std::wstring_view::npos);
+            VERIFY_IS_TRUE(summary.find(L"20") != std::wstring_view::npos);
+            VERIFY_IS_TRUE(summary.find(L"25") != std::wstring_view::npos);
+        });
+    }
+
+    void TabTests::RailGitStatusReportsNonRepositoryAndClean()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // wta prints `null` outside a work tree.
+            const auto outside = Page::_ParseRailGitStatus(
+                std::optional<std::string>{ "null" }, winrt::hstring{ L"D:\\plain" });
+            VERIFY_IS_TRUE(outside.rows.empty());
+            VERIFY_IS_FALSE(outside.message.empty());
+            VERIFY_IS_TRUE(outside.summary.empty());
+
+            // A pane that reports no folder has nothing for git to inspect.
+            const auto folderless = Page::_ParseRailGitStatus(std::nullopt, winrt::hstring{});
+            VERIFY_IS_TRUE(folderless.rows.empty());
+            VERIFY_IS_FALSE(folderless.message.empty());
+
+            // A work tree with no changes.
+            const auto clean = Page::_ParseRailGitStatus(
+                std::optional<std::string>{ R"({"top":"D:/work/repo","branch":"main","commit":"abc1234567",
+                    "conflicted":[],"staged":[],"unstaged":[],"untracked":[]})" },
+                winrt::hstring{ L"D:\\work\\repo" });
+            VERIFY_IS_TRUE(clean.rows.empty());
+            VERIFY_IS_FALSE(clean.message.empty());
+
+            // A detached HEAD has no branch, so the short commit stands in.
+            const auto detached = Page::_ParseRailGitStatus(
+                std::optional<std::string>{ R"({"top":"D:/work/repo","commit":"abc1234567",
+                    "conflicted":[],"staged":[],"unstaged":[],"untracked":[]})" },
+                winrt::hstring{ L"D:\\work\\repo" });
+            VERIFY_IS_TRUE(std::wstring_view{ detached.summary }.find(L"abc1234") != std::wstring_view::npos);
         });
     }
 

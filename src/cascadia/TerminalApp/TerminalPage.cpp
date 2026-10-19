@@ -92,6 +92,12 @@ static constexpr double railCollapsedWidth = 40.0;
 static constexpr auto sidebarHistoryMasterRecoveryTimeout = std::chrono::seconds{ 15 };
 static constexpr auto sidebarHistoryFastRefreshInterval = std::chrono::seconds{ 5 };
 static constexpr auto sidebarHistoryRefreshInterval = std::chrono::seconds{ 60 };
+// The workspace footer reads herdr over a named pipe and runs git in the focused
+// tab's folder, so it refreshes on its own slower cadence than agent sessions.
+static constexpr auto railWorkspaceRefreshInterval = std::chrono::seconds{ 20 };
+// Both sections cap their rows; a long Git change list would otherwise push the
+// footer past the height of the rail itself.
+static constexpr size_t railWorkspaceMaxRows = 20;
 
 #define HOOKUP_ACTION(action) _actionDispatch->action({ this, &TerminalPage::_Handle##action });
 
@@ -309,6 +315,7 @@ namespace winrt::TerminalApp::implementation
             _sidebarIntroductionTimer.Stop();
         }
         _StopSidebarHistoryRefreshTimer();
+        _StopRailWorkspaceRefreshTimer();
         if constexpr (Feature_RichTabProviders::IsEnabled())
         {
             std::vector<::Microsoft::Terminal::RichTab::Provider::ProviderBroker::AttachmentId> attachments;
@@ -6046,12 +6053,15 @@ namespace winrt::TerminalApp::implementation
             _tabStrip.Visibility(Visibility::Visible);
             winrt::get_self<implementation::TabStrip>(_tabStrip)->RefreshRailChrome();
             _ApplyTabListProjection();
+            _RequestRailWorkspaceRefresh();
         }
         else
         {
             _ClearTabSearch();
             _tabStrip.Visibility(Visibility::Collapsed);
             _ApplyHorizontalLayoutReshape();
+            _StopRailWorkspaceRefreshTimer();
+            winrt::get_self<implementation::TabStrip>(_tabStrip)->SetRailWorkspaceVisible(false);
         }
     }
 
@@ -6429,6 +6439,7 @@ namespace winrt::TerminalApp::implementation
         _tabLayoutTransitionSelectedItem = nullptr;
         _ApplyTabListProjection();
         _UpdateRecentAgentSessionsVisibility();
+        _RequestRailWorkspaceRefresh();
         _ApplyPendingPinRequest();
         _EmitAgentRuntimeConfigIfChanged();
 
@@ -6646,6 +6657,7 @@ namespace winrt::TerminalApp::implementation
         _tabStrip.IsRailCollapsed(_isVerticalRailCollapsed);
         _ApplyTabListProjection();
         _UpdateRecentAgentSessionsVisibility();
+        _RequestRailWorkspaceRefresh();
 
         const bool expanded = visible && !_isVerticalRailCollapsed;
         const auto width = visible ? (_isVerticalRailCollapsed ? railCollapsedWidth : _verticalRailWidth) : 0.0;
@@ -6784,6 +6796,8 @@ namespace winrt::TerminalApp::implementation
         _isVerticalRailCollapsed = collapsing;
         _SetVerticalRailVisibility(true);
         _UpdateRecentAgentSessionsVisibility();
+        // The footer only has room while the rail is expanded.
+        _RequestRailWorkspaceRefresh();
         if (sidebarFocus && !_IsVisibleControlInSubtree(sidebarFocus, _tabStrip))
         {
             _FocusSidebarTerminalFallback();
@@ -6939,6 +6953,444 @@ namespace winrt::TerminalApp::implementation
             }
         }
         strip->SetCurrentHistoryItem(current, tabItem);
+    }
+
+    // ── Workspace footer: Herdr agents and the focused tab's Git state ──────
+    //
+    // Two wta captures feed the rail footer below the tab list:
+    //   `wta herdr snapshot` — the running herdr server's agents
+    //   `wta git status --path <dir>` — the focused tab folder's repository
+    // Both run off the UI thread through RunWtaCapture, exactly like
+    // _LoadSidebarHistory, and neither writes anything the tab projection owns.
+
+    std::wstring_view TerminalPage::_RailAccentStyleKey(const std::string_view status)
+    {
+        // Reuse the history row styles so the footer and the session list agree
+        // on what Working / Attention / Error look like in this theme.
+        if (status == "working")
+        {
+            return L"HistoryActiveTextStyle";
+        }
+        if (status == "blocked" || status == "conflicted")
+        {
+            return L"HistoryAttentionTextStyle";
+        }
+        return L"HistorySubtitleTextStyle";
+    }
+
+    winrt::hstring TerminalPage::_FocusedTabWorkingDirectory() const
+    {
+        if (const auto tab = _GetFocusedTabImpl())
+        {
+            if (const auto control = tab->GetActiveTerminalControl())
+            {
+                return control.WorkingDirectory();
+            }
+        }
+        return {};
+    }
+
+    void TerminalPage::_StartRailWorkspaceRefreshTimer()
+    {
+        if (!_railWorkspaceRefreshTimer)
+        {
+            _railWorkspaceRefreshTimer = Windows::UI::Xaml::DispatcherTimer{};
+            _railWorkspaceRefreshTimer.Interval(railWorkspaceRefreshInterval);
+            _railWorkspaceRefreshTimer.Tick([weakThis{ get_weak() }](auto&&, auto&&) {
+                if (const auto page = weakThis.get(); page && page->_IsRailWorkspaceVisible())
+                {
+                    page->_RequestRailWorkspaceRefresh();
+                }
+            });
+        }
+        if (!_railWorkspaceRefreshTimer.IsEnabled())
+        {
+            _railWorkspaceRefreshTimer.Start();
+        }
+    }
+
+    void TerminalPage::_StopRailWorkspaceRefreshTimer()
+    {
+        if (_railWorkspaceRefreshTimer)
+        {
+            _railWorkspaceRefreshTimer.Stop();
+        }
+    }
+
+    void TerminalPage::_RequestRailWorkspaceRefresh()
+    {
+        if (!_tabStrip)
+        {
+            return;
+        }
+        // The rail's own Visibility is the single truth here: the vertical and
+        // horizontal layouts park the strip in different hosts, and focus mode
+        // can hide it without touching either preference flag.
+        const auto visible = _IsRailWorkspaceVisible();
+        _tabStrip.SetRailWorkspaceVisible(visible);
+        if (!visible)
+        {
+            _StopRailWorkspaceRefreshTimer();
+            return;
+        }
+        _StartRailWorkspaceRefreshTimer();
+        if (_railWorkspaceInFlight)
+        {
+            // A tab switch during a capture must not queue up a second wta run:
+            // the in-flight result is already stale and the next tick covers it.
+            _railWorkspacePending = true;
+            return;
+        }
+        _railWorkspaceInFlight = true;
+        _railWorkspacePending = false;
+        _LoadRailWorkspace(++_railWorkspaceGeneration);
+    }
+
+    safe_void_coroutine TerminalPage::_LoadRailWorkspace(const uint64_t generation)
+    {
+        const auto weakThis = get_weak();
+        const auto dispatcher = Dispatcher();
+        const auto directory = _FocusedTabWorkingDirectory();
+        const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
+
+        co_await winrt::resume_background();
+
+        namespace Wta = ::Microsoft::Terminal::WtaProcess;
+        const auto run = [&](const std::wstring& arguments, const DWORD timeoutMs) {
+            const auto result = Wta::RunWtaCapture(wtaPath, arguments, timeoutMs, nullptr, false);
+            if (result.completed && result.exitCode == 0)
+            {
+                return std::optional<std::string>{ result.output };
+            }
+            return std::optional<std::string>{};
+        };
+
+        // Herdr is global to the machine, not to the folder, so it is read even
+        // when the focused pane has no folder to report.
+        const auto herdrOutput = run(L"herdr snapshot", 10'000);
+        std::optional<std::string> gitOutput;
+        if (!directory.empty())
+        {
+            // A trailing separator would escape the closing quote, because the
+            // child parses `\"` as a literal quote. Trim it, but keep a drive
+            // root readable (`C:\` becomes `C:/`) instead of collapsing it to
+            // `C:`, which means "the current folder on C:".
+            std::wstring target{ directory.c_str() };
+            while (!target.empty() && (target.back() == L'\\' || target.back() == L'/'))
+            {
+                target.pop_back();
+            }
+            if (target.empty() || target.back() == L':')
+            {
+                target += L'/';
+            }
+            std::wstring arguments{ L"git status --path \"" };
+            arguments += target;
+            arguments += L"\"";
+            gitOutput = run(arguments, 15'000);
+        }
+
+        co_await wil::resume_foreground(dispatcher);
+        const auto page = weakThis.get();
+        if (!page)
+        {
+            co_return;
+        }
+        page->_railWorkspaceInFlight = false;
+        if (generation != page->_railWorkspaceGeneration)
+        {
+            // Superseded: a newer capture already owns the footer.
+            co_return;
+        }
+
+        auto herdr = _ParseRailHerdrSnapshot(herdrOutput);
+        auto git = _ParseRailGitStatus(gitOutput, directory);
+        page->_CompleteRailWorkspace(generation, std::move(herdr), std::move(git));
+    }
+
+    void TerminalPage::_CompleteRailWorkspace(const uint64_t generation,
+                                              _RailSection herdr,
+                                              _RailSection git)
+    {
+        if (generation != _railWorkspaceGeneration || !_tabStrip)
+        {
+            return;
+        }
+
+        const auto toItems = [&](const _RailSection& section) {
+            auto items = winrt::single_threaded_vector<TerminalApp::TabStripRailItem>();
+            for (const auto& row : section.rows)
+            {
+                auto item = winrt::make<TabStripRailItem>();
+                item.Badge(row.badge);
+                item.Title(row.title);
+                item.Detail(row.detail);
+                item.ToolTip(row.tooltip);
+                const auto styleKey = _RailAccentStyleKey(winrt::to_string(row.accent));
+                if (_tabStrip.Resources().HasKey(box_value(styleKey)))
+                {
+                    item.AccentStyle(_tabStrip.Resources().Lookup(box_value(styleKey)).as<WUX::Style>());
+                }
+                items.Append(item);
+            }
+            return items;
+        };
+
+        _tabStrip.CommitRailSection(TerminalApp::TabStripRailSection::Herdr,
+                                    toItems(herdr),
+                                    herdr.summary,
+                                    herdr.message);
+        _tabStrip.CommitRailSection(TerminalApp::TabStripRailSection::Git,
+                                    toItems(git),
+                                    git.summary,
+                                    git.message);
+
+        if (_railWorkspacePending)
+        {
+            _railWorkspacePending = false;
+            _RequestRailWorkspaceRefresh();
+        }
+    }
+
+    // `wta herdr snapshot` prints the running server's session snapshot, or
+    // nothing at all when herdr is not running. Only the agents are shown: the
+    // pane list is a folder inventory the footer has no room for.
+    TerminalPage::_RailSection TerminalPage::_ParseRailHerdrSnapshot(const std::optional<std::string>& output)
+    {
+        _RailSection section;
+        if (!output || output->empty())
+        {
+            section.message = RS_(L"VerticalTabsHerdrNotRunning");
+            return section;
+        }
+
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        builder["failIfExtra"] = true;
+        std::istringstream json{ *output };
+        std::string errors;
+        if (!Json::parseFromStream(builder, json, &root, &errors) || !root.isObject())
+        {
+            section.message = RS_(L"VerticalTabsRailInvalidResponse");
+            return section;
+        }
+
+        const auto& agents = root["agents"];
+        size_t total = 0;
+        if (agents.isArray())
+        {
+            for (const auto& agent : agents)
+            {
+                if (!agent.isObject())
+                {
+                    continue;
+                }
+                // `unknown` is herdr's "no state to report", not an agent state.
+                const auto status = agent.get("agent_status", "unknown").asString();
+                if (status == "unknown")
+                {
+                    continue;
+                }
+                ++total;
+                if (section.rows.size() >= railWorkspaceMaxRows)
+                {
+                    continue;
+                }
+                // The pane's folder is what identifies the agent's workspace;
+                // the agent's own title is the friendliest name it reports.
+                std::string folder;
+                const auto paneId = agent.get("pane_id", "").asString();
+                const auto& panes = root["panes"];
+                if (panes.isArray())
+                {
+                    for (const auto& pane : panes)
+                    {
+                        if (pane.isObject() && pane.get("pane_id", "").asString() == paneId)
+                        {
+                            folder = pane.get("cwd", "").asString();
+                            break;
+                        }
+                    }
+                }
+                const auto agentName = agent.get("display_agent", agent.get("agent", "agent")).asString();
+                const auto title = agent.get("terminal_title_stripped", agent.get("title", "")).asString();
+                // The filename is taken from a wide path: the JSON is UTF-8, but
+                // `std::filesystem::path{ std::string }` decodes those bytes with the
+                // system code page, which garbles non-ASCII folder names.
+                const auto name = winrt::hstring{ std::filesystem::path{ winrt::to_hstring(folder.empty() ? title : folder).c_str() }.filename().native() };
+
+                _RailRow row;
+                row.badge = _RailAgentStatusLabel(status);
+                row.title = name.empty() ? winrt::to_hstring(title) : name;
+                row.detail = winrt::to_hstring(agentName);
+                row.accent = winrt::to_hstring(status);
+                auto tooltip = agentName + "\n" + title;
+                if (!folder.empty())
+                {
+                    tooltip += "\n" + folder;
+                }
+                row.tooltip = winrt::to_hstring(tooltip);
+                section.rows.emplace_back(std::move(row));
+            }
+        }
+
+        if (total == 0)
+        {
+            section.message = RS_(L"VerticalTabsHerdrNoAgents");
+            return section;
+        }
+        if (section.rows.size() < total)
+        {
+            section.summary = _RailCountSummary(total, section.rows.size());
+        }
+        return section;
+    }
+
+    // `wta git status --path <dir>` prints the work tree's branch and its changed
+    // files, or `null` when the folder is outside a work tree.
+    TerminalPage::_RailSection TerminalPage::_ParseRailGitStatus(const std::optional<std::string>& output, winrt::hstring const& directory)
+    {
+        _RailSection section;
+        if (directory.empty())
+        {
+            section.message = RS_(L"VerticalTabsGitNoFolder");
+            return section;
+        }
+        if (!output)
+        {
+            section.message = RS_(L"VerticalTabsRailUnavailable");
+            return section;
+        }
+
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        builder["failIfExtra"] = true;
+        std::istringstream json{ *output };
+        std::string errors;
+        if (!Json::parseFromStream(builder, json, &root, &errors))
+        {
+            section.message = RS_(L"VerticalTabsRailInvalidResponse");
+            return section;
+        }
+        if (!root.isObject())
+        {
+            // `null`: the folder is not in a work tree.
+            section.message = RS_(L"VerticalTabsGitNotRepository");
+            return section;
+        }
+
+        const auto top = root.get("top", "").asString();
+        const auto branch = root.get("branch", "").asString();
+        const auto commit = root.get("commit", "").asString();
+        // `top` arrives as UTF-8 JSON; building the path from a wide string keeps
+        // non-ASCII repository names intact instead of decoding them at the ACP.
+        const auto repository = std::filesystem::path{ winrt::to_hstring(top).c_str() }.filename().native();
+        const auto head = !branch.empty() ? branch : (commit.size() >= 7 ? commit.substr(0, 7) : std::string{ "HEAD" });
+        // The middle dot is written as an escape: the file is UTF-8, but a
+        // wide literal keeps the separator unambiguous at every code page.
+        section.summary = (repository.empty() ? winrt::hstring{ L"repository" } : winrt::hstring{ repository }) +
+                          L" \u00B7 " +
+                          winrt::to_hstring(head);
+
+        // The order Ely's panel uses: what blocks a commit first, then what is
+        // ready to commit, then what is not yet staged, then what git ignores.
+        // The badge is git's own porcelain letter, which a reader of `git status`
+        // already knows and which fits the rail's width; the full word lives in
+        // the tooltip.
+        struct Group
+        {
+            const char* key;
+            const char* badge;
+            const char* status;
+        };
+        static constexpr Group groups[] = {
+            { "conflicted", "C", "conflicted" },
+            { "staged", "S", "staged" },
+            { "unstaged", "U", "unstaged" },
+            { "untracked", "?", "untracked" },
+        };
+
+        size_t total = 0;
+        for (const auto& group : groups)
+        {
+            const auto& changes = root[group.key];
+            if (!changes.isArray())
+            {
+                continue;
+            }
+            for (const auto& change : changes)
+            {
+                if (!change.isObject())
+                {
+                    continue;
+                }
+                ++total;
+                if (section.rows.size() >= railWorkspaceMaxRows)
+                {
+                    continue;
+                }
+                const auto path = change.get("path", "").asString();
+                if (path.empty())
+                {
+                    continue;
+                }
+                const auto kind = change.get("status", "").asString();
+                _RailRow row;
+                row.badge = winrt::to_hstring(std::string_view{ group.badge });
+                row.title = winrt::to_hstring(path);
+                // The right column names the change (modified, renamed, ...) so
+                // the row reads without opening its tooltip.
+                row.detail = winrt::to_hstring(kind);
+                row.accent = winrt::to_hstring(group.status);
+                auto tooltip = std::string{ group.badge } + "  " + kind + ": " + path;
+                if (const auto from = change.get("from", "").asString(); !from.empty())
+                {
+                    tooltip += "\nfrom " + from;
+                }
+                row.tooltip = winrt::to_hstring(tooltip);
+                section.rows.emplace_back(std::move(row));
+            }
+        }
+
+        if (total == 0)
+        {
+            section.message = RS_(L"VerticalTabsGitClean");
+            return section;
+        }
+        if (section.rows.size() < total)
+        {
+            // The repository and its HEAD stay the section's headline; the count
+            // is appended only when rows had to be left out.
+            section.summary = section.summary + L" \u00B7 " + _RailCountSummary(total, section.rows.size());
+        }
+        return section;
+    }
+
+    // The summary doubles as the "there are more" notice: both callers only
+    // ask for it when rows had to be left out, so a section never silently
+    // hides changes.
+    winrt::hstring TerminalPage::_RailCountSummary(const size_t total, const size_t shown)
+    {
+        return winrt::hstring{ RS_fmt(L"VerticalTabsRailTruncatedFormat", shown, total) };
+    }
+
+    winrt::hstring TerminalPage::_RailAgentStatusLabel(const std::string_view status)
+    {
+        // herdr names four states; the first three already have a localized
+        // label in the session list, so only Done needs its own.
+        if (status == "working")
+        {
+            return RS_(L"VerticalTabsHistoryStatusWorking");
+        }
+        if (status == "blocked")
+        {
+            return RS_(L"VerticalTabsHistoryStatusAttention");
+        }
+        if (status == "done")
+        {
+            return RS_(L"VerticalTabsHerdrStatusDone");
+        }
+        return RS_(L"VerticalTabsHistoryStatusIdle");
     }
 
     void TerminalPage::_StartSidebarHistoryRefreshTimer()
@@ -13854,6 +14306,8 @@ namespace winrt::TerminalApp::implementation
         }
 
         _UpdateSidebarHistoryCurrentSession();
+        // The footer describes the active tab's folder, so it follows a tab switch.
+        _RequestRailWorkspaceRefresh();
         _adjustProcessPriorityThrottled->Run();
     }
 

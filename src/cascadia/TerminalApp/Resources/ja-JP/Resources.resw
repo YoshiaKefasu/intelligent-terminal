@@ -1712,4 +1712,48 @@ In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), n
     <value>タブとエージェント セッションがサイドバーに表示されるようになりました。サイドバーの表示オプションでタブの詳細を選択できます。タブを右クリックすると、横並びのタブに戻せます。</value>
     <comment>Body of the once-only sidebar introduction teaching tip. Sidebar display options refers to the sidebar toolbar button with that tooltip. Explain where to customize visible tab details and how to return to the horizontal tab layout using a tab's context menu. Agents means AI agents, not people.</comment>
   </data>
+  <data name="VerticalTabsHerdrHeader.Text" xml:space="preserve">
+    <value>Herdr</value>
+    <comment>Heading of the Herdr section in the sidebar footer. Herdr is a terminal session manager; the section lists its agents and their state.</comment>
+  </data>
+  <data name="VerticalTabsGitHeader.Text" xml:space="preserve">
+    <value>Git とファイル</value>
+    <comment>Heading of the Git and Files section in the sidebar footer. The section lists the repository, its branch and the changed files of the active tab's folder.</comment>
+  </data>
+  <data name="VerticalTabsHerdrNotRunning" xml:space="preserve">
+    <value>herdr は起動していません</value>
+    <comment>Shown in the Herdr section of the sidebar footer when no herdr server answers on its socket.</comment>
+  </data>
+  <data name="VerticalTabsHerdrNoAgents" xml:space="preserve">
+    <value>herdr エージェントなし</value>
+    <comment>Shown in the Herdr section when a running herdr server reports no agents with a known state.</comment>
+  </data>
+  <data name="VerticalTabsGitNoFolder" xml:space="preserve">
+    <value>このタブはフォルダを報告していません</value>
+    <comment>Shown in the Git and Files section when the active terminal pane has not reported a working directory, so git has nothing to inspect.</comment>
+  </data>
+  <data name="VerticalTabsGitNotRepository" xml:space="preserve">
+    <value>Git リポジトリではありません</value>
+    <comment>Shown in the Git and Files section when the active tab's folder is not inside a git work tree.</comment>
+  </data>
+  <data name="VerticalTabsGitClean" xml:space="preserve">
+    <value>変更なし</value>
+    <comment>Shown in the Git and Files section when the work tree has no changed files.</comment>
+  </data>
+  <data name="VerticalTabsRailUnavailable" xml:space="preserve">
+    <value>読み取れません</value>
+    <comment>Shown in a sidebar footer section when the wta command that supplies it did not complete.</comment>
+  </data>
+  <data name="VerticalTabsRailInvalidResponse" xml:space="preserve">
+    <value>応答が不正です</value>
+    <comment>Shown in a sidebar footer section when the wta command printed something that is not the expected JSON.</comment>
+  </data>
+  <data name="VerticalTabsRailTruncatedFormat" xml:space="preserve">
+    <value>{0} / {1} 件を表示</value>
+    <comment>Summary of a sidebar footer section that lists fewer rows than it found. {0} is the number of rows shown, {1} the total found.</comment>
+  </data>
+  <data name="VerticalTabsHerdrStatusDone" xml:space="preserve">
+    <value>完了</value>
+    <comment>State of a herdr agent that finished its work and is waiting for the next prompt. Short label shown in a sidebar footer row.</comment>
+  </data>
 </root>
