@@ -130,7 +130,8 @@
 #define ADDITIONAL_SHORTCUT_ACTIONS \
     ON_ALL_ACTIONS(ToggleSidebar)              \
     ON_ALL_ACTIONS(ToggleSidebarAgentsOnly)    \
-    ON_ALL_ACTIONS(ToggleSidebarRecentAgentSessions)
+    ON_ALL_ACTIONS(ToggleSidebarRecentAgentSessions) \
+    ON_ALL_ACTIONS(ToggleGitSidebar)
 
 #define ALL_SHORTCUT_ACTIONS \
     LEGACY_SHORTCUT_ACTIONS  \

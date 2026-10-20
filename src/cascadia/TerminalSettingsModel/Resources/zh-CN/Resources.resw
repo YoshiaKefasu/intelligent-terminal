@@ -1006,6 +1006,10 @@
     <value>切换侧边栏中最近的智能体会话的显示</value>
     <comment>Command that toggles the Recent agent sessions section in the sidebar without changing the independent Agents only filter. Recent sessions are also included while a global search query is present.</comment>
   </data>
+  <data name="ToggleGitSidebarCommandKey" xml:space="preserve">
+    <value>切换 Git 和文件面板</value>
+    <comment>A command that shows or hides the Git and Files panel, the dock on the trailing edge that lists the active tab folder's repository, branch and changed files. It is independent of the tab sidebar.</comment>
+  </data>
   <data name="OpenAgentPaneCommandKey" xml:space="preserve">
     <value>切换智能体</value>
     <comment>In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), not a human agent or representative.</comment>

@@ -504,6 +504,10 @@
     <value>[!!_Ｔｏｇｇｌｅ ｒｅｃｅｎｔ ａｇｅｎｔ ｓｅｓｓｉｏｎｓ ｉｎ ｓｉｄｅｂａｒ_!!]</value>
     <comment>Command that toggles the Recent agent sessions section in the sidebar without changing the independent Agents only filter. Recent sessions are also included while a global search query is present.</comment>
   </data>
+  <data name="ToggleGitSidebarCommandKey" xml:space="preserve">
+    <value>[!!_Ｔｏｇｇｌｅ Ｇｉｔ ａｎｄ Ｆｉｌｅｓ ｐａｎｅｌ_!!]</value>
+    <comment>A command that shows or hides the Git and Files panel, the dock on the trailing edge that lists the active tab folder's repository, branch and changed files. It is independent of the tab sidebar.</comment>
+  </data>
   <data name="TogglePaneReadOnlyCommandKey" xml:space="preserve">
     <value>Ŧōĝğľé ρåŋê яэãď-όńļу моđě !!! !!! !</value>
   </data>

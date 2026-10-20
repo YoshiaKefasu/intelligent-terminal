@@ -261,12 +261,32 @@ namespace winrt::TerminalApp::implementation
         }
         _sidebarToggleKeyChordText = display;
 
-        // Mirror the chord into the sidebar tab-row button's tooltip (the
-        // "Show/Hide Git and Files" button next to the [+] button).
+        // The chord is mirrored only onto the vertical rail's own toggle (built
+        // in _ensureVerticalChrome). The tab-row button next to [+] owns the
+        // Git and Files panel, a different surface with its own chord, which is
+        // handled by GitSidebarToggleKeyChordText below.
+    }
+
+    void TabRowControl::GitSidebarToggleKeyChordText(const winrt::hstring& value)
+    {
+        std::wstring display{ value };
+        bool keyStart = true;
+        for (auto& character : display)
+        {
+            if (keyStart)
+            {
+                character = til::toupper_ascii(character);
+            }
+            keyStart = character == L'+';
+        }
+        _gitSidebarToggleKeyChordText = display;
+
         if (const auto shortcut = SidebarToggleTabRowShortcut())
         {
-            shortcut.Text(display);
-            shortcut.Visibility(display.empty() ? WUX::Visibility::Collapsed : WUX::Visibility::Visible);
+            shortcut.Text(_gitSidebarToggleKeyChordText);
+            shortcut.Visibility(_gitSidebarToggleKeyChordText.empty() ?
+                                    WUX::Visibility::Collapsed :
+                                    WUX::Visibility::Visible);
         }
     }
 

@@ -64,6 +64,7 @@ static constexpr std::string_view TogglePaneVisibilityKey{ "togglePaneVisibility
 static constexpr std::string_view ToggleSidebarKey{ "toggleSidebar" };
 static constexpr std::string_view ToggleSidebarAgentsOnlyKey{ "toggleSidebarAgentsOnly" };
 static constexpr std::string_view ToggleSidebarRecentAgentSessionsKey{ "toggleSidebarRecentAgentSessions" };
+static constexpr std::string_view ToggleGitSidebarKey{ "toggleGitSidebar" };
 static constexpr std::string_view ToggleSplitOrientationKey{ "toggleSplitOrientation" };
 static constexpr std::string_view LegacyToggleRetroEffectKey{ "toggleRetroEffect" };
 static constexpr std::string_view ToggleShaderEffectsKey{ "toggleShaderEffects" };

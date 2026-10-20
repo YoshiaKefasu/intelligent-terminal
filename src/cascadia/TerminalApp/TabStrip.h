@@ -128,8 +128,8 @@ namespace winrt::TerminalApp::implementation
             _Item{ std::move(item) } {}
     };
 
-    // One row of the workspace footer. Written once by the host before the row
-    // joins its section, so these stay plain properties: raising change
+    // One row of the Git and Files side panel. Written once by the host before
+    // the row joins its section, so these stay plain properties: raising change
     // notifications would only cost the binding subscribers a marshalling hop.
     struct TabStripRailItem : TabStripRailItemT<TabStripRailItem>
     {
@@ -407,16 +407,6 @@ namespace winrt::TerminalApp::implementation
                                      winrt::hstring const& statusText);
         bool HasHistoryItems() const noexcept { return !_historySnapshot.empty(); }
 
-        // Workspace footer. The host captures and parses wta output; these
-        // methods only replace what the footer draws, so the tab list above is
-        // never touched by a refresh.
-        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> HerdrRailItems() const { return _herdrRailItems; }
-        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> GitRailItems() const { return _gitRailItems; }
-        void CommitRailSection(TerminalApp::TabStripRailSection section,
-                               winrt::Windows::Foundation::Collections::IVector<TerminalApp::TabStripRailItem> const& items,
-                               winrt::hstring const& summary,
-                               winrt::hstring const& message);
-        void SetRailWorkspaceVisible(bool visible);
         void ClearHistorySnapshot();
         void OpenHistory();
         bool HistoryActive() const noexcept { return _sidebarFilters.ShowRecentAgentSessions(); }
@@ -641,17 +631,10 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripHistoryItem> _historyItems{ nullptr };
         std::vector<TerminalApp::TabStripHistoryItem> _historySnapshot;
 
-        // Workspace footer state. Both sections keep their own row vector so a
-        // Git refresh cannot disturb the Herdr rows, and neither one is part of
-        // the ListView above.
-        bool _railWorkspaceVisible{ false };
-        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _herdrRailItems{ nullptr };
-        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitRailItems{ nullptr };
-        winrt::hstring _herdrRailSummary;
-        winrt::hstring _herdrRailMessage;
-        winrt::hstring _gitRailSummary;
-        winrt::hstring _gitRailMessage;
-        void _updateRailWorkspaceVisualState();
+        // Workspace footer state lives in TerminalPage now: the Herdr and Git
+        // sections are a full-height right panel (GitSidebarPanel), not a strip
+        // squeezed under the tab list. Nothing here is part of the ListView
+        // above.
         std::vector<std::vector<winrt::hstring>> _historySearchTerms;
         winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable>::VectorChanged_revoker _vectorChangedRevoker;
         winrt::Windows::UI::ViewManagement::AccessibilitySettings _accessibilitySettings;

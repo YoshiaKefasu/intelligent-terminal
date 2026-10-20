@@ -325,6 +325,17 @@ namespace winrt::TerminalApp::implementation
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, SavedActionKeyChord, PropertyChanged.raise, L"");
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, SavedActionCommandLine, PropertyChanged.raise, L"");
 
+        // Git and Files panel. Getter-only and stable: XAML binds once and the
+        // page mutates the vectors in place, the same contract the sidebar's
+        // history list uses.
+        //
+        // WINRT_OBSERVABLE_PROPERTY above leaves the access modifier at
+        // private, so this public: is load-bearing (same trap TabRowControl.h
+        // documents for IsVerticalLayout).
+    public:
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> GitSidebarHerdrItems() const noexcept { return _gitSidebarHerdrItems; }
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> GitSidebarGitItems() const noexcept { return _gitSidebarGitItems; }
+
     private:
         friend struct TerminalPageT<TerminalPage>; // for Xaml to bind events
         std::optional<HWND> _hostingHwnd;
@@ -377,12 +388,20 @@ namespace winrt::TerminalApp::implementation
         std::chrono::seconds _historyRetryDelay{ 0 };
         std::chrono::steady_clock::time_point _historyNextRefresh{};
         std::optional<std::chrono::steady_clock::time_point> _historyMasterUnavailableSince;
-        // Workspace footer refresh: its own generation and timer so it never
+        // Git and Files panel refresh: its own generation and timer so it never
         // contends with the agent-session history refresh above.
         uint64_t _railWorkspaceGeneration{ 0 };
         bool _railWorkspaceInFlight{ false };
         bool _railWorkspacePending{ false };
         Windows::UI::Xaml::DispatcherTimer _railWorkspaceRefreshTimer{ nullptr };
+        // Git and Files panel: a full-height dock on the trailing edge, opened
+        // by the tab-row "Show/Hide Git and Files" button. The preference
+        // survives layout switches; the column width is the panel's own, not
+        // the tab rail's. Chrome conditions (focus mode, full screen) hide the
+        // panel without clearing this flag — see _IsRailWorkspaceVisible.
+        bool _gitSidebarOpen{ false };
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarHerdrItems{ nullptr };
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarGitItems{ nullptr };
         bool _tabDragReorderAuthorized{ false };
         Windows::Foundation::IInspectable _tabDragSelectedItem{ nullptr };
         winrt::weak_ref<Tab> _pendingPinTab;
@@ -1072,11 +1091,13 @@ namespace winrt::TerminalApp::implementation
         void _RequestSidebarHistoryRefresh(bool initialLoad);
         void _UpdateSidebarHistoryCurrentSession();
 
-        // ── Workspace footer (Herdr agents + Git state of the focused tab) ──
-        // The rail renders what these capture; nothing here touches the tab
-        // list, so a refresh can never disturb selection or drag order.
+        // ── Git and Files side panel (Herdr agents + Git state) ──
+        // A full-height panel docked on the trailing edge, not a strip under
+        // the tab list. The panel renders what these capture; nothing here
+        // touches the tab list, so a refresh can never disturb selection or
+        // drag order.
         //
-        // One footer row as the capture produces it, before the UI thread turns
+        // One panel row as the capture produces it, before the UI thread turns
         // it into a TabStripRailItem and resolves the accent style.
         struct _RailRow
         {
@@ -1087,7 +1108,7 @@ namespace winrt::TerminalApp::implementation
             // Chooses the badge style; see _RailAccentStyleKey.
             winrt::hstring accent;
         };
-        // What one footer section shows: its rows plus the one-line summary and
+        // What one panel section shows: its rows plus the one-line summary and
         // the message that stands in when there are no rows to draw.
         struct _RailSection
         {
@@ -1101,17 +1122,24 @@ namespace winrt::TerminalApp::implementation
         static winrt::hstring _RailAgentStatusLabel(std::string_view status);
         bool _IsRailWorkspaceVisible() const
         {
-            // The strip's own Visibility is the single truth: the vertical and
-            // horizontal layouts park it in different hosts, and focus mode can
-            // hide it without touching either preference flag.
-            if (!_tabStrip || _tabStrip.Visibility() != winrt::Windows::UI::Xaml::Visibility::Visible)
-            {
-                return false;
-            }
-            // A collapsed (icon-only) rail has no room for the footer, so it
-            // must not keep the 20s capture poll alive behind a hidden surface.
-            return !_isVerticalLayout || (!_isVerticalRailCollapsed && _isVerticalRailVisible);
+            // The panel is actually on screen: the user's preference AND the
+            // chrome conditions that own the surrounding chrome. Focus mode
+            // and full screen collapse the dock exactly like they collapse the
+            // tab rail, so this is also the gate for its refresh timer.
+            return _gitSidebarOpen && !_isInFocusMode && (!_isFullscreen || _showTabsFullscreen);
         }
+        void _ToggleGitSidebar();
+        void _SetGitSidebarVisible(bool visible);
+        // Mirrors the effective ToggleSidebar / ToggleGitSidebar chords onto the
+        // rail and tab-row tooltips. Runs in both layouts: the Git and Files
+        // toggle lives in the horizontal chrome, the rail toggle in the vertical
+        // one.
+        void _UpdateRailToggleKeyChordHints();
+        // Re-derives the panel's Visibility and column width from
+        // _IsRailWorkspaceVisible(). Called by _SetGitSidebarVisible and by the
+        // chrome-mode setters (focus mode, full screen, showTabsFullscreen).
+        void _ApplyGitSidebarVisibility();
+        void _GitSidebarCloseClick(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::RoutedEventArgs& args);
         void _RequestRailWorkspaceRefresh();
         safe_void_coroutine _LoadRailWorkspace(uint64_t generation);
         void _CompleteRailWorkspace(uint64_t generation,

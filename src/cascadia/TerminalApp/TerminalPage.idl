@@ -4,6 +4,7 @@ import "TaskbarState.idl";
 import "Remoting.idl";
 import "Tab.idl";
 import "IPaneContent.idl";
+import "TabStrip.idl";
 // Microsoft.Terminal.Protocol types are available via project reference (.winmd)
 
 namespace TerminalApp
@@ -115,6 +116,11 @@ namespace TerminalApp
         String SavedActionName { get; };
         String SavedActionKeyChord { get; };
         String SavedActionCommandLine { get; };
+
+        // Git and Files side panel rows. Getter-only and stable: the panel
+        // binds once and the page mutates the vectors in place.
+        Windows.Foundation.Collections.IObservableVector<TabStripRailItem> GitSidebarHerdrItems { get; };
+        Windows.Foundation.Collections.IObservableVector<TabStripRailItem> GitSidebarGitItems { get; };
 
         // We cannot use the default XAML APIs because we want to make sure
         // that there's only one application-global dialog visible at a time,

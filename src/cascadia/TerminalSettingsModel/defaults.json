@@ -539,6 +539,7 @@
         { "command": "toggleSidebar", "id": "Terminal.ToggleSidebar" },
         { "command": "toggleSidebarAgentsOnly", "id": "Terminal.ToggleSidebarAgentsOnly" },
         { "command": "toggleSidebarRecentAgentSessions", "id": "Terminal.ToggleSidebarRecentAgentSessions" },
+        { "command": "toggleGitSidebar", "id": "Terminal.ToggleGitSidebar" },
         { "command": "toggleAlwaysOnTop", "id": "Terminal.ToggleAlwaysOnTop" },
         { "command": "openNewTabDropdown", "id": "Terminal.OpenNewTabDropdown" },
         { "command": { "action": "openSettings", "target": "settingsUI" }, "id": "Terminal.OpenSettingsUI" },
@@ -773,6 +774,10 @@
         { "keys": "ctrl+shift+s", "id": "Terminal.ToggleSidebar" },
         { "keys": "ctrl+shift+g", "id": "Terminal.ToggleSidebarAgentsOnly" },
         { "keys": "ctrl+shift+r", "id": "Terminal.ToggleSidebarRecentAgentSessions" },
+        // The Git and Files panel has no tab-row chrome in vertical layout, so
+        // this chord is its layout-independent entry point. Ctrl+Shift+G above
+        // is the tab rail's agent filter, a different surface.
+        { "keys": "ctrl+shift+e", "id": "Terminal.ToggleGitSidebar" },
 
         // Tab Management
         // "command": "closeTab" is unbound by default.

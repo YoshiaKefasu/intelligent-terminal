@@ -924,6 +924,9 @@ namespace SettingsModelUnitTests
         verifyBinding(L"ctrl+shift+s", L"Terminal.ToggleSidebar");
         verifyBinding(L"ctrl+shift+g", L"Terminal.ToggleSidebarAgentsOnly");
         verifyBinding(L"ctrl+shift+r", L"Terminal.ToggleSidebarRecentAgentSessions");
+        // The Git and Files panel has no tab-row chrome in vertical layout, so
+        // this chord is its layout-independent entry point.
+        verifyBinding(L"ctrl+shift+e", L"Terminal.ToggleGitSidebar");
     }
 
     void KeyBindingsTests::AgentActionsParse()
@@ -981,6 +984,7 @@ namespace SettingsModelUnitTests
             testCase{ "toggleSidebar", ShortcutAction::ToggleSidebar, L"User.toggleSidebar" },
             testCase{ "toggleSidebarAgentsOnly", ShortcutAction::ToggleSidebarAgentsOnly, L"User.toggleSidebarAgentsOnly" },
             testCase{ "toggleSidebarRecentAgentSessions", ShortcutAction::ToggleSidebarRecentAgentSessions, L"User.toggleSidebarRecentAgentSessions" },
+            testCase{ "toggleGitSidebar", ShortcutAction::ToggleGitSidebar, L"User.toggleGitSidebar" },
         };
         for (const auto& test : cases)
         {

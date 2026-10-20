@@ -13,6 +13,86 @@
       Background="Transparent"
       mc:Ignorable="d">
 
+    <Page.Resources>
+        <ResourceDictionary>
+            <!--
+                Row styles for the Git and Files panel. Kept local to this page
+                because the panel is a TerminalPage child, not a TabStrip one;
+                TabStrip has its own near-identical pair for the session list.
+            -->
+            <Style x:Key="GitSidebarSubtitleTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Opacity" Value="0.72" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="GitSidebarAttentionTextStyle"
+                   BasedOn="{StaticResource GitSidebarSubtitleTextStyle}"
+                   TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style x:Key="GitSidebarActiveTextStyle"
+                   BasedOn="{StaticResource GitSidebarSubtitleTextStyle}"
+                   TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style x:Key="GitSidebarSectionHeaderStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Opacity" Value="0.72" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="GitSidebarSummaryTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="GitSidebarMessageTextStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <!--
+                One row of the panel; the badge carries the kind of thing
+                (git's porcelain letter, or the agent's state).
+            -->
+            <DataTemplate x:Key="GitSidebarRowTemplate">
+                <Grid MinHeight="24"
+                      Padding="12,2,12,2"
+                      ColumnSpacing="8"
+                      ToolTipService.ToolTip="{Binding ToolTip}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock MinWidth="12"
+                               VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono"
+                               FontSize="11"
+                               Style="{Binding AccentStyle}"
+                               Text="{Binding Badge}" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Text="{Binding Title}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Opacity="0.6"
+                               Text="{Binding Detail}"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Page.Resources>
+
     <Grid x:Name="Root"
           Background="Transparent">
         <Grid.RowDefinitions>
@@ -30,6 +110,22 @@
             <ColumnDefinition x:Name="VerticalRailColumn" Width="0" />
             <ColumnDefinition x:Name="TrailingColumn"
                               Width="*" />
+            <!--
+                Git and Files panel. Docked on the trailing edge and spanning
+                every row, so it runs the full height of the window like the
+                agent-session list does. Width 0 keeps it out of the layout
+                until the user opens it.
+
+                Note: the column index stays 2 in both flow directions. Root
+                is deliberately LeftToRight (tests assert the page and the
+                terminal content never inherit RTL — see
+                AgentChromeMirrorsWithoutChangingTerminalFlowDirection), so
+                mirroring the panel is done by giving the panel itself the
+                resolved FlowDirection, which flips its internal columns. The
+                dock stays physically right; matching the tab rail, which also
+                keeps a fixed grid column and mirrors only its contents.
+            -->
+            <ColumnDefinition x:Name="GitSidebarColumn" Width="0" />
         </Grid.ColumnDefinitions>
 
         <local:TabStrip x:Name="VerticalTabStrip"
@@ -96,6 +192,109 @@
                 <ImageBrush />
             </Grid.Background>
         </Grid>
+
+        <!--
+            Git and Files: a full-height panel docked on the trailing edge.
+            Opened by the tab-row "Show/Hide Git and Files" button; the column
+            width is driven from _SetGitSidebarVisible. Ctrl+Shift+G is NOT
+            wired here on purpose: that chord is ToggleSidebar, which owns the
+            tab rail's collapse state, a different surface.
+
+            Note: the dock is physically right in every flow direction, so the
+            column index is a constant. Root stays LeftToRight (tests pin the
+            terminal content to LTR — see
+            AgentChromeMirrorsWithoutChangingTerminalFlowDirection), and only
+            the panel's own contents mirror for RTL. Mirroring the dock side
+            would mean renumbering the rail/content columns that
+            _ApplyVerticalLayoutReshape and _ApplyHorizontalLayoutReshape own;
+            that is a deliberate omission, not an oversight.
+        -->
+        <Border x:Name="GitSidebarPanel"
+                Grid.Row="0"
+                Grid.RowSpan="4"
+                Grid.Column="2"
+                Background="{ThemeResource TabViewBackground}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0"
+                Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!--  Header: the panel's own title plus a close button.  -->
+                <Grid Grid.Row="0"
+                      MinHeight="40"
+                      Padding="12,0,4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Uid="VerticalTabsGitHeader"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button x:Name="GitSidebarCloseButton"
+                            Grid.Column="1"
+                            Width="32"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Close Git and Files"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="_GitSidebarCloseClick">
+                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="10"
+                                  Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1"
+                              HorizontalScrollBarVisibility="Disabled"
+                              HorizontalScrollMode="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              VerticalScrollMode="Auto">
+                    <StackPanel Padding="0,0,0,12">
+                        <!--  Herdr agents, then the focused tab's Git state.  -->
+                        <TextBlock x:Name="GitSidebarHerdrHeader"
+                                   x:Uid="VerticalTabsHerdrHeader"
+                                   Margin="12,4,12,2"
+                                   Style="{StaticResource GitSidebarSectionHeaderStyle}"
+                                   Visibility="Collapsed" />
+                        <TextBlock x:Name="GitSidebarHerdrSummary"
+                                   Margin="12,0,12,2"
+                                   Style="{StaticResource GitSidebarSummaryTextStyle}"
+                                   Visibility="Collapsed" />
+                        <ItemsControl x:Name="GitSidebarHerdrList"
+                                      ItemTemplate="{StaticResource GitSidebarRowTemplate}"
+                                      ItemsSource="{x:Bind GitSidebarHerdrItems}"
+                                      Visibility="Collapsed" />
+                        <TextBlock x:Name="GitSidebarHerdrMessage"
+                                   Margin="12,0,12,4"
+                                   Style="{StaticResource GitSidebarMessageTextStyle}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock x:Name="GitSidebarGitSummary"
+                                   Margin="12,8,12,4"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   Visibility="Collapsed" />
+                        <ItemsControl x:Name="GitSidebarGitList"
+                                      ItemTemplate="{StaticResource GitSidebarRowTemplate}"
+                                      ItemsSource="{x:Bind GitSidebarGitItems}"
+                                      Visibility="Collapsed" />
+                        <TextBlock x:Name="GitSidebarGitMessage"
+                                   Margin="12,0,12,4"
+                                   Style="{StaticResource GitSidebarMessageTextStyle}"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
 
         <!-- Bottom Bar: RETIRED. Forced Collapsed (see
              _UpdateBottomBarVisibility) so TabContent fills the window down

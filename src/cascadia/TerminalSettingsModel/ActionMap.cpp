@@ -173,6 +173,7 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
                 { ShortcutAction::ToggleSidebar, USES_RESOURCE(L"ToggleSidebarCommandKey") },
                 { ShortcutAction::ToggleSidebarAgentsOnly, USES_RESOURCE(L"ToggleSidebarAgentsOnlyCommandKey") },
                 { ShortcutAction::ToggleSidebarRecentAgentSessions, USES_RESOURCE(L"ToggleSidebarRecentAgentSessionsCommandKey") },
+                { ShortcutAction::ToggleGitSidebar, USES_RESOURCE(L"ToggleGitSidebarCommandKey") },
                 { ShortcutAction::ToggleSplitOrientation, USES_RESOURCE(L"ToggleSplitOrientationCommandKey") },
                 { ShortcutAction::Workspaces, USES_RESOURCE(L"WorkspacesCommandKey") },
             };

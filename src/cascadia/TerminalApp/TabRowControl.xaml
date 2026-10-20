@@ -89,6 +89,63 @@
 
         <mux:TabView.TabStripFooter>
             <Grid x:Name="HorizontalChromeFooter">
+                <Grid.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <!--
+                                Segmented chrome group: the two toggles below sit
+                                flush against the new-tab SplitButton, so their
+                                hover/pressed fill has to match it exactly. The
+                                SplitButton's own ThemeDictionaries (further down)
+                                map SplitButton* onto TabViewButton*, so mapping
+                                Button* onto the same keys makes the whole run read
+                                as one control instead of three unrelated squares —
+                                and guarantees the match without hardcoding a color.
+
+                                Safe at this scope: the SplitButton's template gives
+                                its inner buttons their own ControlTemplate (a plain
+                                RootGrid + ContentPresenter with only a Disabled
+                                state), so they never read ButtonBackground*.
+                            -->
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Dark">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+
+                        <!--
+                            "Lit" fill for the session toggle. Same ARGB(30,255,255,255)
+                            overlay the retired bottom bar used, kept as one static
+                            brush instance: minting a fresh SolidColorBrush on every
+                            state update is what made the chrome leave stale
+                            composited patches on Acrylic windows (issue #1020; see
+                            the brush-reuse fix in #1014).
+                        -->
+                        <SolidColorBrush x:Key="TabRowToggleLitBrush"
+                                         Color="#1EFFFFFF" />
+                        <!--
+                            Matches WinUI 2's ControlCornerRadius. Spelled out
+                            because only the *right* pair of corners is rounded
+                            here; a CornerRadius resource cannot be partially
+                            applied without a converter.
+                        -->
+                        <CornerRadius x:Key="TabRowGroupRightCornerRadius">0,4,4,0</CornerRadius>
+                    </ResourceDictionary>
+                </Grid.Resources>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -189,15 +246,41 @@
                       The old agent chat pane toggle was retired (DEBLOAT):
                       its button is now the sidebar toggle. Click handlers are
                       bound in TerminalPage::Create; lit state is mirrored in
-                      TerminalPage::_UpdateBottomBarState.  -->
+                      TerminalPage::_UpdateBottomBarState.
+
+                      These two buttons butt against the SplitButton with no
+                      margin, so [ + | v | sessions | sidebar ] reads as one
+                      segmented group. BorderThickness is 0 for the same reason
+                      the SplitButton sets it: Button's PointerOver visual state
+                      animates the template RootGrid's BorderBrush to
+                      ButtonBorderBrushPointerOver, which would otherwise draw
+                      a 1px box around each segment. The exact brush that key
+                      resolves to belongs to the WinUI theme dictionary, not to
+                      this file, so BorderThickness=0 is what actually guarantees
+                      the segmented look across WinUI versions.
+
+                      The session toggle is the middle segment, so it stays
+                      square; only the sidebar toggle carries the rounded end.
+                      That end is applied in code from the resolved flow
+                      direction (TerminalPage::Create): CornerRadius does not
+                      mirror with FlowDirection, so in RTL the sidebar button
+                      sits on the physical left and needs the opposite pair.
+
+                      Note: the SplitButton's template paints its fill in the
+                      non-rounded Primary/SecondaryBackgroundGrids, so the left
+                      end stays square unless that template is replaced (doing
+                      so would break TabTests::NewTabButtonSharesChromeBackdrop).  -->
                 <Button x:Name="SessionToggleTabRowButton"
                         Grid.Column="1"
                         Width="32"
                         Height="24"
-                        Margin="4,4,0,4"
+                        Margin="0,4,0,4"
                         Padding="0"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
                         Background="Transparent"
-                        BorderBrush="Transparent">
+                        BorderThickness="0"
+                        CornerRadius="0">
                     <ToolTipService.ToolTip>
                         <ToolTip>
                             <StackPanel>
@@ -215,29 +298,47 @@
                             </StackPanel>
                         </ToolTip>
                     </ToolTipService.ToolTip>
-                    <Image Width="16"
-                           Height="16"
-                           Stretch="Uniform">
-                        <Image.Source>
-                            <SvgImageSource UriSource="ms-appx:///AgentIcons/session.svg"
-                                            RasterizePixelWidth="32"
-                                            RasterizePixelHeight="32" />
-                        </Image.Source>
-                    </Image>
+                    <Grid>
+                        <!--
+                            Lit state. Deliberately a sibling Border and not the
+                            Button's own Background: the Button template paints its
+                            fill through ContentPresenter.Background, which the
+                            PointerOver/Pressed VisualStates animate. A brush written
+                            into Button.Background becomes the revert target of those
+                            storyboards, which on an Acrylic (HostBackdrop) window
+                            leaves an opaque patch behind after the pointer leaves
+                            (issue #1020). Toggled by _UpdateBottomBarState.
+                        -->
+                        <Border x:Name="SessionToggleTabRowLitBackground"
+                                Background="{ThemeResource TabRowToggleLitBrush}"
+                                IsHitTestVisible="False"
+                                Visibility="Collapsed" />
+                        <Image Width="16"
+                               Height="16"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Stretch="Uniform">
+                            <Image.Source>
+                                <SvgImageSource UriSource="ms-appx:///AgentIcons/session.svg"
+                                                RasterizePixelWidth="32"
+                                                RasterizePixelHeight="32" />
+                            </Image.Source>
+                        </Image>
+                    </Grid>
                 </Button>
 
-                <!--  Sidebar (Git & Files rail) open/close. Wired to the same
-                      ToggleSidebar action as the Ctrl+Shift+G hotkey and the
-                      vertical rail toggle. The shortcut TextBlock is filled
-                      from TerminalPage via SidebarToggleKeyChordText.  -->
+                <!--  Sidebar (Git & Files panel) open/close. Bound in
+                      TerminalPage::Create to _ToggleGitSidebar; the same action
+                      is reachable from the palette and from Ctrl+Shift+E.  -->
                 <Button x:Name="SidebarToggleTabRowButton"
                         Grid.Column="2"
                         Width="32"
                         Height="24"
-                        Margin="4,4,0,4"
+                        Margin="0,4,0,4"
                         Padding="0"
                         Background="Transparent"
-                        BorderBrush="Transparent">
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource TabRowGroupRightCornerRadius}">
                     <ToolTipService.ToolTip>
                         <ToolTip>
                             <StackPanel>
@@ -246,6 +347,8 @@
                                            FontSize="12"
                                            FontWeight="Normal"
                                            LineHeight="16" />
+                                <!--  Filled in from TerminalPage with the
+                                      effective binding of ToggleGitSidebar.  -->
                                 <TextBlock x:Name="SidebarToggleTabRowShortcut"
                                            FontFamily="Segoe UI Variable"
                                            FontSize="12"

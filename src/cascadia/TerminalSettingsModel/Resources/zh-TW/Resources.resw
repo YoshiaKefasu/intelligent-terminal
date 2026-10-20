@@ -997,6 +997,10 @@
     <value>切換側邊欄中最近的智能體工作階段的顯示</value>
     <comment>Command that toggles the Recent agent sessions section in the sidebar without changing the independent Agents only filter. Recent sessions are also included while a global search query is present.</comment>
   </data>
+  <data name="ToggleGitSidebarCommandKey" xml:space="preserve">
+    <value>切換 Git 與檔案面板</value>
+    <comment>A command that shows or hides the Git and Files panel, the dock on the trailing edge that lists the active tab folder's repository, branch and changed files. It is independent of the tab sidebar.</comment>
+  </data>
   <data name="OpenAgentPaneCommandKey" xml:space="preserve"><value>切換 AI 代理</value><comment>In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), not a human agent or representative.</comment></data>
   <data name="FocusAgentPaneCommandKey" xml:space="preserve"><value>將焦點移至 AI 代理窗格</value><comment>In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), not a human agent or representative.</comment></data>
   <data name="OpenAgentSessionsCommandKey" xml:space="preserve"><value>開啟 AI 代理工作階段清單</value><comment>In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), not a human agent or representative.</comment></data>

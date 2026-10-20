@@ -191,56 +191,6 @@
                     </Grid>
                 </Grid>
             </DataTemplate>
-            <Style x:Key="RailSectionHeaderStyle"
-                   TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Opacity" Value="0.72" />
-                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-            </Style>
-            <Style x:Key="RailSummaryTextStyle"
-                   TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="Opacity" Value="0.6" />
-                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-            </Style>
-            <Style x:Key="RailMessageTextStyle"
-                   TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="Opacity" Value="0.6" />
-                <Setter Property="TextWrapping" Value="Wrap" />
-            </Style>
-            <!--  One row of the workspace footer; the badge carries the kind of thing (agent state, file status).  -->
-            <DataTemplate x:Key="RailRowTemplate"
-                          x:DataType="local:TabStripRailItem">
-                <Grid MinHeight="22"
-                      Padding="12,1,12,1"
-                      ColumnSpacing="8"
-                      ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock MinWidth="44"
-                               VerticalAlignment="Center"
-                               FontSize="11"
-                               Style="{x:Bind AccentStyle}"
-                               Text="{x:Bind Badge}"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1"
-                               VerticalAlignment="Center"
-                               FontSize="12"
-                               Text="{x:Bind Title}"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="2"
-                               VerticalAlignment="Center"
-                               FontSize="11"
-                               Opacity="0.6"
-                               Text="{x:Bind Detail}"
-                               TextTrimming="CharacterEllipsis" />
-                </Grid>
-            </DataTemplate>
             <DataTemplate x:Key="HistoryRowTemplate"
                           x:DataType="local:TabStripHistoryItem">
                 <Grid x:Name="HistoryRowGrid"
@@ -377,7 +327,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -945,57 +894,6 @@
                               Glyph="&#xE711;" />
                 </Button>
             </Grid>
-        </Border>
-
-        <!--
-            Workspace footer: Herdr agents and the focused tab's Git state.
-            Deliberately outside ItemsList so a refresh here can never disturb
-            the tab projection above (selection, drag order, filtering).
-        -->
-        <Border x:Name="RailWorkspaceFooter"
-                Grid.Row="6"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="0,1,0,0"
-                Visibility="Collapsed">
-            <ScrollViewer MaxHeight="320"
-                          HorizontalScrollBarVisibility="Disabled"
-                          HorizontalScrollMode="Disabled"
-                          VerticalScrollBarVisibility="Auto"
-                          VerticalScrollMode="Auto">
-                <StackPanel Padding="0,4,0,6">
-                    <TextBlock x:Name="HerdrRailHeader"
-                               x:Uid="VerticalTabsHerdrHeader"
-                               Margin="12,4,12,2"
-                               Style="{StaticResource RailSectionHeaderStyle}" />
-                    <TextBlock x:Name="HerdrRailSummary"
-                               Margin="12,0,12,2"
-                               Style="{StaticResource RailSummaryTextStyle}"
-                               Visibility="Collapsed" />
-                    <ItemsControl x:Name="HerdrRailList"
-                                  ItemTemplate="{StaticResource RailRowTemplate}"
-                                  ItemsSource="{x:Bind HerdrRailItems}" />
-                    <TextBlock x:Name="HerdrRailMessage"
-                               Margin="12,0,12,2"
-                               Style="{StaticResource RailMessageTextStyle}"
-                               Visibility="Collapsed" />
-
-                    <TextBlock x:Name="GitRailHeader"
-                               x:Uid="VerticalTabsGitHeader"
-                               Margin="12,8,12,2"
-                               Style="{StaticResource RailSectionHeaderStyle}" />
-                    <TextBlock x:Name="GitRailSummary"
-                               Margin="12,0,12,2"
-                               Style="{StaticResource RailSummaryTextStyle}"
-                               Visibility="Collapsed" />
-                    <ItemsControl x:Name="GitRailList"
-                                  ItemTemplate="{StaticResource RailRowTemplate}"
-                                  ItemsSource="{x:Bind GitRailItems}" />
-                    <TextBlock x:Name="GitRailMessage"
-                               Margin="12,0,12,2"
-                               Style="{StaticResource RailMessageTextStyle}"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </ScrollViewer>
         </Border>
 
     </Grid>

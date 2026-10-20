@@ -515,6 +515,10 @@
     <value>إظهار جلسات الوكلاء الأخيرة في الشريط الجانبي أو إخفاؤها</value>
     <comment>Command that toggles the Recent agent sessions section in the sidebar without changing the independent Agents only filter. Recent sessions are also included while a global search query is present.</comment>
   </data>
+  <data name="ToggleGitSidebarCommandKey" xml:space="preserve">
+    <value>إظهار لوحة Git والملفات أو إخفاؤها</value>
+    <comment>A command that shows or hides the Git and Files panel, the dock on the trailing edge that lists the active tab folder's repository, branch and changed files. It is independent of the tab sidebar.</comment>
+  </data>
   <data name="TogglePaneReadOnlyCommandKey" xml:space="preserve">
     <value>تبديل وضع القراءة فقط للوحة</value>
   </data>

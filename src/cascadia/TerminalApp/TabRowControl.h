@@ -38,6 +38,10 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::UI::Xaml::Controls::Button VerticalRailToggleButton() const noexcept { return _verticalRailToggleButton; }
         winrt::Microsoft::UI::Xaml::Controls::SplitButton VerticalNewTabButton() const noexcept { return _verticalNewTabButton; }
         void SidebarToggleKeyChordText(const winrt::hstring& value);
+        // The Git and Files panel's own chord (ToggleGitSidebar). Kept apart
+        // from SidebarToggleKeyChordText, which labels the vertical rail's
+        // collapse toggle: the two are different surfaces.
+        void GitSidebarToggleKeyChordText(const winrt::hstring& value);
         void SetVerticalRailState(bool visible, bool collapsed, double width);
         til::typed_event<TerminalApp::TabRowControl, winrt::Windows::Foundation::IInspectable> RailCollapseRequested;
 
@@ -45,6 +49,7 @@ namespace winrt::TerminalApp::implementation
         bool _showElevationShield{ false };
         bool _isVerticalLayout{ false };
         winrt::hstring _sidebarToggleKeyChordText;
+        winrt::hstring _gitSidebarToggleKeyChordText;
         winrt::Windows::UI::Xaml::UIElement _verticalTitleBarContent{ nullptr };
         winrt::Windows::UI::Xaml::UIElement _verticalExpandedChrome{ nullptr };
         winrt::Windows::UI::Xaml::Controls::StackPanel _verticalLeadingChrome{ nullptr };

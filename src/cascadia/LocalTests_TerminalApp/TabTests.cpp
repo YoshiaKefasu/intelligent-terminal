@@ -447,6 +447,8 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalLayoutUsesFirstPreferredResourceLanguage);
         TEST_METHOD(AgentChromeMirrorsWithoutChangingTerminalFlowDirection);
         TEST_METHOD(VerticalRailVisibilityRestoresWidth);
+        TEST_METHOD(GitSidebarTogglesFullHeightDock);
+        TEST_METHOD(GitSidebarActionTogglesInEveryLayout);
         TEST_METHOD(VerticalRailCollapseRestoresWidth);
         TEST_METHOD(SidebarHotkeyFocusesSearchAndReturnsToInput);
         TEST_METHOD(SidebarRecentPreferencePreservesSearchAndInputFocus);
@@ -4833,6 +4835,137 @@ namespace TerminalAppLocalTests
             VERIFY_IS_TRUE(page->_verticalRailSplitter.IsHitTestVisible());
 
         });
+    }
+
+    // The Git and Files panel has no reachable chrome in vertical layout (the
+    // tab-row button lives in TabView.TabStripFooter, which is collapsed there),
+    // so ToggleGitSidebar is the layout-independent entry point. This pins both
+    // the action plumbing and the chrome-mode gating behind _IsRailWorkspaceVisible.
+    void TabTests::GitSidebarActionTogglesInEveryLayout()
+    {
+        for (const auto layout : { TabLayout::Horizontal, TabLayout::Vertical })
+        {
+            CascadiaSettings settings{ LR"({
+                "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "showTabsInTitlebar": false,
+                "profiles": [{
+                    "name": "profile0",
+                    "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                    "commandline": "cmd.exe"
+                }]
+            })", {} };
+            settings.GlobalSettings().TabLayout(layout);
+            winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+            const auto connection = winrt::make_self<TestConnection>(
+                winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+                winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+            _initializeTerminalPage(page, settings, *connection);
+
+            TestOnUIThread([&]() {
+                const auto dispatch = [&]() {
+                    ActionEventArgs args{};
+                    page->_HandleToggleGitSidebar(nullptr, args);
+                    VERIFY_IS_TRUE(args.Handled());
+                };
+
+                VERIFY_IS_FALSE(page->_gitSidebarOpen);
+                dispatch();
+                VERIFY_IS_TRUE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+                VERIFY_IS_TRUE(page->GitSidebarColumn().Width().Value > 0.0);
+                dispatch();
+                VERIFY_IS_FALSE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                VERIFY_ARE_EQUAL(0.0, page->GitSidebarColumn().Width().Value);
+
+                // The preference is not the panel: focus mode and full screen
+                // take the dock off screen without forgetting it, and leaving
+                // them brings it back.
+                dispatch();
+                VERIFY_IS_TRUE(page->_gitSidebarOpen);
+                page->SetFocusMode(true);
+                VERIFY_IS_TRUE(page->_gitSidebarOpen);
+                VERIFY_IS_FALSE(page->_IsRailWorkspaceVisible());
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                VERIFY_ARE_EQUAL(0.0, page->GitSidebarColumn().Width().Value);
+                page->SetFocusMode(false);
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+
+                page->SetFullscreen(true);
+                VERIFY_IS_TRUE(page->_gitSidebarOpen);
+                VERIFY_IS_FALSE(page->_IsRailWorkspaceVisible());
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                VERIFY_ARE_EQUAL(0.0, page->GitSidebarColumn().Width().Value);
+                page->SetFullscreen(false);
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+
+                // showTabsFullscreen keeps the chrome, so the dock stays too.
+                page->SetFullscreen(true);
+                page->SetShowTabsFullscreen(true);
+                VERIFY_IS_TRUE(page->_IsRailWorkspaceVisible());
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+                page->SetShowTabsFullscreen(false);
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                page->SetFullscreen(false);
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+            });
+        }
+    }
+
+    // The Git and Files panel is a full-height dock of its own: opening it must
+    // claim a real column so the terminal reflows, closing it must give the
+    // column back, and it must never disturb the tab rail it visually resembles.
+    void TabTests::GitSidebarTogglesFullHeightDock()
+    {
+        for (const auto layout : { TabLayout::Horizontal, TabLayout::Vertical })
+        {
+            CascadiaSettings settings{ LR"({
+                "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "showTabsInTitlebar": false,
+                "profiles": [{
+                    "name": "profile0",
+                    "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                    "commandline": "cmd.exe"
+                }]
+            })", {} };
+            settings.GlobalSettings().TabLayout(layout);
+            winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+            const auto connection = winrt::make_self<TestConnection>(
+                winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+                winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+            _initializeTerminalPage(page, settings, *connection);
+
+            TestOnUIThread([&]() {
+                // Closed by default: no column, no panel.
+                VERIFY_IS_FALSE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                VERIFY_ARE_EQUAL(0.0, page->GitSidebarColumn().Width().Value);
+
+                page->_ToggleGitSidebar();
+                VERIFY_IS_TRUE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarPanel().Visibility());
+                VERIFY_IS_TRUE(page->GitSidebarColumn().Width().Value > 0.0);
+                VERIFY_ARE_EQUAL(GridUnitType::Pixel, page->GitSidebarColumn().Width().GridUnitType);
+
+                page->_ToggleGitSidebar();
+                VERIFY_IS_FALSE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+                VERIFY_ARE_EQUAL(0.0, page->GitSidebarColumn().Width().Value);
+
+                // The panel is not the tab rail: opening it must leave the
+                // rail's own column and collapse state untouched.
+                const auto railWidthBefore = page->VerticalRailColumn().Width().Value;
+                const auto collapsedBefore = page->_isVerticalRailCollapsed;
+                page->_ToggleGitSidebar();
+                VERIFY_ARE_EQUAL(railWidthBefore, page->VerticalRailColumn().Width().Value);
+                VERIFY_ARE_EQUAL(collapsedBefore, page->_isVerticalRailCollapsed);
+
+                // The close button is a second, explicit way out.
+                page->_GitSidebarCloseClick(nullptr, nullptr);
+                VERIFY_IS_FALSE(page->_gitSidebarOpen);
+                VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarPanel().Visibility());
+            });
+        }
     }
 
     void TabTests::VerticalLayoutMirrorsForRtl()

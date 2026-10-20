@@ -98,6 +98,9 @@ static constexpr auto railWorkspaceRefreshInterval = std::chrono::seconds{ 20 };
 // Both sections cap their rows; a long Git change list would otherwise push the
 // footer past the height of the rail itself.
 static constexpr size_t railWorkspaceMaxRows = 20;
+// Git and Files panel width. Wide enough for a nested path plus git's status
+// word, narrow enough to leave the terminal usable on a laptop display.
+static constexpr double gitSidebarWidth = 320.0;
 
 #define HOOKUP_ACTION(action) _actionDispatch->action({ this, &TerminalPage::_Handle##action });
 
@@ -277,6 +280,10 @@ namespace winrt::TerminalApp::implementation
         _hostingHwnd{},
         _WindowProperties{ std::move(properties) }
     {
+        // Before InitializeComponent: the panel's ItemsSource is an x:Bind,
+        // which is evaluated one-time while the XAML tree is built.
+        _gitSidebarHerdrItems = winrt::single_threaded_observable_vector<TerminalApp::TabStripRailItem>();
+        _gitSidebarGitItems = winrt::single_threaded_observable_vector<TerminalApp::TabStripRailItem>();
         InitializeComponent();
         _WindowProperties.PropertyChanged({ get_weak(), &TerminalPage::_windowPropertyChanged });
         _keepRunningTabsChangedToken = winrt::get_self<implementation::ContentManager>(_manager)->KeepRunningTabsChanged(
@@ -572,11 +579,13 @@ namespace winrt::TerminalApp::implementation
         }
         if (const auto sidebarToggle = tabRowImpl->SidebarToggleTabRowButton())
         {
-            // Same path as the Ctrl+Shift+G hotkey and the vertical rail toggle.
+            // The Git and Files panel is its own full-height dock, so the
+            // button toggles that panel directly instead of routing through
+            // the tab rail's collapse state (which is a tab-browser concern).
             sidebarToggle.Click([weakThis = get_weak()](auto&&, auto&&) {
                 if (const auto self = weakThis.get())
                 {
-                    self->_ToggleSidebarHotkey();
+                    self->_ToggleGitSidebar();
                 }
             });
             const auto sidebarLabel = L"Show/Hide Git and Files";
@@ -589,6 +598,20 @@ namespace winrt::TerminalApp::implementation
         _isRightToLeft = ::Microsoft::Terminal::RtlHelper::IsRtlLocale(language);
         const auto flowDirection = _isRightToLeft ? FlowDirection::RightToLeft : FlowDirection::LeftToRight;
         _tabRow.FlowDirection(flowDirection);
+
+        // CornerRadius does not mirror with FlowDirection, but the segmented
+        // group's last segment does: the sidebar toggle is the right end in LTR
+        // and the left end in RTL. Flip the pair the XAML set (so the radius
+        // still has exactly one source of truth) rather than repeating the
+        // value here.
+        if (_isRightToLeft)
+        {
+            if (const auto sidebarToggle = tabRowImpl->SidebarToggleTabRowButton())
+            {
+                const auto radius = sidebarToggle.CornerRadius().TopRight;
+                sidebarToggle.CornerRadius(WUX::CornerRadius{ radius, 0, 0, radius });
+            }
+        }
         _tabStrip.FlowDirection(flowDirection);
         BottomBarRoot().FlowDirection(flowDirection);
         if (const auto titlebar = tabRowImpl->VerticalTitleBarContent().try_as<FrameworkElement>())
@@ -4772,8 +4795,11 @@ namespace winrt::TerminalApp::implementation
                 isTerminalTab = isTerm || isAgent;
             }
         }
-        // Lit-state brushes, defined before the early return below so the
-        // tab-row toggles can go dark there too.
+        // Lit-state brushes for the (retired, always-collapsed) bottom bar's
+        // toggles. The tab-row toggle no longer uses these — it toggles a
+        // sibling Border's Visibility instead, so that the Button's own
+        // PointerOver/Pressed visual states remain the sole owner of its
+        // background (see the mirror block further down).
         const auto kLitOverlay = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
             winrt::Windows::UI::ColorHelper::FromArgb(30, 255, 255, 255)
         };
@@ -4788,9 +4814,9 @@ namespace winrt::TerminalApp::implementation
             if (_tabRow)
             {
                 const auto tabRowImpl = winrt::get_self<implementation::TabRowControl>(_tabRow);
-                if (const auto rowSessions = tabRowImpl->SessionToggleTabRowButton())
+                if (const auto rowLit = tabRowImpl->SessionToggleTabRowLitBackground())
                 {
-                    rowSessions.Background(kTransparent);
+                    rowLit.Visibility(Visibility::Collapsed);
                 }
             }
             return;
@@ -4832,13 +4858,23 @@ namespace winrt::TerminalApp::implementation
         {
             sessionsBtn.Background(sessionsView ? kLitOverlay : kTransparent);
         }
-        // Mirror the lit state onto the tab-row toggles.
+        // Mirror the lit state onto the tab-row toggle.
+        //
+        // Deliberately NOT `rowSessions.Background(...)`. The Button template
+        // paints its fill through `ContentPresenter.Background`, which the
+        // PointerOver/Pressed VisualStates animate. Writing a brush into the
+        // control's own Background property makes that property the revert
+        // target of those storyboards, and on an Acrylic window (HostBackdrop)
+        // the revert leaves the hovered region composited as an opaque patch
+        // (issue #1020: gray trails after hovering tab-row chrome). The lit
+        // fill is now a sibling Border inside the button's content, toggled by
+        // Visibility, so the visual states own the background exclusively.
         if (_tabRow)
         {
             const auto tabRowImpl = winrt::get_self<implementation::TabRowControl>(_tabRow);
-            if (const auto rowSessions = tabRowImpl->SessionToggleTabRowButton())
+            if (const auto rowLit = tabRowImpl->SessionToggleTabRowLitBackground())
             {
-                rowSessions.Background(sessionsView ? kLitOverlay : kTransparent);
+                rowLit.Visibility(sessionsView ? Visibility::Visible : Visibility::Collapsed);
             }
         }
 
@@ -6061,7 +6097,6 @@ namespace winrt::TerminalApp::implementation
             _tabStrip.Visibility(Visibility::Collapsed);
             _ApplyHorizontalLayoutReshape();
             _StopRailWorkspaceRefreshTimer();
-            winrt::get_self<implementation::TabStrip>(_tabStrip)->SetRailWorkspaceVisible(false);
         }
     }
 
@@ -6086,6 +6121,10 @@ namespace winrt::TerminalApp::implementation
     {
         SessionToggleButton().Visibility(_isVerticalLayout ? Visibility::Collapsed : Visibility::Visible);
         _tabStrip.TopChromeContent(nullptr);
+        // The tab-row Git and Files toggle only exists in the horizontal chrome,
+        // and _SetVerticalRailVisibility (the other hint writer) is a no-op
+        // there, so refresh the hints here for both layouts.
+        _UpdateRailToggleKeyChordHints();
         if (_hasTitlebarHost)
         {
             SetTitleBarContent.raise(*this, nullptr);
@@ -6630,6 +6669,29 @@ namespace winrt::TerminalApp::implementation
         return selectedChord;
     }
 
+    void TerminalPage::_UpdateRailToggleKeyChordHints()
+    {
+        // The rail's own toggle lives in the vertical chrome, while the tab-row
+        // copy of the Git and Files toggle lives in the horizontal chrome, so
+        // this must run in either layout. _GetEffectiveKeyBindingForAction
+        // resolves through the user's overrides, so each hint always matches
+        // the chord that actually fires.
+        const auto actionMap = _settings.ActionMap();
+        if (!actionMap || !_tabRow)
+        {
+            return;
+        }
+
+        const auto toText = [&](const ShortcutAction action) {
+            const auto chord = _GetEffectiveKeyBindingForAction(actionMap, action);
+            return chord ? KeyChordSerialization::ToString(chord) : winrt::hstring{};
+        };
+
+        const auto tabRow = winrt::get_self<implementation::TabRowControl>(_tabRow);
+        tabRow->SidebarToggleKeyChordText(toText(ShortcutAction::ToggleSidebar));
+        tabRow->GitSidebarToggleKeyChordText(toText(ShortcutAction::ToggleGitSidebar));
+    }
+
     void TerminalPage::_SetVerticalRailVisibility(const bool visible)
     {
         if (!_isVerticalLayout)
@@ -6682,12 +6744,8 @@ namespace winrt::TerminalApp::implementation
                 Automation::AutomationProperties::SetAcceleratorKey(item, shortcut);
             }
         }
-        const auto sidebarChord = _GetEffectiveKeyBindingForAction(actionMap, ShortcutAction::ToggleSidebar);
-        const auto sidebarKeyChordText = sidebarChord ?
-                                             KeyChordSerialization::ToString(sidebarChord) :
-                                             winrt::hstring{};
+        _UpdateRailToggleKeyChordHints();
         const auto tabRow = winrt::get_self<implementation::TabRowControl>(_tabRow);
-        tabRow->SidebarToggleKeyChordText(sidebarKeyChordText);
         tabRow->SetVerticalRailState(visible, _isVerticalRailCollapsed, width);
         if (!expanded)
         {
@@ -6777,6 +6835,66 @@ namespace winrt::TerminalApp::implementation
         {
             LOG_HR(E_FAIL);
         }
+    }
+
+    // The Git and Files panel is its own surface, independent of the tab rail:
+    // the rail is a tab browser, this panel is the focused tab's repository.
+    // Both layouts dock it on the trailing edge, and it survives a tabLayout
+    // switch because it is a sibling of the content, not of the rail.
+    void TerminalPage::_ToggleGitSidebar()
+    {
+        _SetGitSidebarVisible(!_gitSidebarOpen);
+    }
+
+    void TerminalPage::_SetGitSidebarVisible(const bool visible)
+    {
+        if (_gitSidebarOpen == visible)
+        {
+            return;
+        }
+        _gitSidebarOpen = visible;
+        _ApplyGitSidebarVisibility();
+    }
+
+    void TerminalPage::_ApplyGitSidebarVisibility()
+    {
+        // The flag is the preference; _IsRailWorkspaceVisible() folds in the
+        // chrome conditions. Deriving the UI from it keeps focus mode and full
+        // screen able to hide the dock without forgetting the preference, and
+        // keeps the column width, the panel Visibility and the refresh timer
+        // from ever disagreeing.
+        const bool visible = _IsRailWorkspaceVisible();
+
+        const auto panel = GitSidebarPanel();
+        if (!panel)
+        {
+            // SetFocusMode can arrive before Create() has loaded the XAML.
+            return;
+        }
+        panel.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+
+        // The content gives up exactly the panel's width, so the terminal
+        // reflows instead of being covered. The rail column keeps its own
+        // width; only this column changes.
+        const auto panelLength = GridLengthHelper::FromValueAndType(visible ? gitSidebarWidth : 0.0, GridUnitType::Pixel);
+        GitSidebarColumn().Width(panelLength);
+
+        if (visible)
+        {
+            // Mirror the panel's internal columns for RTL. The dock side stays
+            // physically right (see the note in TerminalPage.xaml).
+            panel.FlowDirection(_isRightToLeft ? FlowDirection::RightToLeft : FlowDirection::LeftToRight);
+            _RequestRailWorkspaceRefresh();
+        }
+        else
+        {
+            _StopRailWorkspaceRefreshTimer();
+        }
+    }
+
+    void TerminalPage::_GitSidebarCloseClick(const IInspectable&, const RoutedEventArgs&)
+    {
+        _SetGitSidebarVisible(false);
     }
 
     void TerminalPage::_OnVerticalRailCollapseRequested(const IInspectable&, const IInspectable&)
@@ -6955,9 +7073,9 @@ namespace winrt::TerminalApp::implementation
         strip->SetCurrentHistoryItem(current, tabItem);
     }
 
-    // ── Workspace footer: Herdr agents and the focused tab's Git state ──────
+    // ── Git and Files panel: Herdr agents + the focused tab's Git state ────
     //
-    // Two wta captures feed the rail footer below the tab list:
+    // Two wta captures feed the right-hand panel:
     //   `wta herdr snapshot` — the running herdr server's agents
     //   `wta git status --path <dir>` — the focused tab folder's repository
     // Both run off the UI thread through RunWtaCapture, exactly like
@@ -6965,17 +7083,18 @@ namespace winrt::TerminalApp::implementation
 
     std::wstring_view TerminalPage::_RailAccentStyleKey(const std::string_view status)
     {
-        // Reuse the history row styles so the footer and the session list agree
-        // on what Working / Attention / Error look like in this theme.
+        // The panel's own row styles, so Working / Attention / Conflicted read
+        // the same way they do in the session list without depending on the
+        // tab strip's resource dictionary.
         if (status == "working")
         {
-            return L"HistoryActiveTextStyle";
+            return L"GitSidebarActiveTextStyle";
         }
         if (status == "blocked" || status == "conflicted")
         {
-            return L"HistoryAttentionTextStyle";
+            return L"GitSidebarAttentionTextStyle";
         }
-        return L"HistorySubtitleTextStyle";
+        return L"GitSidebarSubtitleTextStyle";
     }
 
     winrt::hstring TerminalPage::_FocusedTabWorkingDirectory() const
@@ -7019,16 +7138,9 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_RequestRailWorkspaceRefresh()
     {
-        if (!_tabStrip)
-        {
-            return;
-        }
-        // The rail's own Visibility is the single truth here: the vertical and
-        // horizontal layouts park the strip in different hosts, and focus mode
-        // can hide it without touching either preference flag.
-        const auto visible = _IsRailWorkspaceVisible();
-        _tabStrip.SetRailWorkspaceVisible(visible);
-        if (!visible)
+        // The panel's own Visibility is the single truth here: focus mode and
+        // fullscreen can hide it without touching the preference flag.
+        if (!_IsRailWorkspaceVisible())
         {
             _StopRailWorkspaceRefreshTimer();
             return;
@@ -7112,13 +7224,15 @@ namespace winrt::TerminalApp::implementation
                                               _RailSection herdr,
                                               _RailSection git)
     {
-        if (generation != _railWorkspaceGeneration || !_tabStrip)
+        if (generation != _railWorkspaceGeneration)
         {
             return;
         }
 
-        const auto toItems = [&](const _RailSection& section) {
-            auto items = winrt::single_threaded_vector<TerminalApp::TabStripRailItem>();
+        const auto toItems = [&](const _RailSection& section,
+                                 const IObservableVector<TerminalApp::TabStripRailItem>& target) {
+            std::vector<TerminalApp::TabStripRailItem> items;
+            items.reserve(section.rows.size());
             for (const auto& row : section.rows)
             {
                 auto item = winrt::make<TabStripRailItem>();
@@ -7127,23 +7241,42 @@ namespace winrt::TerminalApp::implementation
                 item.Detail(row.detail);
                 item.ToolTip(row.tooltip);
                 const auto styleKey = _RailAccentStyleKey(winrt::to_string(row.accent));
-                if (_tabStrip.Resources().HasKey(box_value(styleKey)))
+                if (Resources().HasKey(box_value(styleKey)))
                 {
-                    item.AccentStyle(_tabStrip.Resources().Lookup(box_value(styleKey)).as<WUX::Style>());
+                    item.AccentStyle(Resources().Lookup(box_value(styleKey)).as<WUX::Style>());
                 }
-                items.Append(item);
+                items.emplace_back(item);
             }
-            return items;
+            // ReplaceAll resets the ItemsControl; the panel holds at most a
+            // couple dozen rows, so that is cheaper than diffing slots.
+            target.ReplaceAll(items);
         };
 
-        _tabStrip.CommitRailSection(TerminalApp::TabStripRailSection::Herdr,
-                                    toItems(herdr),
-                                    herdr.summary,
-                                    herdr.message);
-        _tabStrip.CommitRailSection(TerminalApp::TabStripRailSection::Git,
-                                    toItems(git),
-                                    git.summary,
-                                    git.message);
+        toItems(herdr, _gitSidebarHerdrItems);
+        toItems(git, _gitSidebarGitItems);
+
+        // A section with neither rows nor a message would draw only its own
+        // header, which reads as an empty section; hide the whole block.
+        const auto showSection = [](const TextBlock& header,
+                                    const TextBlock& summaryText,
+                                    const TextBlock& messageText,
+                                    const ItemsControl& list,
+                                    const _RailSection& section) {
+            summaryText.Text(section.summary);
+            summaryText.Visibility(section.summary.empty() ? Visibility::Collapsed : Visibility::Visible);
+            messageText.Text(section.message);
+            messageText.Visibility(section.message.empty() ? Visibility::Collapsed : Visibility::Visible);
+            list.Visibility(section.rows.empty() ? Visibility::Collapsed : Visibility::Visible);
+            // The Git section has no separate header: its summary (repo ·
+            // branch) already reads as the headline, so it doubles as one.
+            if (header)
+            {
+                const auto any = !section.rows.empty() || !section.message.empty() || !section.summary.empty();
+                header.Visibility(any ? Visibility::Visible : Visibility::Collapsed);
+            }
+        };
+        showSection(GitSidebarHerdrHeader(), GitSidebarHerdrSummary(), GitSidebarHerdrMessage(), GitSidebarHerdrList(), herdr);
+        showSection(nullptr, GitSidebarGitSummary(), GitSidebarGitMessage(), GitSidebarGitList(), git);
 
         if (_railWorkspacePending)
         {
@@ -16805,6 +16938,10 @@ namespace winrt::TerminalApp::implementation
         {
             _isInFocusMode = newInFocusMode;
             _UpdateTabView();
+            // Focus mode hides the whole chrome, the Git and Files dock included.
+            // Re-derive its visibility so the 320px panel and its refresh timer do
+            // not survive into focus mode, and come back out of it.
+            _ApplyGitSidebarVisibility();
             FocusModeChanged.raise(*this, nullptr);
         }
     }
@@ -17054,6 +17191,7 @@ namespace winrt::TerminalApp::implementation
         if (_isFullscreen)
         {
             _UpdateTabView();
+            _ApplyGitSidebarVisibility();
         }
     }
 
@@ -17065,6 +17203,7 @@ namespace winrt::TerminalApp::implementation
         }
         _isFullscreen = newFullscreen;
         _UpdateTabView();
+        _ApplyGitSidebarVisibility();
         FullscreenChanged.raise(*this, nullptr);
     }
 
