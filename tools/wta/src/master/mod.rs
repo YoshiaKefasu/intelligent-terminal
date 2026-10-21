@@ -7849,8 +7849,13 @@ fn host_history_agent_ids(
 ) -> Vec<&'static str> {
     crate::agent_registry::KNOWN_AGENTS
         .iter()
-        // Gemini remains available for chat, but must not start solely for sidebar history.
-        .filter(|profile| profile.id != crate::agent_registry::GEMINI_AGENT_ID)
+        // Gemini, Antigravity, and OpenCode remain available for chat/explicit
+        // invocation, but must not start solely for background sidebar history.
+        .filter(|profile| {
+            profile.id != crate::agent_registry::GEMINI_AGENT_ID
+                && profile.id != crate::agent_registry::ANTIGRAVITY_AGENT_ID
+                && profile.id != crate::agent_registry::OPENCODE_AGENT_ID
+        })
         // Delegate-only agents have no ACP server to answer a history query.
         .filter(|profile| profile.supports_acp())
         .filter(|profile| allowed_ids.is_none_or(|ids| ids.contains(profile.id)))

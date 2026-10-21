@@ -6950,6 +6950,13 @@ namespace winrt::TerminalApp::implementation
         else
         {
             _StopRailWorkspaceRefreshTimer();
+            // The tree is forgotten while the panel is away. Hiding it is the
+            // reader putting the folder down, so reopening the panel must read
+            // the folder afresh instead of resuming a tree that may have gone
+            // stale in the meantime. Clearing the recorded root is what makes
+            // the next capture rebuild rather than diff against a tree that is
+            // no longer on screen.
+            _gitSidebarFilesRoot.clear();
         }
     }
 
@@ -7395,20 +7402,36 @@ namespace winrt::TerminalApp::implementation
             return;
         }
 
-        // The tree is rebuilt only when the folder it shows changes. A periodic
-        // refresh must not fold what the reader opened, and a tree that is
-        // already showing this folder is already correct: git's marks are on
-        // the rows the folder read returned, not on the tree's structure.
-        if (_gitSidebarFilesRoot == directory && tree.RootNodes().Size() > 0)
-        {
-            return;
-        }
+        // The tree keeps the folder it is showing, and a refresh of that same
+        // folder only re-reads its root level: folding what the reader opened
+        // would cost them their place every twenty seconds. A different folder
+        // is a different tree, so that one is rebuilt from its root.
+        const auto sameFolder = _gitSidebarFilesRoot == directory && tree.RootNodes().Size() > 0;
         _gitSidebarFilesRoot = directory;
 
-        tree.RootNodes().Clear();
         GitSidebarFilesSummary().Text(root.summary);
         GitSidebarFilesSummary().Visibility(root.summary.empty() ? Visibility::Collapsed : Visibility::Visible);
 
+        // A refresh of the folder already on screen re-reads its root level in
+        // place. The root node is the folder the pane reports, and the rows
+        // below it are the same rows the capture just read, so the reader's
+        // open folders survive and only the marks that changed are rewritten.
+        if (sameFolder)
+        {
+            // A message is a read that did not complete: it describes no rows,
+            // so the rows on screen stay and the message does not cover them.
+            // The message and the tree share a grid cell, so showing both would
+            // draw the failure across a folder that is still perfectly readable.
+            if (!root.message.empty() && root.rows.empty())
+            {
+                return;
+            }
+            GitSidebarFilesMessage().Visibility(Visibility::Collapsed);
+            _ApplyRailRootRows(tree.RootNodes().GetAt(0), root);
+            return;
+        }
+
+        tree.RootNodes().Clear();
         if (!root.message.empty())
         {
             // No folder to show: the message stands where the tree would be.
@@ -7435,6 +7458,109 @@ namespace winrt::TerminalApp::implementation
         rootNode.IsExpanded(true);
         _FillGitSidebarNode(rootNode, root);
         tree.RootNodes().Append(rootNode);
+    }
+
+    // `root`'s rows as `rootNode`'s children, keeping what the reader opened.
+    // The row template binds its mark once, so a row that has to change is
+    // drawn on a fresh node; the subtree already read below that row is moved
+    // onto the fresh node, so a refresh never folds an open folder.
+    void TerminalPage::_ApplyRailRootRows(const winrt::Microsoft::UI::Xaml::Controls::TreeViewNode& rootNode, const _RailSection& root)
+    {
+        const auto children = rootNode.Children();
+
+        // The nodes on screen, by path: a row is matched to the node it was
+        // last drawn as, not to its position. Git lists a folder's entries in
+        // name order, so one new file would otherwise shift every row below it
+        // onto its neighbour's mark.
+        std::unordered_map<std::wstring, winrt::Microsoft::UI::Xaml::Controls::TreeViewNode> onScreen;
+        onScreen.reserve(children.Size());
+        for (const auto& child : children)
+        {
+            if (const auto content = child.Content().try_as<winrt::TerminalApp::TabStripRailItem>(); content && !content.Path().empty())
+            {
+                onScreen.emplace(std::wstring{ content.Path() }, child);
+            }
+        }
+
+        std::vector<winrt::Microsoft::UI::Xaml::Controls::TreeViewNode> rows;
+        rows.reserve(root.rows.size());
+        for (const auto& row : root.rows)
+        {
+            // A row the tree already draws correctly keeps the node it has,
+            // children and all: that is what leaves the folder the reader
+            // opened open, and what keeps the rest of the list from being
+            // redrawn when one file gained a mark.
+            const auto found = onScreen.find(std::wstring{ row.path });
+            if (found != onScreen.end())
+            {
+                const auto previous = found->second;
+                const auto item = previous.Content().try_as<winrt::TerminalApp::TabStripRailItem>();
+                const auto styleKey = _RailAccentStyleKey(winrt::to_string(row.accent));
+                const auto style = Resources().HasKey(box_value(styleKey)) ? Resources().Lookup(box_value(styleKey)).as<WUX::Style>() : nullptr;
+                if (item &&
+                    item.Title() == row.title &&
+                    item.Badge() == row.badge &&
+                    item.ToolTip() == row.tooltip &&
+                    item.IsFolder() == row.isFolder &&
+                    item.AccentStyle() == style)
+                {
+                    rows.emplace_back(previous);
+                    continue;
+                }
+
+                // The row itself changed. The row template binds its mark once,
+                // so the new mark is painted on a fresh node; the subtree
+                // already read below the old one is moved onto it first, so a
+                // refresh never folds an open folder. The children come off the
+                // old node before they go on the new one: removing a child
+                // clears its parent, so appending first would leave every moved
+                // node parentless.
+                auto node = _BuildRailFileNode(row);
+                const auto opened = previous.Children();
+                while (opened.Size() > 0)
+                {
+                    const auto child = opened.GetAt(0);
+                    opened.RemoveAt(0);
+                    node.Children().Append(child);
+                }
+                if (node.Children().Size() > 0)
+                {
+                    // The folder was read, so it no longer promises more than
+                    // it has; one that read empty stays without a chevron.
+                    node.HasUnrealizedChildren(false);
+                }
+                node.IsExpanded(previous.IsExpanded());
+                rows.emplace_back(std::move(node));
+                continue;
+            }
+
+            rows.emplace_back(_BuildRailFileNode(row));
+        }
+
+        // Cleared and appended rather than replaced: a TreeViewNodeVector skips
+        // ReplaceAll entirely when it currently holds nothing, so a folder that
+        // was empty and gained its first file would keep drawing as empty. A
+        // refresh that changed nothing skips the clear altogether, so the
+        // panel keeps its scroll position and its selection. The root's own
+        // expansion is saved across the clear, because emptying a child
+        // collection folds the node that owns it.
+        bool unchanged = children.Size() == rows.size();
+        for (uint32_t i = 0; unchanged && i < children.Size(); ++i)
+        {
+            unchanged = children.GetAt(i) == rows[i];
+        }
+        if (unchanged)
+        {
+            return;
+        }
+
+        const auto wasExpanded = rootNode.IsExpanded();
+        children.Clear();
+        for (const auto& node : rows)
+        {
+            children.Append(node);
+        }
+        rootNode.IsExpanded(wasExpanded);
     }
 
     // `section`'s rows as `node`'s children. A folder keeps its chevron until it
@@ -7520,14 +7646,21 @@ namespace winrt::TerminalApp::implementation
         const auto folder = std::filesystem::path{ path }.parent_path().wstring();
         // ShellExecuteW answers with a value above 32 on success and the error
         // code itself at or below it - it does not set the last error, so the
-        // code has to be logged from the return value. A file that will not
-        // open has to say so: silently doing nothing reads as a click that
-        // missed.
+        // code has to be logged from the return value. The comparison stays in
+        // pointer width: narrowing the handle to int would read a 64-bit value
+        // through a 32-bit signed slot, and a failure code's high bits are
+        // exactly what that truncation loses. A file that will not open has to
+        // say so: silently doing nothing reads as a click that missed.
         const auto launched = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, folder.empty() ? nullptr : folder.c_str(), SW_SHOWNORMAL);
-        if (const auto code = static_cast<int>(reinterpret_cast<uintptr_t>(launched)); code <= 32)
+        if (const auto code = reinterpret_cast<uintptr_t>(launched); code <= 32)
         {
-            LOG_HR_MSG(HRESULT_FROM_WIN32(static_cast<DWORD>(code)), "Files view: ShellExecuteW could not open the selected file");
-            _ShowCouldNotOpenDialog(RS_(L"VerticalTabsFilesOpenFailed"), item.Path());
+            LOG_HR_MSG(HRESULT_FROM_WIN32(static_cast<DWORD>(code)), "Files view: ShellExecuteW could not open '%ls' (code %u)", path.c_str(), static_cast<unsigned>(code));
+            // The failure is reported through the notice dialog rather than the
+            // URI error dialog: its wording and its Cancel button belong to a
+            // link that could not be opened, and a file is neither. The notice
+            // carries an Error title and an OK button, and the path follows the
+            // reason so the two read as one sentence.
+            _ShowControlNoticeDialog(RS_(L"NoticeError"), RS_(L"VerticalTabsFilesOpenFailed") + L"\n\n" + item.Path());
         }
     }
 
@@ -7904,7 +8037,10 @@ namespace winrt::TerminalApp::implementation
         }
         if (status == "conflicted")
         {
-            return L"!";
+            // The Git view gives a conflict `C`, so the tree gives it the same
+            // letter: `!` here and `C` there would read as two different marks
+            // for one state inside one panel.
+            return L"C";
         }
         return {};
     }

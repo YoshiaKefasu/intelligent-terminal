@@ -1177,6 +1177,9 @@ namespace winrt::TerminalApp::implementation
         static winrt::hstring _RailAgentStatusLabel(std::string_view status);
         // Git's porcelain letter for a status word, and the letter its accent
         // style key is chosen from. The Files tree marks files with the former.
+        // Both views draw their marks from one vocabulary: the Git view's
+        // section letters (C/S/U/?) are the same glyphs the tree writes on a
+        // file, so a mark never means two things inside the panel.
         static winrt::hstring _RailFileMark(std::string_view status);
         bool _IsRailWorkspaceVisible() const
         {
@@ -1204,8 +1207,15 @@ namespace winrt::TerminalApp::implementation
         void _GitSidebarFileTreeItemInvoked(const Microsoft::UI::Xaml::Controls::TreeView& sender, const Microsoft::UI::Xaml::Controls::TreeViewItemInvokedEventArgs& args);
         // Reads `node`'s folder off the UI thread and fills its children.
         safe_void_coroutine _LoadGitSidebarFolder(winrt::Microsoft::UI::Xaml::Controls::TreeViewNode node);
-        // Rebuilds the Files tree from the focused tab's folder.
+        // Rebuilds the Files tree from the focused tab's folder. A refresh of
+        // the folder the tree already shows keeps the reader's open folders and
+        // applies only the root level's changed rows.
         void _RebuildGitSidebarFiles(const _RailSection& root, winrt::hstring const& directory);
+        // Re-reads the root level's rows into an existing root node, leaving the
+        // nodes the reader opened untouched. A folder that disappears folds its
+        // subtree with it; a row whose mark changed keeps its node and takes the
+        // new badge, so nothing the reader opened is folded by a refresh.
+        void _ApplyRailRootRows(const winrt::Microsoft::UI::Xaml::Controls::TreeViewNode& rootNode, const _RailSection& root);
         void _FillGitSidebarNode(const winrt::Microsoft::UI::Xaml::Controls::TreeViewNode& node, const _RailSection& section);
         // Mirrors the effective ToggleSidebar / ToggleGitSidebar chords onto the
         // rail and tab-row tooltips. Runs in both layouts: the Git and Files

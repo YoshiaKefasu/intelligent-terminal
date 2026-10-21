@@ -13504,8 +13504,9 @@ fn sidebar_history_discovery_checks_policy_before_installation() {
     let installed = ["copilot", "claude", "codex", "opencode"];
     assert_eq!(
         host_history_agent_ids(None, |id| installed.contains(&id)),
-        installed
+        ["copilot", "claude", "codex"]
     );
+    assert!(host_history_agent_ids(None, |id| matches!(id, "opencode" | "antigravity")).is_empty());
     assert!(host_history_agent_ids(None, |_| false).is_empty());
 }
 
@@ -13548,20 +13549,18 @@ async fn sidebar_history_discovery_keeps_registered_gemini_sessions() {
 }
 
 #[test]
-fn sidebar_history_discovery_excludes_gemini_but_allows_explicit_chat() {
+fn sidebar_history_discovery_excludes_background_only_agents_but_allows_explicit_chat() {
     let mut checked = Vec::new();
     let ids = host_history_agent_ids(None, |id| {
         checked.push(id.to_owned());
         true
     });
-    // Gemini remains excluded from sidebar history discovery, while all other
-    // known ACP-capable agents (including Pi via pi-acp adapter) are probed.
-    assert_eq!(
-        ids,
-        [
-            "copilot", "claude", "codex", "opencode", "antigravity", "pi"
-        ]
-    );
+    // Gemini, Antigravity, and OpenCode remain excluded from sidebar history
+    // discovery, while every other known ACP-capable agent (including Pi via
+    // its pi-acp adapter) is probed. The exclusions run before the availability
+    // probe, so no `agy_acp_server.exe` / `opencode acp` process is started by
+    // background history alone.
+    assert_eq!(ids, ["copilot", "claude", "codex", "pi"]);
     assert_eq!(checked, ids);
 
     let allowed = allow_set(&["gemini"]);
@@ -13569,9 +13568,20 @@ fn sidebar_history_discovery_excludes_gemini_but_allows_explicit_chat() {
         panic!("Gemini must not be probed for sidebar discovery");
     })
     .is_empty());
-    let (command, id) = resolve(Some(&allowed), Some("gemini"), None);
-    assert_eq!(command, "gemini --acp");
-    assert_eq!(id.as_deref(), Some("gemini"));
+    let allowed = allow_set(&["antigravity", "opencode"]);
+    assert!(host_history_agent_ids(Some(&allowed), |_| {
+        panic!("Antigravity and OpenCode must not be probed for sidebar discovery");
+    })
+    .is_empty());
+    for id in ["gemini", "antigravity", "opencode"] {
+        let (command, resolved) = resolve(None, Some(id), None);
+        assert_eq!(resolved.as_deref(), Some(id));
+        assert_eq!(
+            command,
+            crate::agent_registry::build_acp_command(id, None),
+            "explicit chat selection stays available for {id}"
+        );
+    }
 }
 
 #[tokio::test]

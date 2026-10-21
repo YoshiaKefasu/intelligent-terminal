@@ -350,9 +350,10 @@ controls; it does not switch between All tabs and Agents only. The Agents
 view displays the registry activity:
 `Idle` (Idle), `Working` (Active), `Attention` (Waiting for input), `Error`
 (Error), and both `Ended` and `Historical` as Historical, with localized labels.
-Automatic Host discovery and prewarming exclude Gemini; opening this sidebar
-does not start a Gemini ACP process. Explicit Gemini chat selection remains
-available, and existing Gemini registry rows are still eligible for display.
+Automatic Host discovery and prewarming exclude Gemini, Antigravity, and
+OpenCode; opening this sidebar does not start a `gemini`, `agy_acp_server.exe`,
+or `opencode acp` process. Explicit chat selection for any of them remains
+available, and existing registry rows for them are still eligible for display.
 This is presentation-only: the raw status, liveness, and focus/resume routing remain
 unchanged. Each row has its provider's vector icon on the left, shared with the agent
 pane header and tinted using the row foreground; unknown/custom providers use a

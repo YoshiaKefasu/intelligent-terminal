@@ -538,6 +538,8 @@ namespace TerminalAppLocalTests
         TEST_METHOD(GitSidebarSwitchesBetweenGitAndFiles);
         TEST_METHOD(GitSidebarFileTreeReadsOnDemand);
         TEST_METHOD(GitCaptureLeavesFilesTreeIntact);
+        TEST_METHOD(FilesTreeRefreshAppliesRootChangesInPlace);
+        TEST_METHOD(RailFileMarkMatchesGitViewVocabulary);
         TEST_METHOD(VerticalTabProgressPercentUsesLocaleFormatting);
         TEST_METHOD(AgentBillingUsesLocaleCurrencyFormatting);
         TEST_METHOD(SessionRegistryStatusDeltaUpdatesCaches);
@@ -8612,6 +8614,125 @@ namespace TerminalAppLocalTests
             VERIFY_ARE_EQUAL(1u, tree.RootNodes().GetAt(0).Children().Size());
             VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" },
                              tree.RootNodes().GetAt(0).Children().GetAt(0).Content().as<winrt::TerminalApp::TabStripRailItem>().Title());
+        });
+    }
+
+    // The Files tree refreshes every twenty seconds, and that refresh has to
+    // reach the rows without folding what the reader opened. A same-folder
+    // capture re-reads the root level in place: a file that gained a mark takes
+    // the new mark, a file that appeared joins the list, a file that is gone
+    // leaves it, and the folder the reader opened beside them stays open.
+    void TabTests::FilesTreeRefreshAppliesRootChangesInPlace()
+    {
+        CascadiaSettings settings{ LR"({
+            "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+            "showTabsInTitlebar": false,
+            "profiles": [{
+                "name": "profile0",
+                "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "commandline": "cmd.exe"
+            }]
+        })", {} };
+        winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+        const auto connection = winrt::make_self<TestConnection>(
+            winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+            winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        _initializeTerminalPage(page, settings, *connection);
+
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            const auto tree = page->GitSidebarFilesTree();
+            VERIFY_IS_TRUE(tree != nullptr);
+            const auto directory = winrt::hstring{ L"D:/work/repo" };
+
+            const auto section = [](std::vector<std::pair<const wchar_t*, const wchar_t*>> rows) {
+                Page::_RailSection section;
+                section.summary = L"repo";
+                for (const auto& [title, badge] : rows)
+                {
+                    Page::_RailRow row;
+                    row.title = title;
+                    row.path = winrt::hstring{ L"D:/work/repo/" } + title;
+                    row.badge = badge;
+                    row.isFolder = winrt::hstring{ title } == winrt::hstring{ L"src" };
+                    row.accent = badge;
+                    section.rows.push_back(row);
+                }
+                return section;
+            };
+
+            page->_gitSidebarView = Page::GitSidebarViewMode::Files;
+            page->_RebuildGitSidebarFiles(section({ { L"src", L"" }, { L"main.rs", L"M" } }), directory);
+            const auto root = tree.RootNodes().GetAt(0);
+            VERIFY_ARE_EQUAL(2u, root.Children().Size());
+
+            // The reader opens the folder: it gains children, and that is the
+            // state a refresh must not destroy.
+            const auto folderNode = root.Children().GetAt(0);
+            Page::_RailSection inside;
+            Page::_RailRow child;
+            child.title = L"lib.rs";
+            child.path = L"D:/work/repo/src/lib.rs";
+            inside.rows.push_back(child);
+            page->_FillGitSidebarNode(folderNode, inside);
+            folderNode.IsExpanded(true);
+            VERIFY_ARE_EQUAL(1u, folderNode.Children().Size());
+
+            // A refresh of the same folder. main.rs gained a second change and
+            // a new file appeared; the folder's read stays.
+            page->_RebuildGitSidebarFiles(section({ { L"src", L"" }, { L"main.rs", L"M" }, { L"new.rs", L"?" } }), directory);
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().Size());
+            VERIFY_ARE_EQUAL(3u, root.Children().Size());
+            const auto refreshedFolder = root.Children().GetAt(0);
+            VERIFY_IS_TRUE(refreshedFolder.IsExpanded());
+            VERIFY_ARE_EQUAL(1u, refreshedFolder.Children().Size());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"lib.rs" },
+                             refreshedFolder.Children().GetAt(0).Content().as<winrt::TerminalApp::TabStripRailItem>().Title());
+
+            // A file's mark reaches the row it belongs to, in its own slot.
+            const auto mainRow = root.Children().GetAt(1).Content().as<winrt::TerminalApp::TabStripRailItem>();
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" }, mainRow.Title());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"M" }, mainRow.Badge());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"?" },
+                             root.Children().GetAt(2).Content().as<winrt::TerminalApp::TabStripRailItem>().Badge());
+
+            // A file that is gone leaves the list, and one that is back takes a
+            // fresh row: nothing stale survives a refresh.
+            page->_RebuildGitSidebarFiles(section({ { L"src", L"" }, { L"main.rs", L"D" } }), directory);
+            VERIFY_ARE_EQUAL(2u, root.Children().Size());
+            const auto goneRow = root.Children().GetAt(1).Content().as<winrt::TerminalApp::TabStripRailItem>();
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" }, goneRow.Title());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D" }, goneRow.Badge());
+            VERIFY_ARE_EQUAL(1u, root.Children().GetAt(0).Children().Size());
+
+            // A refresh that found nothing new leaves the tree alone entirely:
+            // the same nodes, the same folder still open. Rebuilding a tree the
+            // capture agrees with would reset the panel's scroll and selection
+            // every twenty seconds.
+            const auto beforeFolder = root.Children().GetAt(0);
+            const auto beforeChild = beforeFolder.Children().GetAt(0);
+            page->_RebuildGitSidebarFiles(section({ { L"src", L"" }, { L"main.rs", L"D" } }), directory);
+            VERIFY_ARE_EQUAL(2u, root.Children().Size());
+            VERIFY_IS_TRUE(root.Children().GetAt(0) == beforeFolder);
+            VERIFY_IS_TRUE(beforeFolder.Children().GetAt(0) == beforeChild);
+            VERIFY_IS_TRUE(beforeFolder.IsExpanded());
+        });
+    }
+
+    // One vocabulary for both views: a conflict is `C` in the Git view, so the
+    // Files tree writes `C` on the file too. `!` there and `C` here would read
+    // as two different states inside one panel.
+    void TabTests::RailFileMarkMatchesGitViewVocabulary()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"C" }, Page::_RailFileMark("conflicted"));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"M" }, Page::_RailFileMark("modified"));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"A" }, Page::_RailFileMark("added"));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D" }, Page::_RailFileMark("deleted"));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"R" }, Page::_RailFileMark("renamed"));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"?" }, Page::_RailFileMark("untracked"));
+            VERIFY_IS_TRUE(Page::_RailFileMark("unknown").empty());
         });
     }
 
