@@ -30,7 +30,7 @@ if not exist "%MSBUILD%" (
 )
 
 set SOLUTION_DIR=%CD%\
-set COMMON=/p:Platform=x64 /p:Configuration=Release /p:WindowsTerminalBranding=Dev /p:SolutionDir=%SOLUTION_DIR% /m /nologo
+set COMMON=/p:Platform=x64 /p:Configuration=Release /p:WindowsTerminalBranding=Dev /p:SolutionDir=%SOLUTION_DIR% /m:4 /nologo
 
 rem Wipe the wapproj's Release intermediates so glob-based Content items
 rem (like wt-agent-hooks\**) get re-evaluated. Without this, an incremental
