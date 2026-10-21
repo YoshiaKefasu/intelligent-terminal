@@ -413,9 +413,14 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarHerdrItems{ nullptr };
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarGitItems{ nullptr };
         // The folder the Files tree is showing. The periodic refresh compares it
-        // against the focused tab's folder: an unchanged folder keeps the tree
-        // exactly as the reader left it, opened folders and scroll included.
+        // against the folder the latest capture read: an unchanged folder keeps
+        // the tree exactly as the reader left it, opened folders and scroll
+        // included.
         winrt::hstring _gitSidebarFilesRoot;
+        // The folder the panel's current content describes, as the last capture
+        // resolved it. Not the focused tab's folder: herdr's focused Space wins
+        // while herdr runs, so the tab's own folder is only the fallback.
+        winrt::hstring _railWorkspaceDirectory;
         bool _tabDragReorderAuthorized{ false };
         Windows::Foundation::IInspectable _tabDragSelectedItem{ nullptr };
         winrt::weak_ref<Tab> _pendingPinTab;
@@ -1166,6 +1171,10 @@ namespace winrt::TerminalApp::implementation
         // separator handling as _WtaFsTreeArguments.
         static std::wstring _WtaPathArguments(std::wstring_view command, winrt::hstring const& folder);
         static _RailSection _ParseRailHerdrSnapshot(const std::optional<std::string>& output);
+        // The folder herdr's focused pane reports, out of `wta herdr snapshot`:
+        // that pane is the Space the reader is looking at. Empty when herdr is
+        // not running, says nothing, or names a pane it does not list.
+        static winrt::hstring _ExtractHerdrFocusedCwd(const std::optional<std::string>& output);
         static _RailSection _ParseRailGitStatus(const std::optional<std::string>& output, winrt::hstring const& directory);
         // `wta fs tree --depth 1`: one folder's entries, as the Files view
         // lists them. The root level and every folder the reader opens go

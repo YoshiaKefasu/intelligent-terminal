@@ -530,6 +530,7 @@ namespace TerminalAppLocalTests
         TEST_METHOD(VerticalTabHistoryStatusText);
         TEST_METHOD(RailHerdrSnapshotListsKnownAgents);
         TEST_METHOD(RailHerdrSnapshotReportsNotRunningAndEmpty);
+        TEST_METHOD(RailHerdrFocusedCwdFollowsFocusedPane);
         TEST_METHOD(RailGitStatusListsSectionsInOrder);
         TEST_METHOD(RailGitStatusTruncatedSummaryKeepsHeadline);
         TEST_METHOD(RailGitStatusReportsNonRepositoryAndClean);
@@ -8212,6 +8213,51 @@ namespace TerminalAppLocalTests
                 std::optional<std::string>{ R"({"agents":)" });
             VERIFY_IS_TRUE(malformed.rows.empty());
             VERIFY_IS_FALSE(malformed.message.empty());
+        });
+    }
+
+    void TabTests::RailHerdrFocusedCwdFollowsFocusedPane()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // A snapshot lists every Space's panes; the folder the panel reads
+            // is the focused pane's, not the first one's. Switching Spaces is
+            // a different focused id and therefore a different folder.
+            const auto snapshot = [](std::string_view focused) {
+                return std::optional<std::string>{ std::string{ R"({"focused_pane_id":")" } +
+                                                   std::string{ focused } +
+                                                   R"(","panes":[{"pane_id":"w1:p1","cwd":"D:\\work\\alpha"},{"pane_id":"w2:p1","cwd":"D:\\work\\beta"}]})" };
+            };
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D:\\work\\alpha" }, Page::_ExtractHerdrFocusedCwd(snapshot("w1:p1")));
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D:\\work\\beta" }, Page::_ExtractHerdrFocusedCwd(snapshot("w2:p1")));
+
+            // herdr not running prints nothing; a wta that did not complete has
+            // no output at all. Both leave the focused tab's folder standing.
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(std::nullopt).empty());
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(std::optional<std::string>{ std::string{} }).empty());
+
+            // A focused pane it does not list, and a snapshot that names none,
+            // have no folder to report.
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(
+                               std::optional<std::string>{ R"({"focused_pane_id":"w9:p9","panes":[{"pane_id":"w1:p1","cwd":"D:\\work\\alpha"}]})" })
+                               .empty());
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(
+                               std::optional<std::string>{ R"({"panes":[{"pane_id":"w1:p1","cwd":"D:\\work\\alpha"}]})" })
+                               .empty());
+
+            // herdr serializes an absent focused pane and an unset pane folder
+            // as null. asString() throws on null, and this runs every tick, so
+            // both must come back empty rather than throw.
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(
+                               std::optional<std::string>{ R"({"focused_pane_id":null,"panes":[]})" })
+                               .empty());
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(
+                               std::optional<std::string>{ R"({"focused_pane_id":"w1:p1","panes":[{"pane_id":"w1:p1","cwd":null}]})" })
+                               .empty());
+
+            VERIFY_IS_TRUE(Page::_ExtractHerdrFocusedCwd(
+                               std::optional<std::string>{ R"({"focused_pane_id":)" })
+                               .empty());
         });
     }
 

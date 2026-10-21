@@ -92,9 +92,12 @@ static constexpr double railCollapsedWidth = 40.0;
 static constexpr auto sidebarHistoryMasterRecoveryTimeout = std::chrono::seconds{ 15 };
 static constexpr auto sidebarHistoryFastRefreshInterval = std::chrono::seconds{ 5 };
 static constexpr auto sidebarHistoryRefreshInterval = std::chrono::seconds{ 60 };
-// The Git and Files panel runs git (or reads the folder tree) in the focused
-// tab's folder, so it refreshes on its own slower cadence than agent sessions.
-static constexpr auto railWorkspaceRefreshInterval = std::chrono::seconds{ 20 };
+// The Git and Files panel runs git (or reads the folder tree) in the active
+// folder, so it refreshes on its own slower cadence than agent sessions. Three
+// seconds is what makes the panel follow a herdr Space switch without a wait:
+// `wta herdr snapshot` reads a local named pipe and answers in a few
+// milliseconds, so the tick costs almost nothing.
+static constexpr auto railWorkspaceRefreshInterval = std::chrono::seconds{ 3 };
 // The Git view caps its rows: a long change list would push the list past the
 // height of the panel itself. The Git view truncates at this count.
 static constexpr size_t railWorkspaceMaxRows = 20;
@@ -6955,7 +6958,10 @@ namespace winrt::TerminalApp::implementation
             // the folder afresh instead of resuming a tree that may have gone
             // stale in the meantime. Clearing the recorded root is what makes
             // the next capture rebuild rather than diff against a tree that is
-            // no longer on screen.
+            // no longer on screen. The folder the last capture resolved goes
+            // with it: a node read that lands after the panel is gone must not
+            // find itself still rooted in the folder it was opened under.
+            _railWorkspaceDirectory.clear();
             _gitSidebarFilesRoot.clear();
         }
     }
@@ -7263,7 +7269,7 @@ namespace winrt::TerminalApp::implementation
     {
         const auto weakThis = get_weak();
         const auto dispatcher = Dispatcher();
-        const auto directory = _FocusedTabWorkingDirectory();
+        auto directory = _FocusedTabWorkingDirectory();
         const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
         // Only the visible view is captured. The two reads answer different
         // questions and neither is needed to draw the other, so a hidden view
@@ -7282,6 +7288,19 @@ namespace winrt::TerminalApp::implementation
             }
             return std::optional<std::string>{};
         };
+
+        // Prioritize the CWD of Herdr's currently focused pane if Herdr is
+        // active! A Space is the folder the reader is looking at, while the
+        // tab's own folder is only the shell's starting point. A herdr that is
+        // not running prints nothing, and the tab's folder stands.
+        if (const auto snapshot = run(L"herdr snapshot", 5'000))
+        {
+            const auto herdrCwd = _ExtractHerdrFocusedCwd(snapshot);
+            if (!herdrCwd.empty())
+            {
+                directory = herdrCwd;
+            }
+        }
 
         std::optional<std::string> output;
         if (!directory.empty())
@@ -7303,6 +7322,7 @@ namespace winrt::TerminalApp::implementation
             co_return;
         }
 
+        page->_railWorkspaceDirectory = directory;
         if (files)
         {
             page->_CompleteRailWorkspace(generation, {}, _ParseRailFileTree(output, directory), directory);
@@ -7404,7 +7424,7 @@ namespace winrt::TerminalApp::implementation
 
         // The tree keeps the folder it is showing, and a refresh of that same
         // folder only re-reads its root level: folding what the reader opened
-        // would cost them their place every twenty seconds. A different folder
+        // would cost them their place on every refresh. A different folder
         // is a different tree, so that one is rebuilt from its root.
         const auto sameFolder = _gitSidebarFilesRoot == directory && tree.RootNodes().Size() > 0;
         _gitSidebarFilesRoot = directory;
@@ -7604,8 +7624,10 @@ namespace winrt::TerminalApp::implementation
         }
         // The tree may have been rebuilt for another folder while the read ran,
         // in which case this node is no longer on screen. Filling it would grow
-        // a detached subtree, so the rows are dropped instead.
-        if (_gitSidebarFilesRoot != _FocusedTabWorkingDirectory())
+        // a detached subtree, so the rows are dropped instead. The comparison is
+        // against the folder the last capture resolved, not the focused tab's:
+        // herdr's focused Space is what the tree is rooted at while it runs.
+        if (_gitSidebarFilesRoot != _railWorkspaceDirectory)
         {
             co_return;
         }
@@ -7662,6 +7684,74 @@ namespace winrt::TerminalApp::implementation
             // reason so the two read as one sentence.
             _ShowControlNoticeDialog(RS_(L"NoticeError"), RS_(L"VerticalTabsFilesOpenFailed") + L"\n\n" + item.Path());
         }
+    }
+
+    // `wta herdr snapshot` prints the running server's snapshot, whose
+    // `focused_pane_id` names the Space the reader is looking at. That pane's
+    // `cwd` is the folder the panel must read: switching Spaces is switching
+    // folders, so this is what makes Git and Files follow the reader. Empty
+    // when herdr is not running, says nothing, or names a pane it does not
+    // list, in which case the focused tab's folder stands.
+    winrt::hstring TerminalPage::_ExtractHerdrFocusedCwd(const std::optional<std::string>& output)
+    {
+        if (!output || output->empty())
+        {
+            return {};
+        }
+
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        builder["failIfExtra"] = true;
+        std::istringstream json{ *output };
+        std::string errors;
+        if (!Json::parseFromStream(builder, json, &root, &errors) || !root.isObject())
+        {
+            return {};
+        }
+
+        // Read through a const reference: the non-const subscript inserts a
+        // member for a missing key, so probing one would grow the parsed tree.
+        const auto& snapshot = root;
+
+        // The id is read first and the pane matched by it: a snapshot lists
+        // every pane of every Space, and only the focused one describes what
+        // the reader has in front of them.
+        //
+        // Both fields are checked for a string before they are read: herdr
+        // serializes an absent focused pane and an unset pane folder as JSON
+        // `null`, and `asString()` throws on null. This runs on every tick, so
+        // a throw here would take the page down rather than skip a refresh.
+        const auto& focusedPane = snapshot["focused_pane_id"];
+        if (!focusedPane.isString() || focusedPane.asString().empty())
+        {
+            return {};
+        }
+        const auto focusedPaneId = focusedPane.asString();
+        const auto& panes = snapshot["panes"];
+        if (!panes.isArray())
+        {
+            return {};
+        }
+        for (const auto& pane : panes)
+        {
+            if (!pane.isObject())
+            {
+                continue;
+            }
+            const auto& paneId = pane["pane_id"];
+            if (!paneId.isString() || paneId.asString() != focusedPaneId)
+            {
+                continue;
+            }
+            const auto& cwd = pane["cwd"];
+            if (!cwd.isString())
+            {
+                return {};
+            }
+            // The snapshot is UTF-8; to_hstring decodes it as such.
+            return winrt::to_hstring(cwd.asString());
+        }
+        return {};
     }
 
     // `wta herdr snapshot` prints the running server's session snapshot, or
