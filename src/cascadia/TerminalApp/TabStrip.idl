@@ -84,17 +84,18 @@ namespace TerminalApp
         TabStripHistoryItem Item { get; };
     };
 
-    // One row of the Git and Files side panel: a Herdr agent or a changed
-    // file. Values are set once before the row joins its section, so no
-    // property change is ever raised; INotifyPropertyChanged only satisfies
-    // the binding surface the row template expects.
+    // One row of the Git and Files side panel: a changed file, or a folder or
+    // file of the Files tree. Values are set once before the row joins its
+    // section, so no property change is ever raised; INotifyPropertyChanged
+    // only satisfies the binding surface the row template expects.
     //
     // Note: the type lives here, not in TerminalPage.idl, because the XAML
     // type info for this project is generated from the .idl files that own a
     // XAML page. A runtimeclass declared only in TerminalPage.idl is not
     // picked up by XamlTypeInfo, and the XAML compiler fails with an opaque
     // WMC9999. TabStrip.xaml already registers this type, so the panel reuses
-    // it (the panel binds with plain {Binding}, not x:Bind).
+    // it. The panel binds with x:Bind (never plain {Binding}: these are
+    // C++/WinRT objects, which {Binding} cannot reflect over).
     [default_interface] runtimeclass TabStripRailItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
     {
         String Badge;
@@ -102,6 +103,11 @@ namespace TerminalApp
         String Detail;
         String ToolTip;
         Windows.UI.Xaml.Style AccentStyle;
+        // Files tree only: the entry's full path, and whether it is a folder.
+        // The tree nests itself, so a row carries no indent of its own.
+        String Path;
+        Boolean IsFolder;
+        String Icon;
     };
 
     [default_interface] runtimeclass TabStripPaneItem : Windows.UI.Xaml.Data.INotifyPropertyChanged

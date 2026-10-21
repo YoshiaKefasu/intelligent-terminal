@@ -139,6 +139,11 @@ namespace winrt::TerminalApp::implementation
         WINRT_PROPERTY(winrt::hstring, Detail);
         WINRT_PROPERTY(winrt::hstring, ToolTip);
         WINRT_PROPERTY(winrt::Windows::UI::Xaml::Style, AccentStyle, nullptr);
+        // Files tree only: the entry's full path, and whether it is a folder.
+        // The tree nests itself, so a row carries no indent of its own.
+        WINRT_PROPERTY(winrt::hstring, Path);
+        WINRT_PROPERTY(bool, IsFolder, false);
+        WINRT_PROPERTY(winrt::hstring, Icon);
 
     public:
         til::property_changed_event PropertyChanged;

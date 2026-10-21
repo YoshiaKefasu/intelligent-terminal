@@ -38,18 +38,11 @@
                 <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
                 <Setter Property="Opacity" Value="1" />
             </Style>
-            <Style x:Key="GitSidebarSectionHeaderStyle"
+            <Style x:Key="GitSidebarDangerTextStyle"
+                   BasedOn="{StaticResource GitSidebarSubtitleTextStyle}"
                    TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Opacity" Value="0.72" />
-                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-            </Style>
-            <Style x:Key="GitSidebarSummaryTextStyle"
-                   TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="Opacity" Value="0.6" />
-                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="Opacity" Value="1" />
             </Style>
             <Style x:Key="GitSidebarMessageTextStyle"
                    TargetType="TextBlock">
@@ -58,14 +51,20 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
             <!--
-                One row of the panel; the badge carries the kind of thing
-                (git's porcelain letter, or the agent's state).
+                One changed file: git's porcelain letter for the section it is
+                in (C/S/U/?), its path, and the kind of change on the right.
+
+                Note: x:DataType is load-bearing. The row is a C++/WinRT
+                runtimeclass, so plain {Binding} resolves against nothing and
+                every TextBlock renders empty; x:Bind compiles the property
+                access against TabStripRailItem and always draws.
             -->
-            <DataTemplate x:Key="GitSidebarRowTemplate">
+            <DataTemplate x:Key="GitSidebarGitRowTemplate"
+                          x:DataType="local:TabStripRailItem">
                 <Grid MinHeight="24"
                       Padding="12,2,12,2"
                       ColumnSpacing="8"
-                      ToolTipService.ToolTip="{Binding ToolTip}">
+                      ToolTipService.ToolTip="{x:Bind ToolTip}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -75,19 +74,55 @@
                                VerticalAlignment="Center"
                                FontFamily="Cascadia Mono"
                                FontSize="11"
-                               Style="{Binding AccentStyle}"
-                               Text="{Binding Badge}" />
+                               Style="{x:Bind AccentStyle}"
+                               Text="{x:Bind Badge}" />
                     <TextBlock Grid.Column="1"
                                VerticalAlignment="Center"
                                FontSize="12"
-                               Text="{Binding Title}"
+                               Text="{x:Bind Title}"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="2"
                                VerticalAlignment="Center"
                                FontSize="11"
                                Opacity="0.6"
-                               Text="{Binding Detail}"
+                               Text="{x:Bind Detail}"
                                TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </DataTemplate>
+            <!--
+                One folder or file of the Files tree. The template receives the
+                TreeViewNode (the tree is built from nodes, not a bound list),
+                so every property is read off its Content row. The nesting is
+                the TreeView's own, so a row carries no indent.
+            -->
+            <DataTemplate x:Key="GitSidebarFileRowTemplate"
+                          x:DataType="mux:TreeViewNode">
+                <Grid MinHeight="24"
+                      Padding="0,2,12,2"
+                      ColumnSpacing="6"
+                      ToolTipService.ToolTip="{x:Bind ((local:TabStripRailItem)Content).ToolTip}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon VerticalAlignment="Center"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="14"
+                              Glyph="{x:Bind ((local:TabStripRailItem)Content).Icon}"
+                              Opacity="0.85" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Text="{x:Bind ((local:TabStripRailItem)Content).Title}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono"
+                               FontSize="11"
+                               Style="{x:Bind ((local:TabStripRailItem)Content).AccentStyle}"
+                               Text="{x:Bind ((local:TabStripRailItem)Content).Badge}" />
                 </Grid>
             </DataTemplate>
         </ResourceDictionary>
@@ -223,24 +258,60 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!--  Header: the panel's own title plus a close button.  -->
+                <!--
+                    Header: the [ Git | Files ] segment switch, centred, with the
+                    close button on the trailing edge. The switch sits in the
+                    header rather than above the list so the two views share one
+                    top edge, as ELYTerminal's panel does.
+                -->
                 <Grid Grid.Row="0"
-                      MinHeight="40"
-                      Padding="12,0,4,0">
+                      MinHeight="44"
+                      Padding="8,0,4,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Uid="VerticalTabsGitHeader"
-                               VerticalAlignment="Center"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis" />
+
+                    <!--
+                        The segment switch. Two ToggleButtons in a rounded
+                        border: a SegmentedControl does not exist in WinUI 2.8,
+                        and a SelectorBar needs WinUI 3.
+                    -->
+                    <Border Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton x:Name="GitSidebarGitSegment"
+                                          x:Uid="VerticalTabsGitSegment"
+                                          MinWidth="64"
+                                          Height="26"
+                                          Padding="10,0"
+                                          Click="_GitSidebarGitSegmentClick"
+                                          Content="Git"
+                                          CornerRadius="5,0,0,5"
+                                          FontSize="12" />
+                            <ToggleButton x:Name="GitSidebarFilesSegment"
+                                          x:Uid="VerticalTabsFilesSegment"
+                                          MinWidth="64"
+                                          Height="26"
+                                          Padding="10,0"
+                                          Click="_GitSidebarFilesSegmentClick"
+                                          Content="Files"
+                                          CornerRadius="0,5,5,0"
+                                          FontSize="12" />
+                        </StackPanel>
+                    </Border>
+
                     <Button x:Name="GitSidebarCloseButton"
-                            Grid.Column="1"
+                            Grid.Column="2"
                             Width="32"
                             Height="32"
                             Padding="0"
+                            HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="Close Git and Files"
                             Background="Transparent"
@@ -252,39 +323,27 @@
                     </Button>
                 </Grid>
 
-                <ScrollViewer Grid.Row="1"
+                <!--
+                    Git view: the focused tab's repository, its HEAD, and its
+                    changed files. The Herdr section that used to head this
+                    panel is gone from the surface (its capture and parsing are
+                    kept for the session list); the panel is Git and Files.
+                -->
+                <ScrollViewer x:Name="GitSidebarGitView"
+                              Grid.Row="1"
                               HorizontalScrollBarVisibility="Disabled"
                               HorizontalScrollMode="Disabled"
                               VerticalScrollBarVisibility="Auto"
                               VerticalScrollMode="Auto">
                     <StackPanel Padding="0,0,0,12">
-                        <!--  Herdr agents, then the focused tab's Git state.  -->
-                        <TextBlock x:Name="GitSidebarHerdrHeader"
-                                   x:Uid="VerticalTabsHerdrHeader"
-                                   Margin="12,4,12,2"
-                                   Style="{StaticResource GitSidebarSectionHeaderStyle}"
-                                   Visibility="Collapsed" />
-                        <TextBlock x:Name="GitSidebarHerdrSummary"
-                                   Margin="12,0,12,2"
-                                   Style="{StaticResource GitSidebarSummaryTextStyle}"
-                                   Visibility="Collapsed" />
-                        <ItemsControl x:Name="GitSidebarHerdrList"
-                                      ItemTemplate="{StaticResource GitSidebarRowTemplate}"
-                                      ItemsSource="{x:Bind GitSidebarHerdrItems}"
-                                      Visibility="Collapsed" />
-                        <TextBlock x:Name="GitSidebarHerdrMessage"
-                                   Margin="12,0,12,4"
-                                   Style="{StaticResource GitSidebarMessageTextStyle}"
-                                   Visibility="Collapsed" />
-
                         <TextBlock x:Name="GitSidebarGitSummary"
-                                   Margin="12,8,12,4"
+                                   Margin="12,2,12,6"
                                    FontSize="12"
                                    FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis"
                                    Visibility="Collapsed" />
                         <ItemsControl x:Name="GitSidebarGitList"
-                                      ItemTemplate="{StaticResource GitSidebarRowTemplate}"
+                                      ItemTemplate="{StaticResource GitSidebarGitRowTemplate}"
                                       ItemsSource="{x:Bind GitSidebarGitItems}"
                                       Visibility="Collapsed" />
                         <TextBlock x:Name="GitSidebarGitMessage"
@@ -293,6 +352,45 @@
                                    Visibility="Collapsed" />
                     </StackPanel>
                 </ScrollViewer>
+
+                <!--
+                    Files view: the focused tab's folder as a tree, read one
+                    level at a time as the reader opens it. A folder shows its
+                    chevron before it has been read (TreeViewNode.
+                    HasUnrealizedChildren), gets its children from one wta fs
+                    tree capture when opened, and loses the chevron when it
+                    turns out empty: the same on-demand read ELYTerminal's
+                    files.rs does through Tree::on_load.
+
+                    TreeView scrolls itself, so there is no ScrollViewer here.
+                -->
+                <Grid x:Name="GitSidebarFilesView"
+                      Grid.Row="1"
+                      Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="GitSidebarFilesSummary"
+                               Margin="12,2,12,6"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="Collapsed" />
+                    <mux:TreeView x:Name="GitSidebarFilesTree"
+                                  Grid.Row="1"
+                                  CanDragItems="False"
+                                  CanReorderItems="False"
+                                  Expanding="_GitSidebarFileTreeExpanding"
+                                  ItemInvoked="_GitSidebarFileTreeItemInvoked"
+                                  ItemTemplate="{StaticResource GitSidebarFileRowTemplate}"
+                                  SelectionMode="Single" />
+                    <TextBlock x:Name="GitSidebarFilesMessage"
+                               Grid.Row="1"
+                               Margin="12,0,12,4"
+                               Style="{StaticResource GitSidebarMessageTextStyle}"
+                               Visibility="Collapsed" />
+                </Grid>
             </Grid>
         </Border>
 

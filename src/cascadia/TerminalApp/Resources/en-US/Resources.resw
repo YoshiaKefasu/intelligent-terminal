@@ -1810,4 +1810,20 @@ For all available options, run 'wt new-tab --help'.</value>
     <value>Done</value>
     <comment>State of a herdr agent that finished its work and is waiting for the next prompt. Short label shown in a sidebar footer row.</comment>
   </data>
+  <data name="VerticalTabsFilesNoRepository" xml:space="preserve">
+    <value>no Git marks</value>
+    <comment>Appended to the folder name heading the Files view of the Git and Files panel when the folder is not inside a Git work tree, so the entries carry no change marks.</comment>
+  </data>
+  <data name="VerticalTabsGitSegment.Content" xml:space="preserve">
+    <value>Git</value>
+    <comment>Label of the segment button that switches the Git and Files panel to its Git view, which lists the repository, its branch and the changed files. Git is a product name; leave it untranslated.</comment>
+  </data>
+  <data name="VerticalTabsFilesSegment.Content" xml:space="preserve">
+    <value>Files</value>
+    <comment>Label of the segment button that switches the Git and Files panel to its Files view, which shows the active tab's folder as a tree.</comment>
+  </data>
+  <data name="VerticalTabsFilesOpenFailed" xml:space="preserve">
+    <value>This file could not be opened:</value>
+    <comment>Shown in an error dialog when clicking a file in the Files view failed to open it in the default application. Followed by the file's path.</comment>
+  </data>
 </root>

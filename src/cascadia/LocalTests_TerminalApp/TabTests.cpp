@@ -533,6 +533,11 @@ namespace TerminalAppLocalTests
         TEST_METHOD(RailGitStatusListsSectionsInOrder);
         TEST_METHOD(RailGitStatusTruncatedSummaryKeepsHeadline);
         TEST_METHOD(RailGitStatusReportsNonRepositoryAndClean);
+        TEST_METHOD(RailFileTreeListsOneFolderWithMarks);
+        TEST_METHOD(RailFileTreeReportsEmptyFolderAndNoRepository);
+        TEST_METHOD(GitSidebarSwitchesBetweenGitAndFiles);
+        TEST_METHOD(GitSidebarFileTreeReadsOnDemand);
+        TEST_METHOD(GitCaptureLeavesFilesTreeIntact);
         TEST_METHOD(VerticalTabProgressPercentUsesLocaleFormatting);
         TEST_METHOD(AgentBillingUsesLocaleCurrencyFormatting);
         TEST_METHOD(SessionRegistryStatusDeltaUpdatesCaches);
@@ -8302,6 +8307,311 @@ namespace TerminalAppLocalTests
                     "conflicted":[],"staged":[],"unstaged":[],"untracked":[]})" },
                 winrt::hstring{ L"D:\\work\\repo" });
             VERIFY_IS_TRUE(std::wstring_view{ detached.summary }.find(L"abc1234") != std::wstring_view::npos);
+        });
+    }
+
+    // The Files view reads one folder per open, as ELYTerminal's files.rs does,
+    // and marks each name the way the Git view marks a change. The marks are the
+    // reason this view exists: a tree without them is just a directory listing.
+    void TabTests::RailFileTreeListsOneFolderWithMarks()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            const auto parsed = Page::_ParseRailFileTree(
+                std::optional<std::string>{ R"({
+                    "root":"D:/work/repo","repo":true,
+                    "entries":[
+                        {"name":"src","path":"D:/work/repo/src","folder":true,"dirty":true},
+                        {"name":"main.rs","path":"D:/work/repo/src/main.rs","folder":false,"status":"modified"},
+                        {"name":"new.rs","path":"D:/work/repo/src/new.rs","folder":false,"status":"untracked"},
+                        {"name":"gone.rs","path":"D:/work/repo/src/gone.rs","folder":false,"status":"deleted"},
+                        {"name":"README.md","path":"D:/work/repo/README.md","folder":false}]})" },
+                winrt::hstring{ L"D:\\work\\repo" });
+
+            // One level, in the order the capture prints it. What lies inside a
+            // folder is not in this read: it arrives when the reader opens it.
+            VERIFY_ARE_EQUAL(5u, parsed.rows.size());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"src" }, parsed.rows[0].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" }, parsed.rows[1].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"new.rs" }, parsed.rows[2].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"gone.rs" }, parsed.rows[3].title);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"README.md" }, parsed.rows[4].title);
+
+            // The path and the folder flag are what the tree needs to read a
+            // folder on demand and to open a file in the shell.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D:/work/repo/src" }, parsed.rows[0].path);
+            VERIFY_IS_TRUE(parsed.rows[0].isFolder);
+            VERIFY_IS_FALSE(parsed.rows[1].isFolder);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D:/work/repo/src/main.rs" }, parsed.rows[1].path);
+
+            // Git's porcelain letters, so the two views agree on what a mark
+            // means: M for a change, ? for a file git does not track yet (the
+            // same letter the Git view gives that section), D for one it no
+            // longer has.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"M" }, parsed.rows[1].badge);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"?" }, parsed.rows[2].badge);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D" }, parsed.rows[3].badge);
+            // A folder holding a change below it wears a dot; git names the
+            // file, not the folder.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"•" }, parsed.rows[0].badge);
+            // An unmarked file wears nothing at all.
+            VERIFY_IS_TRUE(parsed.rows[4].badge.empty());
+
+            // The accent keys come from the same vocabulary the Git view uses,
+            // so the colours cannot disagree.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"modified" }, parsed.rows[1].accent);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"untracked" }, parsed.rows[2].accent);
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"deleted" }, parsed.rows[3].accent);
+
+            // Folders and files draw different glyphs, so the tree reads at a
+            // glance without the chevron.
+            VERIFY_IS_TRUE(parsed.rows[0].icon != parsed.rows[1].icon);
+
+            // The folder name heads the level; a repository needs no caveat.
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"repo" }, parsed.summary);
+            VERIFY_IS_TRUE(parsed.message.empty());
+        });
+    }
+
+    void TabTests::RailFileTreeReportsEmptyFolderAndNoRepository()
+    {
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            // A folder outside a work tree: the entries carry no marks, so the
+            // heading says so rather than leaving a bare name.
+            const auto outside = Page::_ParseRailFileTree(
+                std::optional<std::string>{ R"({"root":"D:/plain","repo":false,
+                    "entries":[{"name":"a.txt","path":"D:/plain/a.txt","folder":false}]})" },
+                winrt::hstring{ L"D:\\plain" });
+            VERIFY_ARE_EQUAL(1u, outside.rows.size());
+            VERIFY_IS_TRUE(outside.rows[0].badge.empty());
+            const std::wstring_view heading{ outside.summary };
+            VERIFY_IS_TRUE(heading.find(L"plain") != std::wstring_view::npos);
+            VERIFY_IS_TRUE(heading.size() > 5);
+
+            // A folder holding nothing parses to no rows and no message: the
+            // caller folds the node instead of drawing a message inside the
+            // tree, which is how an empty folder reads as empty rather than as
+            // an error.
+            const auto empty = Page::_ParseRailFileTree(
+                std::optional<std::string>{ R"({"root":"D:/work/repo","repo":true,"entries":[]})" },
+                winrt::hstring{ L"D:\\work\\repo" });
+            VERIFY_IS_TRUE(empty.rows.empty());
+            VERIFY_IS_TRUE(empty.message.empty());
+
+            // A pane that reports no folder has nothing to read.
+            const auto folderless = Page::_ParseRailFileTree(std::nullopt, winrt::hstring{});
+            VERIFY_IS_TRUE(folderless.rows.empty());
+            VERIFY_IS_FALSE(folderless.message.empty());
+
+            // A wta that did not complete, and one that printed rubbish.
+            const auto missing = Page::_ParseRailFileTree(std::nullopt, winrt::hstring{ L"D:\\work\\repo" });
+            VERIFY_IS_FALSE(missing.message.empty());
+            const auto malformed = Page::_ParseRailFileTree(
+                std::optional<std::string>{ R"({"entries":)" }, winrt::hstring{ L"D:\\work\\repo" });
+            VERIFY_IS_FALSE(malformed.message.empty());
+        });
+    }
+
+    // The panel's two views are one surface: switching must leave exactly one
+    // on screen, both segment buttons must agree with the mode, and the switch
+    // must survive the panel closing and reopening.
+    void TabTests::GitSidebarSwitchesBetweenGitAndFiles()
+    {
+        CascadiaSettings settings{ LR"({
+            "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+            "showTabsInTitlebar": false,
+            "profiles": [{
+                "name": "profile0",
+                "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "commandline": "cmd.exe"
+            }]
+        })", {} };
+        winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+        const auto connection = winrt::make_self<TestConnection>(
+            winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+            winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        _initializeTerminalPage(page, settings, *connection);
+
+        TestOnUIThread([&]() {
+            page->_ToggleGitSidebar();
+
+            // Git is the default: the repository is what the panel is opened for.
+            VERIFY_IS_TRUE(page->_gitSidebarView == winrt::TerminalApp::implementation::TerminalPage::GitSidebarViewMode::Git);
+            VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarGitView().Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarFilesView().Visibility());
+            VERIFY_IS_TRUE(page->GitSidebarGitSegment().IsChecked().Value());
+            VERIFY_IS_FALSE(page->GitSidebarFilesSegment().IsChecked().Value());
+
+            // Switching swaps exactly one view, and the two buttons stay a
+            // radio pair.
+            page->_GitSidebarFilesSegmentClick(nullptr, nullptr);
+            VERIFY_IS_TRUE(page->_gitSidebarView == winrt::TerminalApp::implementation::TerminalPage::GitSidebarViewMode::Files);
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarGitView().Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarFilesView().Visibility());
+            VERIFY_IS_FALSE(page->GitSidebarGitSegment().IsChecked().Value());
+            VERIFY_IS_TRUE(page->GitSidebarFilesSegment().IsChecked().Value());
+
+            // Clicking the active segment is a no-op, not a toggle-off: a
+            // segment is a radio, so the panel must never show neither view.
+            page->_GitSidebarFilesSegmentClick(nullptr, nullptr);
+            VERIFY_IS_TRUE(page->GitSidebarFilesSegment().IsChecked().Value());
+            VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarFilesView().Visibility());
+
+            // The choice outlives the panel: closing and reopening lands where
+            // the reader left off.
+            page->_ToggleGitSidebar();
+            VERIFY_IS_FALSE(page->_gitSidebarOpen);
+            page->_ToggleGitSidebar();
+            VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarFilesView().Visibility());
+            VERIFY_IS_TRUE(page->GitSidebarFilesSegment().IsChecked().Value());
+
+            // And back, so both directions are pinned.
+            page->_GitSidebarGitSegmentClick(nullptr, nullptr);
+            VERIFY_ARE_EQUAL(Visibility::Visible, page->GitSidebarGitView().Visibility());
+            VERIFY_ARE_EQUAL(Visibility::Collapsed, page->GitSidebarFilesView().Visibility());
+            VERIFY_IS_TRUE(page->GitSidebarGitSegment().IsChecked().Value());
+        });
+    }
+
+    // The Files view is a tree, not a list: a folder draws a chevron before it
+    // has been read, and reading it is one wta run per open rather than a
+    // capture of the whole repository. These are the pieces the panel wires
+    // together, checked without a wta process.
+    void TabTests::GitSidebarFileTreeReadsOnDemand()
+    {
+        CascadiaSettings settings{ LR"({
+            "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+            "showTabsInTitlebar": false,
+            "profiles": [{
+                "name": "profile0",
+                "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "commandline": "cmd.exe"
+            }]
+        })", {} };
+        winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+        const auto connection = winrt::make_self<TestConnection>(
+            winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+            winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        _initializeTerminalPage(page, settings, *connection);
+
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+
+            // A folder row starts unread but promises children: that promise is
+            // the chevron, and it is what makes Expanding fire.
+            Page::_RailRow folderRow;
+            folderRow.title = L"src";
+            folderRow.path = L"D:/work/repo/src";
+            folderRow.isFolder = true;
+            folderRow.icon = L"\xE8B7";
+            const auto folderNode = page->_BuildRailFileNode(folderRow);
+            VERIFY_IS_TRUE(folderNode.HasUnrealizedChildren());
+            VERIFY_IS_FALSE(folderNode.IsExpanded());
+
+            Page::_RailRow fileRow;
+            fileRow.title = L"main.rs";
+            fileRow.path = L"D:/work/repo/src/main.rs";
+            fileRow.isFolder = false;
+            fileRow.icon = L"\xE7C3";
+            const auto fileNode = page->_BuildRailFileNode(fileRow);
+            // A file has nothing to open, so it never draws a chevron.
+            VERIFY_IS_FALSE(fileNode.HasUnrealizedChildren());
+
+            // The row the template binds to carries the path and the folder
+            // flag, which are what a read and a shell-open need.
+            const auto content = folderNode.Content().as<winrt::TerminalApp::TabStripRailItem>();
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"D:/work/repo/src" }, content.Path());
+            VERIFY_IS_TRUE(content.IsFolder());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"src" }, content.Title());
+
+            // Filling a node replaces its children and settles the chevron: a
+            // folder that turned out empty must not keep promising more.
+            Page::_RailSection section;
+            Page::_RailRow child;
+            child.title = L"main.rs";
+            child.path = L"D:/work/repo/src/main.rs";
+            child.isFolder = false;
+            section.rows.push_back(child);
+            page->_FillGitSidebarNode(folderNode, section);
+            VERIFY_IS_FALSE(folderNode.HasUnrealizedChildren());
+            VERIFY_ARE_EQUAL(1u, folderNode.Children().Size());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" },
+                             folderNode.Children().GetAt(0).Content().as<winrt::TerminalApp::TabStripRailItem>().Title());
+
+            // Filling again with nothing empties it, which is how an empty
+            // folder reads as empty.
+            Page::_RailSection none;
+            page->_FillGitSidebarNode(folderNode, none);
+            VERIFY_ARE_EQUAL(0u, folderNode.Children().Size());
+            VERIFY_IS_FALSE(folderNode.HasUnrealizedChildren());
+        });
+    }
+
+    // A Git capture must not touch the Files tree. The two views share one
+    // completion path, and the section a capture did not read arrives empty;
+    // rebuilding the tree from it replaced the open tree with a bare root, so
+    // the Files view came back empty after every Git refresh.
+    void TabTests::GitCaptureLeavesFilesTreeIntact()
+    {
+        CascadiaSettings settings{ LR"({
+            "defaultProfile": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+            "showTabsInTitlebar": false,
+            "profiles": [{
+                "name": "profile0",
+                "guid": "{6239a42c-1111-49a3-80bd-e8fdd045185c}",
+                "commandline": "cmd.exe"
+            }]
+        })", {} };
+        winrt::com_ptr<winrt::TerminalApp::implementation::TerminalPage> page;
+        const auto connection = winrt::make_self<TestConnection>(
+            winrt::guid{ L"{6239a42c-aaaa-49a3-80bd-e8fdd045185c}" },
+            winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::Connected);
+        _initializeTerminalPage(page, settings, *connection);
+
+        TestOnUIThread([&]() {
+            using Page = winrt::TerminalApp::implementation::TerminalPage;
+            const auto tree = page->GitSidebarFilesTree();
+            VERIFY_IS_TRUE(tree != nullptr);
+
+            // A Files read lands: one root, the folder's entries under it.
+            Page::_RailSection files;
+            files.summary = L"repo";
+            Page::_RailRow entry;
+            entry.title = L"main.rs";
+            entry.path = L"D:/work/repo/main.rs";
+            entry.badge = L"M";
+            files.rows.push_back(entry);
+            page->_gitSidebarView = Page::GitSidebarViewMode::Files;
+            page->_RebuildGitSidebarFiles(files, winrt::hstring{ L"D:/work/repo" });
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().Size());
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().GetAt(0).Children().Size());
+
+            // A Git capture completes while the Files view is hidden: it passes
+            // no Files section at all, and the tree it is not showing must stay
+            // exactly as it was.
+            Page::_RailSection git;
+            git.summary = L"repo \u00B7 main";
+            page->_gitSidebarView = Page::GitSidebarViewMode::Git;
+            page->_CompleteRailWorkspace(page->_railWorkspaceGeneration, git, {}, winrt::hstring{ L"D:/work/repo" });
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().Size());
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().GetAt(0).Children().Size());
+
+            // The rebuild guards itself too. A different folder keeps the
+            // early return from masking this: only the empty section stops it,
+            // and a tree wiped here would come back as a root with no children.
+            page->_RebuildGitSidebarFiles({}, winrt::hstring{ L"D:/other/folder" });
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().Size());
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().GetAt(0).Children().Size());
+
+            // A real Files capture still rebuilds, so the guard is not
+            // swallowing reads: switching to Files shows the new folder.
+            page->_gitSidebarView = Page::GitSidebarViewMode::Files;
+            page->_CompleteRailWorkspace(page->_railWorkspaceGeneration, {}, files, winrt::hstring{ L"D:/work/repo" });
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().Size());
+            VERIFY_ARE_EQUAL(1u, tree.RootNodes().GetAt(0).Children().Size());
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"main.rs" },
+                             tree.RootNodes().GetAt(0).Children().GetAt(0).Content().as<winrt::TerminalApp::TabStripRailItem>().Title());
         });
     }
 

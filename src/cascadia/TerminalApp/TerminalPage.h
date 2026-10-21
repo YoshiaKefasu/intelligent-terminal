@@ -338,6 +338,14 @@ namespace winrt::TerminalApp::implementation
 
     private:
         friend struct TerminalPageT<TerminalPage>; // for Xaml to bind events
+        // Which of the Git and Files panel's two views is on screen. Declared
+        // here, at the top of the private section, because _gitSidebarView
+        // below names it as its type.
+        enum class GitSidebarViewMode
+        {
+            Git,
+            Files,
+        };
         std::optional<HWND> _hostingHwnd;
 
         // If you add controls here, but forget to null them either here or in
@@ -400,8 +408,14 @@ namespace winrt::TerminalApp::implementation
         // the tab rail's. Chrome conditions (focus mode, full screen) hide the
         // panel without clearing this flag — see _IsRailWorkspaceVisible.
         bool _gitSidebarOpen{ false };
+        // Which view the panel shows; see GitSidebarViewMode.
+        GitSidebarViewMode _gitSidebarView{ GitSidebarViewMode::Git };
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarHerdrItems{ nullptr };
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripRailItem> _gitSidebarGitItems{ nullptr };
+        // The folder the Files tree is showing. The periodic refresh compares it
+        // against the focused tab's folder: an unchanged folder keeps the tree
+        // exactly as the reader left it, opened folders and scroll included.
+        winrt::hstring _gitSidebarFilesRoot;
         bool _tabDragReorderAuthorized{ false };
         Windows::Foundation::IInspectable _tabDragSelectedItem{ nullptr };
         winrt::weak_ref<Tab> _pendingPinTab;
@@ -1097,6 +1111,15 @@ namespace winrt::TerminalApp::implementation
         // touches the tab list, so a refresh can never disturb selection or
         // drag order.
         //
+        // The panel has two views behind one [ Git | Files ] switch:
+        //   Git   - the focused tab's repository, its HEAD and changed files
+        //   Files - the focused tab's folder, two levels deep, with Git marks
+        //
+        // Note: the Herdr agent section that used to head this panel is off the
+        // surface, not out of the build. _ParseRailHerdrSnapshot and
+        // _gitSidebarHerdrItems stay so the session list can adopt them; the
+        // panel itself shows only Git and Files.
+        //
         // One panel row as the capture produces it, before the UI thread turns
         // it into a TabStripRailItem and resolves the accent style.
         struct _RailRow
@@ -1107,6 +1130,11 @@ namespace winrt::TerminalApp::implementation
             winrt::hstring tooltip;
             // Chooses the badge style; see _RailAccentStyleKey.
             winrt::hstring accent;
+            // Files view only: the entry's full path and whether it is a folder.
+            // The tree nests itself, so a row carries no indent of its own.
+            winrt::hstring path;
+            bool isFolder{ false };
+            winrt::hstring icon;
         };
         // What one panel section shows: its rows plus the one-line summary and
         // the message that stands in when there are no rows to draw.
@@ -1115,11 +1143,41 @@ namespace winrt::TerminalApp::implementation
             std::vector<_RailRow> rows;
             winrt::hstring summary;
             winrt::hstring message;
+            // How many rows the capture found, before the cap: the summary says
+            // so when it had to leave some out.
+            size_t total{ 0 };
         };
+        // A section with nothing at all in it is a capture that did not fill
+        // this view: a default-constructed section, or a read that reported
+        // neither rows nor a message. Applying one would blank a view that is
+        // merely hidden, so callers skip those.
+        static bool _RailSectionIsEmpty(const _RailSection& section)
+        {
+            return section.rows.empty() && section.summary.empty() && section.message.empty();
+        }
+        // `wta fs tree --depth 1` for one folder. The path is quoted, and a
+        // trailing separator is trimmed because the child parses `\"` as a
+        // literal quote; a drive root keeps a readable form (`C:\` becomes
+        // `C:/`) instead of collapsing to `C:`, which means "the current folder
+        // on C:". Shared by the root read and every folder the reader opens, so
+        // the two cannot disagree about how a path is passed.
+        static std::wstring _WtaFsTreeArguments(winrt::hstring const& folder);
+        // `<command> --path "<folder>"`, with the same quoting and trailing
+        // separator handling as _WtaFsTreeArguments.
+        static std::wstring _WtaPathArguments(std::wstring_view command, winrt::hstring const& folder);
         static _RailSection _ParseRailHerdrSnapshot(const std::optional<std::string>& output);
         static _RailSection _ParseRailGitStatus(const std::optional<std::string>& output, winrt::hstring const& directory);
+        // `wta fs tree --depth 1`: one folder's entries, as the Files view
+        // lists them. The root level and every folder the reader opens go
+        // through here, so a tree is read one level at a time.
+        static _RailSection _ParseRailFileTree(const std::optional<std::string>& output, winrt::hstring const& directory);
+        // The node the tree hangs from, its children already read.
+        winrt::Microsoft::UI::Xaml::Controls::TreeViewNode _BuildRailFileNode(const _RailRow& row);
         static winrt::hstring _RailCountSummary(size_t total, size_t shown);
         static winrt::hstring _RailAgentStatusLabel(std::string_view status);
+        // Git's porcelain letter for a status word, and the letter its accent
+        // style key is chosen from. The Files tree marks files with the former.
+        static winrt::hstring _RailFileMark(std::string_view status);
         bool _IsRailWorkspaceVisible() const
         {
             // The panel is actually on screen: the user's preference AND the
@@ -1130,6 +1188,25 @@ namespace winrt::TerminalApp::implementation
         }
         void _ToggleGitSidebar();
         void _SetGitSidebarVisible(bool visible);
+        // Which of the panel's two views is on screen. Git is the default: the
+        // repository is what a reader opens this panel for, and the tree is the
+        // wider, slower read.
+        void _SetGitSidebarView(GitSidebarViewMode mode);
+        // Drives the segment buttons, the two views and their refresh from
+        // _gitSidebarView.
+        void _ApplyGitSidebarView();
+        void _GitSidebarGitSegmentClick(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::RoutedEventArgs& args);
+        void _GitSidebarFilesSegmentClick(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::RoutedEventArgs& args);
+        // The Files tree reads a folder when the reader opens it, never before:
+        // Expanding is where one `wta fs tree --depth 1` runs, and ItemInvoked
+        // is where a row opens in the shell.
+        void _GitSidebarFileTreeExpanding(const Microsoft::UI::Xaml::Controls::TreeView& sender, const Microsoft::UI::Xaml::Controls::TreeViewExpandingEventArgs& args);
+        void _GitSidebarFileTreeItemInvoked(const Microsoft::UI::Xaml::Controls::TreeView& sender, const Microsoft::UI::Xaml::Controls::TreeViewItemInvokedEventArgs& args);
+        // Reads `node`'s folder off the UI thread and fills its children.
+        safe_void_coroutine _LoadGitSidebarFolder(winrt::Microsoft::UI::Xaml::Controls::TreeViewNode node);
+        // Rebuilds the Files tree from the focused tab's folder.
+        void _RebuildGitSidebarFiles(const _RailSection& root, winrt::hstring const& directory);
+        void _FillGitSidebarNode(const winrt::Microsoft::UI::Xaml::Controls::TreeViewNode& node, const _RailSection& section);
         // Mirrors the effective ToggleSidebar / ToggleGitSidebar chords onto the
         // rail and tab-row tooltips. Runs in both layouts: the Git and Files
         // toggle lives in the horizontal chrome, the rail toggle in the vertical
@@ -1143,8 +1220,9 @@ namespace winrt::TerminalApp::implementation
         void _RequestRailWorkspaceRefresh();
         safe_void_coroutine _LoadRailWorkspace(uint64_t generation);
         void _CompleteRailWorkspace(uint64_t generation,
-                                    _RailSection herdr,
-                                    _RailSection git);
+                                    _RailSection git,
+                                    _RailSection files,
+                                    winrt::hstring const& directory);
         static std::wstring_view _RailAccentStyleKey(std::string_view status);
         winrt::hstring _FocusedTabWorkingDirectory() const;
         void _StartRailWorkspaceRefreshTimer();

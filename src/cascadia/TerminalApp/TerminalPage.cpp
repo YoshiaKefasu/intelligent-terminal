@@ -92,12 +92,17 @@ static constexpr double railCollapsedWidth = 40.0;
 static constexpr auto sidebarHistoryMasterRecoveryTimeout = std::chrono::seconds{ 15 };
 static constexpr auto sidebarHistoryFastRefreshInterval = std::chrono::seconds{ 5 };
 static constexpr auto sidebarHistoryRefreshInterval = std::chrono::seconds{ 60 };
-// The workspace footer reads herdr over a named pipe and runs git in the focused
+// The Git and Files panel runs git (or reads the folder tree) in the focused
 // tab's folder, so it refreshes on its own slower cadence than agent sessions.
 static constexpr auto railWorkspaceRefreshInterval = std::chrono::seconds{ 20 };
-// Both sections cap their rows; a long Git change list would otherwise push the
-// footer past the height of the rail itself.
+// The Git view caps its rows: a long change list would push the list past the
+// height of the panel itself. The Git view truncates at this count.
 static constexpr size_t railWorkspaceMaxRows = 20;
+// The Files view reads one folder per open, so its cap is per folder rather than
+// per tree. A folder holding a dependency tree can run to thousands of entries;
+// the panel is 320px wide, so the first few hundred are what a reader can reach
+// anyway. The summary names the truncation.
+static constexpr size_t railWorkspaceMaxTreeRows = 400;
 // Git and Files panel width. Wide enough for a nested path plus git's status
 // word, narrow enough to leave the terminal usable on a laptop display.
 static constexpr double gitSidebarWidth = 320.0;
@@ -6856,6 +6861,61 @@ namespace winrt::TerminalApp::implementation
         _ApplyGitSidebarVisibility();
     }
 
+    // The panel's two views share one capture pass and one row type; the switch
+    // only decides which of the two lists and which scroll viewer is on screen.
+    // The mode survives closing the panel: reopening it lands where the reader
+    // left off.
+    void TerminalPage::_SetGitSidebarView(const GitSidebarViewMode mode)
+    {
+        const bool changed = _gitSidebarView != mode;
+        _gitSidebarView = mode;
+        // Always re-applied, even when the mode did not change: a segment is a
+        // radio, and clicking the active one toggles its button off before this
+        // runs, so the pair has to be re-asserted either way.
+        _ApplyGitSidebarView();
+        // A view that has never been captured would open empty; the refresh is
+        // cheap for the Git side and re-reads the tree for Files.
+        if (changed && _IsRailWorkspaceVisible())
+        {
+            _RequestRailWorkspaceRefresh();
+        }
+    }
+
+    void TerminalPage::_ApplyGitSidebarView()
+    {
+        const auto gitButton = GitSidebarGitSegment();
+        const auto filesButton = GitSidebarFilesSegment();
+        if (!gitButton || !filesButton)
+        {
+            // Create() has not loaded the XAML yet; _ApplyGitSidebarVisibility
+            // calls back in once it has.
+            return;
+        }
+        const bool git = _gitSidebarView == GitSidebarViewMode::Git;
+        // A segment is a radio, not a checkbox: clicking the active one must not
+        // turn it off, so both are re-asserted on every apply.
+        gitButton.IsChecked(git);
+        filesButton.IsChecked(!git);
+        if (const auto gitView = GitSidebarGitView())
+        {
+            gitView.Visibility(git ? Visibility::Visible : Visibility::Collapsed);
+        }
+        if (const auto filesView = GitSidebarFilesView())
+        {
+            filesView.Visibility(git ? Visibility::Collapsed : Visibility::Visible);
+        }
+    }
+
+    void TerminalPage::_GitSidebarGitSegmentClick(const IInspectable&, const RoutedEventArgs&)
+    {
+        _SetGitSidebarView(GitSidebarViewMode::Git);
+    }
+
+    void TerminalPage::_GitSidebarFilesSegmentClick(const IInspectable&, const RoutedEventArgs&)
+    {
+        _SetGitSidebarView(GitSidebarViewMode::Files);
+    }
+
     void TerminalPage::_ApplyGitSidebarVisibility()
     {
         // The flag is the preference; _IsRailWorkspaceVisible() folds in the
@@ -6884,6 +6944,7 @@ namespace winrt::TerminalApp::implementation
             // Mirror the panel's internal columns for RTL. The dock side stays
             // physically right (see the note in TerminalPage.xaml).
             panel.FlowDirection(_isRightToLeft ? FlowDirection::RightToLeft : FlowDirection::LeftToRight);
+            _ApplyGitSidebarView();
             _RequestRailWorkspaceRefresh();
         }
         else
@@ -7083,16 +7144,22 @@ namespace winrt::TerminalApp::implementation
 
     std::wstring_view TerminalPage::_RailAccentStyleKey(const std::string_view status)
     {
-        // The panel's own row styles, so Working / Attention / Conflicted read
-        // the same way they do in the session list without depending on the
-        // tab strip's resource dictionary.
-        if (status == "working")
+        // The panel's own row styles, so a status reads the same way it does in
+        // the session list without depending on the tab strip's resource
+        // dictionary. The Git view's section words and the Files view's
+        // per-entry words both land here, plus the Herdr states whose parsing
+        // is retained for the session list.
+        if (status == "working" || status == "staged" || status == "untracked" || status == "added")
         {
             return L"GitSidebarActiveTextStyle";
         }
-        if (status == "blocked" || status == "conflicted")
+        if (status == "blocked" || status == "unstaged" || status == "modified" || status == "renamed")
         {
             return L"GitSidebarAttentionTextStyle";
+        }
+        if (status == "conflicted" || status == "deleted")
+        {
+            return L"GitSidebarDangerTextStyle";
         }
         return L"GitSidebarSubtitleTextStyle";
     }
@@ -7136,6 +7203,33 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
+    // `<command> --path "<folder>"`. A trailing separator would escape the
+    // closing quote, because the child parses `\"` as a literal quote. Trim it,
+    // but keep a drive root readable (`C:\` becomes `C:/`) instead of collapsing
+    // it to `C:`, which means "the current folder on C:".
+    std::wstring TerminalPage::_WtaPathArguments(const std::wstring_view command, winrt::hstring const& folder)
+    {
+        std::wstring target{ folder.c_str() };
+        while (!target.empty() && (target.back() == L'\\' || target.back() == L'/'))
+        {
+            target.pop_back();
+        }
+        if (target.empty() || target.back() == L':')
+        {
+            target += L'/';
+        }
+        std::wstring arguments{ command };
+        arguments += L" --path \"";
+        arguments += target;
+        arguments += L"\"";
+        return arguments;
+    }
+
+    std::wstring TerminalPage::_WtaFsTreeArguments(winrt::hstring const& folder)
+    {
+        return _WtaPathArguments(L"fs tree --depth 1", folder);
+    }
+
     void TerminalPage::_RequestRailWorkspaceRefresh()
     {
         // The panel's own Visibility is the single truth here: focus mode and
@@ -7164,6 +7258,11 @@ namespace winrt::TerminalApp::implementation
         const auto dispatcher = Dispatcher();
         const auto directory = _FocusedTabWorkingDirectory();
         const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
+        // Only the visible view is captured. The two reads answer different
+        // questions and neither is needed to draw the other, so a hidden view
+        // must not cost a wta run every tick; _SetGitSidebarView refreshes when
+        // the reader switches, so the view they land on is never stale.
+        const bool files = _gitSidebarView == GitSidebarViewMode::Files;
 
         co_await winrt::resume_background();
 
@@ -7177,29 +7276,11 @@ namespace winrt::TerminalApp::implementation
             return std::optional<std::string>{};
         };
 
-        // Herdr is global to the machine, not to the folder, so it is read even
-        // when the focused pane has no folder to report.
-        const auto herdrOutput = run(L"herdr snapshot", 10'000);
-        std::optional<std::string> gitOutput;
+        std::optional<std::string> output;
         if (!directory.empty())
         {
-            // A trailing separator would escape the closing quote, because the
-            // child parses `\"` as a literal quote. Trim it, but keep a drive
-            // root readable (`C:\` becomes `C:/`) instead of collapsing it to
-            // `C:`, which means "the current folder on C:".
-            std::wstring target{ directory.c_str() };
-            while (!target.empty() && (target.back() == L'\\' || target.back() == L'/'))
-            {
-                target.pop_back();
-            }
-            if (target.empty() || target.back() == L':')
-            {
-                target += L'/';
-            }
-            std::wstring arguments{ L"git status --path \"" };
-            arguments += target;
-            arguments += L"\"";
-            gitOutput = run(arguments, 15'000);
+            output = files ? run(_WtaFsTreeArguments(directory), 20'000) :
+                             run(_WtaPathArguments(L"git status", directory), 15'000);
         }
 
         co_await wil::resume_foreground(dispatcher);
@@ -7211,18 +7292,24 @@ namespace winrt::TerminalApp::implementation
         page->_railWorkspaceInFlight = false;
         if (generation != page->_railWorkspaceGeneration)
         {
-            // Superseded: a newer capture already owns the footer.
+            // Superseded: a newer capture already owns the panel.
             co_return;
         }
 
-        auto herdr = _ParseRailHerdrSnapshot(herdrOutput);
-        auto git = _ParseRailGitStatus(gitOutput, directory);
-        page->_CompleteRailWorkspace(generation, std::move(herdr), std::move(git));
+        if (files)
+        {
+            page->_CompleteRailWorkspace(generation, {}, _ParseRailFileTree(output, directory), directory);
+        }
+        else
+        {
+            page->_CompleteRailWorkspace(generation, _ParseRailGitStatus(output, directory), {}, directory);
+        }
     }
 
     void TerminalPage::_CompleteRailWorkspace(const uint64_t generation,
-                                              _RailSection herdr,
-                                              _RailSection git)
+                                              _RailSection git,
+                                              _RailSection files,
+                                              winrt::hstring const& directory)
     {
         if (generation != _railWorkspaceGeneration)
         {
@@ -7240,6 +7327,9 @@ namespace winrt::TerminalApp::implementation
                 item.Title(row.title);
                 item.Detail(row.detail);
                 item.ToolTip(row.tooltip);
+                item.Path(row.path);
+                item.IsFolder(row.isFolder);
+                item.Icon(row.icon);
                 const auto styleKey = _RailAccentStyleKey(winrt::to_string(row.accent));
                 if (Resources().HasKey(box_value(styleKey)))
                 {
@@ -7247,41 +7337,197 @@ namespace winrt::TerminalApp::implementation
                 }
                 items.emplace_back(item);
             }
-            // ReplaceAll resets the ItemsControl; the panel holds at most a
+            // ReplaceAll resets the ItemsControl; the Git view holds at most a
             // couple dozen rows, so that is cheaper than diffing slots.
             target.ReplaceAll(items);
         };
 
-        toItems(herdr, _gitSidebarHerdrItems);
-        toItems(git, _gitSidebarGitItems);
+        // A capture fills only the section it read; the other arrives
+        // default-constructed. Applying that empty section would blank a view
+        // that is merely hidden, so each section is applied only when it
+        // carries something to show.
+        if (!_RailSectionIsEmpty(git))
+        {
+            toItems(git, _gitSidebarGitItems);
 
-        // A section with neither rows nor a message would draw only its own
-        // header, which reads as an empty section; hide the whole block.
-        const auto showSection = [](const TextBlock& header,
-                                    const TextBlock& summaryText,
-                                    const TextBlock& messageText,
-                                    const ItemsControl& list,
-                                    const _RailSection& section) {
-            summaryText.Text(section.summary);
-            summaryText.Visibility(section.summary.empty() ? Visibility::Collapsed : Visibility::Visible);
-            messageText.Text(section.message);
-            messageText.Visibility(section.message.empty() ? Visibility::Collapsed : Visibility::Visible);
-            list.Visibility(section.rows.empty() ? Visibility::Collapsed : Visibility::Visible);
-            // The Git section has no separate header: its summary (repo ·
-            // branch) already reads as the headline, so it doubles as one.
-            if (header)
-            {
-                const auto any = !section.rows.empty() || !section.message.empty() || !section.summary.empty();
-                header.Visibility(any ? Visibility::Visible : Visibility::Collapsed);
-            }
-        };
-        showSection(GitSidebarHerdrHeader(), GitSidebarHerdrSummary(), GitSidebarHerdrMessage(), GitSidebarHerdrList(), herdr);
-        showSection(nullptr, GitSidebarGitSummary(), GitSidebarGitMessage(), GitSidebarGitList(), git);
+            // The Git section: a summary that doubles as its headline, its rows,
+            // and the message that stands in when there are none.
+            GitSidebarGitSummary().Text(git.summary);
+            GitSidebarGitSummary().Visibility(git.summary.empty() ? Visibility::Collapsed : Visibility::Visible);
+            GitSidebarGitMessage().Text(git.message);
+            GitSidebarGitMessage().Visibility(git.message.empty() ? Visibility::Collapsed : Visibility::Visible);
+            GitSidebarGitList().Visibility(git.rows.empty() ? Visibility::Collapsed : Visibility::Visible);
+        }
+
+        // The Files section is a tree rather than a list, so it is rebuilt from
+        // the root every time; _RebuildGitSidebarFiles keeps whatever the
+        // reader had opened. Only a Files capture may touch it: a Git capture
+        // passes no Files section, and rebuilding from one would replace the
+        // open tree with a bare root. The folder is the one this capture read,
+        // not the focused tab's current one, so the root and the rows below it
+        // always describe the same folder.
+        if (_gitSidebarView == GitSidebarViewMode::Files && !_RailSectionIsEmpty(files))
+        {
+            _RebuildGitSidebarFiles(files, directory);
+        }
 
         if (_railWorkspacePending)
         {
             _railWorkspacePending = false;
             _RequestRailWorkspaceRefresh();
+        }
+    }
+
+    void TerminalPage::_RebuildGitSidebarFiles(const _RailSection& root, winrt::hstring const& directory)
+    {
+        const auto tree = GitSidebarFilesTree();
+        if (!tree)
+        {
+            return;
+        }
+
+        // Nothing was read: a section this empty is a capture that did not fill
+        // the Files view, and rebuilding from it would wipe the tree the reader
+        // has open. The call sites already filter those out; this keeps a future
+        // one from reintroducing the bug.
+        if (_RailSectionIsEmpty(root))
+        {
+            return;
+        }
+
+        // The tree is rebuilt only when the folder it shows changes. A periodic
+        // refresh must not fold what the reader opened, and a tree that is
+        // already showing this folder is already correct: git's marks are on
+        // the rows the folder read returned, not on the tree's structure.
+        if (_gitSidebarFilesRoot == directory && tree.RootNodes().Size() > 0)
+        {
+            return;
+        }
+        _gitSidebarFilesRoot = directory;
+
+        tree.RootNodes().Clear();
+        GitSidebarFilesSummary().Text(root.summary);
+        GitSidebarFilesSummary().Visibility(root.summary.empty() ? Visibility::Collapsed : Visibility::Visible);
+
+        if (!root.message.empty())
+        {
+            // No folder to show: the message stands where the tree would be.
+            GitSidebarFilesMessage().Text(root.message);
+            GitSidebarFilesMessage().Visibility(Visibility::Visible);
+            return;
+        }
+        GitSidebarFilesMessage().Visibility(Visibility::Collapsed);
+
+        // The tree's one root is the folder the pane reports, opened so its
+        // entries are visible without a click - the same thing ELYTerminal does
+        // with `Tree::open([key(&self.root)])`.
+        _RailRow rootRow;
+        rootRow.title = winrt::hstring{ std::filesystem::path{ directory.c_str() }.filename().native() };
+        if (rootRow.title.empty())
+        {
+            rootRow.title = directory.empty() ? root.summary : directory;
+        }
+        rootRow.path = directory;
+        rootRow.isFolder = true;
+        rootRow.icon = L"\xE8B7";
+        rootRow.tooltip = directory;
+        auto rootNode = _BuildRailFileNode(rootRow);
+        rootNode.IsExpanded(true);
+        _FillGitSidebarNode(rootNode, root);
+        tree.RootNodes().Append(rootNode);
+    }
+
+    // `section`'s rows as `node`'s children. A folder keeps its chevron until it
+    // is opened and read; an empty folder drops it, which is how a reader tells
+    // "nothing inside" from "not read yet".
+    void TerminalPage::_FillGitSidebarNode(const winrt::Microsoft::UI::Xaml::Controls::TreeViewNode& node, const _RailSection& section)
+    {
+        node.Children().Clear();
+        for (const auto& row : section.rows)
+        {
+            node.Children().Append(_BuildRailFileNode(row));
+        }
+        node.HasUnrealizedChildren(false);
+    }
+
+    safe_void_coroutine TerminalPage::_LoadGitSidebarFolder(winrt::Microsoft::UI::Xaml::Controls::TreeViewNode node)
+    {
+        const auto item = node.Content().try_as<winrt::TerminalApp::TabStripRailItem>();
+        if (!item || !item.IsFolder())
+        {
+            co_return;
+        }
+
+        const auto weakThis = get_weak();
+        const auto dispatcher = Dispatcher();
+        const auto directory = item.Path();
+        const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
+
+        const auto arguments = _WtaFsTreeArguments(directory);
+
+        co_await winrt::resume_background();
+
+        const auto result = ::Microsoft::Terminal::WtaProcess::RunWtaCapture(wtaPath, arguments, 20'000, nullptr, false);
+        const auto output = (result.completed && result.exitCode == 0) ? std::optional<std::string>{ result.output } : std::nullopt;
+        auto section = _ParseRailFileTree(output, directory);
+
+        co_await wil::resume_foreground(dispatcher);
+        if (!weakThis.get())
+        {
+            co_return;
+        }
+        // The tree may have been rebuilt for another folder while the read ran,
+        // in which case this node is no longer on screen. Filling it would grow
+        // a detached subtree, so the rows are dropped instead.
+        if (_gitSidebarFilesRoot != _FocusedTabWorkingDirectory())
+        {
+            co_return;
+        }
+        _FillGitSidebarNode(node, section);
+        if (section.rows.empty())
+        {
+            // Nothing inside: the chevron goes and the node folds, so the
+            // folder reads as empty rather than as never opened.
+            node.IsExpanded(false);
+        }
+    }
+
+    void TerminalPage::_GitSidebarFileTreeExpanding(const Microsoft::UI::Xaml::Controls::TreeView&, const Microsoft::UI::Xaml::Controls::TreeViewExpandingEventArgs& args)
+    {
+        const auto node = args.Node();
+        if (!node || !node.HasUnrealizedChildren())
+        {
+            return;
+        }
+        // The chevron was drawn on the promise that children exist; a read that
+        // finds none takes it back.
+        node.HasUnrealizedChildren(false);
+        _LoadGitSidebarFolder(node);
+    }
+
+    void TerminalPage::_GitSidebarFileTreeItemInvoked(const Microsoft::UI::Xaml::Controls::TreeView&, const Microsoft::UI::Xaml::Controls::TreeViewItemInvokedEventArgs& args)
+    {
+        // A folder is opened by the tree's own chevron; a file opens in the
+        // shell, as ELYTerminal's Files panel does.
+        const auto item = args.InvokedItem().try_as<winrt::TerminalApp::TabStripRailItem>();
+        if (!item || item.IsFolder() || item.Path().empty())
+        {
+            return;
+        }
+        const auto path = std::wstring{ item.Path() };
+        // ShellExecute needs a folder to start in; the file's own is the one the
+        // reader is looking at.
+        const auto folder = std::filesystem::path{ path }.parent_path().wstring();
+        // ShellExecuteW answers with a value above 32 on success and the error
+        // code itself at or below it - it does not set the last error, so the
+        // code has to be logged from the return value. A file that will not
+        // open has to say so: silently doing nothing reads as a click that
+        // missed.
+        const auto launched = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, folder.empty() ? nullptr : folder.c_str(), SW_SHOWNORMAL);
+        if (const auto code = static_cast<int>(reinterpret_cast<uintptr_t>(launched)); code <= 32)
+        {
+            LOG_HR_MSG(HRESULT_FROM_WIN32(static_cast<DWORD>(code)), "Files view: ShellExecuteW could not open the selected file");
+            _ShowCouldNotOpenDialog(RS_(L"VerticalTabsFilesOpenFailed"), item.Path());
         }
     }
 
@@ -7498,6 +7744,174 @@ namespace winrt::TerminalApp::implementation
         }
         return section;
     }
+
+    // `wta fs tree --path <dir> --depth 1` prints one folder's entries with
+    // Git's mark on each. The Files view calls this once per folder the reader
+    // opens, so the capture is always exactly one level and never guesses at
+    // what lies below it.
+    TerminalPage::_RailSection TerminalPage::_ParseRailFileTree(const std::optional<std::string>& output, winrt::hstring const& directory)
+    {
+        _RailSection section;
+        if (directory.empty())
+        {
+            section.message = RS_(L"VerticalTabsGitNoFolder");
+            return section;
+        }
+        if (!output)
+        {
+            section.message = RS_(L"VerticalTabsRailUnavailable");
+            return section;
+        }
+
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        builder["failIfExtra"] = true;
+        std::istringstream json{ *output };
+        std::string errors;
+        if (!Json::parseFromStream(builder, json, &root, &errors) || !root.isObject())
+        {
+            section.message = RS_(L"VerticalTabsRailInvalidResponse");
+            return section;
+        }
+
+        // The root's own name heads the tree, as `~` or the folder's basename.
+        // A pane reports a drive root with no name, so that falls back to the
+        // path itself rather than drawing an empty row.
+        const auto rootPath = root.get("root", "").asString();
+        auto rootName = std::filesystem::path{ winrt::to_hstring(rootPath).c_str() }.filename().native();
+        if (rootName.empty())
+        {
+            rootName = winrt::to_hstring(rootPath);
+        }
+
+        const auto& entries = root["entries"];
+        if (entries.isArray())
+        {
+            for (const auto& entry : entries)
+            {
+                if (!entry.isObject())
+                {
+                    continue;
+                }
+                ++section.total;
+                if (section.rows.size() >= railWorkspaceMaxTreeRows)
+                {
+                    continue;
+                }
+                const auto entryName = entry.get("name", "").asString();
+                if (entryName.empty())
+                {
+                    continue;
+                }
+                const auto folder = entry.get("folder", false).asBool();
+                const auto status = entry.get("status", "").asString();
+                const auto dirty = entry.get("dirty", false).asBool();
+
+                _RailRow row;
+                row.isFolder = folder;
+                row.path = winrt::to_hstring(entry.get("path", "").asString());
+                row.icon = folder ? L"\xE8B7" : L"\xE7C3";
+                row.title = winrt::to_hstring(entryName);
+                // A folder that holds a change below it is marked with a dot:
+                // git names the file, not the folder it lives in.
+                row.badge = !status.empty() ? _RailFileMark(status) : (dirty ? winrt::hstring{ L"\u2022" } : winrt::hstring{});
+                // The status word is the accent key: _RailAccentStyleKey owns
+                // the colour, so the Git and Files views cannot disagree.
+                row.accent = !status.empty() ? winrt::to_hstring(status) : (dirty ? winrt::hstring{ L"modified" } : winrt::hstring{});
+                auto tooltip = std::string{ folder ? "Folder: " : "File: " } + entryName;
+                if (!status.empty())
+                {
+                    tooltip += "\n" + status;
+                }
+                else if (dirty)
+                {
+                    tooltip += "\nHolds changes";
+                }
+                if (const auto error = entry.get("error", "").asString(); !error.empty())
+                {
+                    tooltip += "\n" + error;
+                }
+                row.tooltip = winrt::to_hstring(tooltip);
+                section.rows.emplace_back(std::move(row));
+            }
+        }
+
+        // The headline names the folder this level belongs to, and says whether
+        // its marks are Git's at all.
+        section.summary = winrt::hstring{ rootName };
+        if (!root.get("repo", false).asBool())
+        {
+            section.summary = section.summary + L" \u00B7 " + RS_(L"VerticalTabsFilesNoRepository");
+        }
+        if (section.rows.size() < section.total)
+        {
+            section.summary = section.summary + L" \u00B7 " + _RailCountSummary(section.total, section.rows.size());
+        }
+        return section;
+    }
+
+    // One row as a tree node. A folder starts unread but says it has children,
+    // which is what draws its chevron before anything below it is known; an
+    // empty folder loses the chevron when its read comes back empty.
+    winrt::Microsoft::UI::Xaml::Controls::TreeViewNode TerminalPage::_BuildRailFileNode(const _RailRow& row)
+    {
+        auto item = winrt::make<TabStripRailItem>();
+        item.Badge(row.badge);
+        item.Title(row.title);
+        item.Detail(row.detail);
+        item.ToolTip(row.tooltip);
+        item.Path(row.path);
+        item.IsFolder(row.isFolder);
+        item.Icon(row.icon);
+        const auto styleKey = _RailAccentStyleKey(winrt::to_string(row.accent));
+        if (Resources().HasKey(box_value(styleKey)))
+        {
+            item.AccentStyle(Resources().Lookup(box_value(styleKey)).as<WUX::Style>());
+        }
+
+        winrt::Microsoft::UI::Xaml::Controls::TreeViewNode node{};
+        node.Content(item);
+        node.HasUnrealizedChildren(row.isFolder);
+        return node;
+    }
+
+    // Git's porcelain letter for a status word, as the Files tree marks a name.
+    // The Git view derives its letters from the section a change is in, which is
+    // the same vocabulary; this maps the per-entry status the tree reports. An
+    // untracked file wears `?`, the letter the Git view gives that section, so
+    // the same mark never means two things in one panel.
+    winrt::hstring TerminalPage::_RailFileMark(const std::string_view status)
+    {
+        if (status == "modified")
+        {
+            return L"M";
+        }
+        if (status == "added")
+        {
+            return L"A";
+        }
+        if (status == "deleted")
+        {
+            return L"D";
+        }
+        if (status == "untracked")
+        {
+            return L"?";
+        }
+        if (status == "renamed")
+        {
+            return L"R";
+        }
+        if (status == "conflicted")
+        {
+            return L"!";
+        }
+        return {};
+    }
+
+    // Which of the panel's row styles a status paints its mark with lives in
+    // _RailAccentStyleKey: a new file is green like the Git view's `?`, a change
+    // to tracked content is amber, and anything blocking a commit is red.
 
     // The summary doubles as the "there are more" notice: both callers only
     // ask for it when rows had to be left out, so a section never silently
