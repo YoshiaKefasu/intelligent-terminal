@@ -51,10 +51,24 @@ const VARIABLES: [&str; 6] = [
 ];
 
 /// `wta herdr snapshot`: print the snapshot a running herdr server reports.
+///
+/// `root_pid` confines the answer to one tab: when it is given, the server is
+/// asked only if that process tree holds a herdr.exe. A tab running an ordinary
+/// shell therefore keeps its own folder instead of adopting whatever Space
+/// another window's herdr happens to have focused.
 pub(crate) async fn run_snapshot(
     requested: Option<PathBuf>,
     session: Option<&str>,
+    root_pid: Option<u32>,
 ) -> anyhow::Result<()> {
+    if let Some(root) = root_pid {
+        if !tree_runs_herdr(root) {
+            // Nothing to say, and no pipe opened: this is the common case for
+            // every non-herdr tab, so it must stay cheap and silent.
+            tracing::info!(root_pid = root, "herdr is not running under this pane");
+            return Ok(());
+        }
+    }
     let socket = match requested {
         Some(socket) => socket,
         None => socket(session, &process_env())?,
@@ -87,6 +101,94 @@ pub(crate) async fn snapshot(socket: &Path) -> anyhow::Result<SessionSnapshot> {
         .await
         .with_context(|| format!("herdr: asking {}", socket.display()))?;
     parse_reply(&reply).with_context(|| format!("herdr: {}", socket.display()))
+}
+
+/// The name herdr's client runs under, as Toolhelp reports it.
+const HERDR_IMAGE: &str = "herdr.exe";
+
+/// Does the process tree rooted at `root` hold a herdr.exe?
+///
+/// The tree is read from one Toolhelp snapshot rather than by walking parent
+/// links upward: a herdr that spawned a shell (and the shell then spawned the
+/// pane's process) is a descendant of the pane's root, not its ancestor, and
+/// the same snapshot answers for every level at once. A `root` that has already
+/// exited answers no, which is the same outcome as a shell tab.
+#[cfg(windows)]
+pub(crate) fn tree_runs_herdr(root: u32) -> bool {
+    use std::collections::{HashMap, HashSet};
+
+    use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _};
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
+    if root == 0 {
+        return false;
+    }
+
+    // SAFETY: the snapshot handle is owned immediately and closed on drop; the
+    // entry buffer is ours and `dwSize` is set before the first call, as
+    // Toolhelp requires.
+    let processes = unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            // Without a snapshot the tree is unknown. Answering "no" keeps the
+            // tab's own folder, which is the safe half of the guess.
+            tracing::debug!("herdr: no process snapshot, assuming none");
+            return false;
+        }
+        let snapshot = std::os::windows::io::OwnedHandle::from_raw_handle(snapshot);
+
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut found: HashMap<u32, (u32, String)> = HashMap::new();
+        let mut more = Process32FirstW(snapshot.as_raw_handle(), &mut entry);
+        while more != 0 {
+            let name_len = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let name = String::from_utf16_lossy(&entry.szExeFile[..name_len]);
+            found.insert(entry.th32ProcessID, (entry.th32ParentProcessID, name));
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            more = Process32NextW(snapshot.as_raw_handle(), &mut entry);
+        }
+        found
+    };
+
+    // Breadth-first over children. `seen` also bounds the walk: a recycled PID
+    // can make the parent links circular, and following one would loop forever.
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (pid, (parent, _)) in &processes {
+        children.entry(*parent).or_default().push(*pid);
+    }
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut pending = vec![root];
+    while let Some(pid) = pending.pop() {
+        if !seen.insert(pid) {
+            continue;
+        }
+        if let Some((_, name)) = processes.get(&pid) {
+            if name.eq_ignore_ascii_case(HERDR_IMAGE) {
+                return true;
+            }
+        }
+        if let Some(kids) = children.get(&pid) {
+            pending.extend(kids.iter().copied());
+        }
+    }
+    false
+}
+
+/// A tree walk needs a real process table, which only Windows has here.
+#[cfg(not(windows))]
+pub(crate) fn tree_runs_herdr(_root: u32) -> bool {
+    false
 }
 
 /// The line herdr's server answers with.

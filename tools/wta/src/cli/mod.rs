@@ -161,9 +161,11 @@ pub(crate) async fn run(command: Command, json_mode: bool) -> Result<()> {
             }
         },
         Command::Herdr { action } => match action {
-            HerdrAction::Snapshot { socket, session } => {
-                crate::herdr::run_snapshot(socket, session.as_deref()).await
-            }
+            HerdrAction::Snapshot {
+                socket,
+                session,
+                root_pid,
+            } => crate::herdr::run_snapshot(socket, session.as_deref(), root_pid).await,
         },
         Command::Git { action } => match action {
             GitAction::Status { path } => crate::git_files::run_status(path),

@@ -4858,6 +4858,47 @@ namespace TerminalAppLocalTests
                 VERIFY_ARE_EQUAL(std::wstring{ L"yazi.exe" }, resolved.filename().wstring());
                 VERIFY_IS_TRUE(resolved.is_absolute());
             }
+
+            // `ya.exe` is the only way to move a running instance, and it ships
+            // beside yazi. A bundle with yazi but no ya would leave the pane
+            // unable to follow a Space switch, so the pair is pinned together.
+            const auto yaPath = Page::_DetectYaPath();
+            if (!path.empty())
+            {
+                VERIFY_IS_FALSE(yaPath.empty());
+            }
+            if (!yaPath.empty())
+            {
+                const std::filesystem::path resolved{ yaPath.c_str() };
+                VERIFY_IS_TRUE(std::filesystem::exists(resolved));
+                VERIFY_ARE_EQUAL(std::wstring{ L"ya.exe" }, resolved.filename().wstring());
+                VERIFY_IS_TRUE(resolved.is_absolute());
+                // Both binaries come out of the same folder: a `ya` from
+                // somewhere else would talk to a different yazi version.
+                VERIFY_ARE_EQUAL(std::filesystem::path{ path.c_str() }.parent_path(), resolved.parent_path());
+            }
+
+            // The `file` override is optional: empty means "Git for Windows is
+            // not installed", and yazi then keeps its own behaviour. A
+            // non-empty answer must name a file that exists, or yazi fails the
+            // same way it does without the variable.
+            const auto fileCommand = Page::_DetectFileCommandPath();
+            if (!fileCommand.empty())
+            {
+                const std::filesystem::path resolved{ fileCommand.c_str() };
+                VERIFY_IS_TRUE(std::filesystem::exists(resolved));
+                VERIFY_ARE_EQUAL(std::wstring{ L"file.exe" }, resolved.filename().wstring());
+            }
+
+            // The client id key is the contract between the launch and the
+            // follow tick: a rename turns every emit-to into "receiver not
+            // found".
+            VERIFY_ARE_EQUAL(std::wstring_view{ L"YAZI_CLIENT_ID" }, Page::YaziClientIdSessionVariable);
+
+            // A pane that records no id (one made by an older build) answers
+            // empty, which the follow tick reads as "do not move anything"
+            // rather than as an id to address.
+            VERIFY_IS_TRUE(Page::_YaziClientId(nullptr).empty());
         });
     }
 
@@ -4905,6 +4946,22 @@ namespace TerminalAppLocalTests
             VERIFY_IS_NOT_NULL(found.get());
             VERIFY_IS_TRUE(found == marked);
             VERIFY_IS_FALSE(found == plain);
+
+            // The follow tick needs the shell beside yazi, not yazi itself.
+            // Clicking into yazi to browse makes it the active pane, and
+            // following that would ask yazi where yazi is. `_YaziSourcePane`
+            // must therefore answer the other terminal leaf either way.
+            const auto source = Page::_YaziSourcePane(tab);
+            VERIFY_IS_NOT_NULL(source.get());
+            VERIFY_IS_FALSE(source == marked);
+            VERIFY_IS_TRUE(source->GetTerminalControl() != nullptr);
+
+            // A pane with no client id records nothing, and the follow tick
+            // reads that as "do not move anything" rather than an empty id.
+            VERIFY_IS_TRUE(Page::_YaziClientId(marked).empty());
+            marked->SetSessionVariable(winrt::hstring{ Page::YaziClientIdSessionVariable }, L"1234");
+            VERIFY_ARE_EQUAL(winrt::hstring{ L"1234" }, Page::_YaziClientId(marked));
+            VERIFY_IS_TRUE(Page::_YaziClientId(nullptr).empty());
         });
     }
 

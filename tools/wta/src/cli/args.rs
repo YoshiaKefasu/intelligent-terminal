@@ -563,6 +563,11 @@ pub(crate) enum HerdrAction {
         /// Named herdr session; resolves under <herdr dir>\sessions\<NAME>.
         #[arg(long, conflicts_with = "socket", value_name = "NAME")]
         session: Option<String>,
+        /// Only answer when herdr runs inside this process tree: the tree
+        /// rooted at the given PID must hold a herdr.exe. Otherwise print
+        /// nothing to stdout and exit 0 without touching herdr's pipe.
+        #[arg(long, value_name = "PID")]
+        root_pid: Option<u32>,
     },
 }
 

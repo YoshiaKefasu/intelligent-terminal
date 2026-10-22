@@ -99,6 +99,10 @@ namespace winrt::Microsoft::Terminal::Settings
         void StartingDirectory(const hstring& startingDirectory) { _StartingDirectory = startingDirectory; }
         void Commandline(const hstring& commandline) { _Commandline = commandline; }
         void UsesManagedAgentCommand(const bool value) { _UsesManagedAgentCommand = value; }
+        // Callers that launch a specific tool rather than the profile's own
+        // shell add the variables that tool needs here: they belong to this one
+        // launch and must not leak into the profile.
+        void EnvironmentVariables(const IEnvironmentVariableMapView& value) { _EnvironmentVariables = value; }
 
     private:
         std::optional<std::array<Microsoft::Terminal::Core::Color, COLOR_TABLE_SIZE>> _ColorTable;

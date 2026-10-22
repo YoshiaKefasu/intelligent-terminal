@@ -187,6 +187,17 @@ fn the_snapshot_serializes_back_to_herdr_s_shape() {
     assert_eq!(printed["agents"], serde_json::json!([]));
 }
 
+/// A tab's own process is never a herdr: the tree check is what keeps an
+/// ordinary shell tab from adopting another window's focused Space.
+#[test]
+fn a_tree_without_herdr_answers_no() {
+    // This test binary is wta's own process; it runs no herdr.
+    assert!(!tree_runs_herdr(std::process::id()));
+    // A pid that cannot exist is the same answer, not a panic.
+    assert!(!tree_runs_herdr(0));
+    assert!(!tree_runs_herdr(u32::MAX));
+}
+
 /// herdr answers over its pipe: the request on the wire, the reply read back.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn herdr_answers_over_its_pipe() {

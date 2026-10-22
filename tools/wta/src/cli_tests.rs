@@ -730,19 +730,36 @@ fn herdr_snapshot_cli_parses_socket_and_session() {
     let cli = Cli::try_parse_from(["wta", "herdr", "snapshot"]).expect("herdr snapshot");
     match cli.command {
         Some(Command::Herdr {
-            action: HerdrAction::Snapshot { socket, session },
+            action: HerdrAction::Snapshot {
+                socket,
+                session,
+                root_pid,
+            },
         }) => {
             assert_eq!(socket, None);
             assert_eq!(session, None);
+            assert_eq!(root_pid, None);
         }
         other => panic!("expected herdr snapshot, got {other:?}"),
     }
+
+    // The pane's own PID scopes the answer to that tab.
+    let cli = Cli::try_parse_from(["wta", "herdr", "snapshot", "--root-pid", "4242"])
+        .expect("a root pid");
+    match cli.command {
+        Some(Command::Herdr {
+            action: HerdrAction::Snapshot { root_pid, .. },
+        }) => assert_eq!(root_pid, Some(4242)),
+        other => panic!("expected herdr snapshot, got {other:?}"),
+    }
+    Cli::try_parse_from(["wta", "herdr", "snapshot", "--root-pid", "not-a-pid"])
+        .expect_err("--root-pid is a PID");
 
     let cli = Cli::try_parse_from(["wta", "herdr", "snapshot", "--session", "work"])
         .expect("a named session");
     match cli.command {
         Some(Command::Herdr {
-            action: HerdrAction::Snapshot { socket, session },
+            action: HerdrAction::Snapshot { socket, session, .. },
         }) => {
             assert_eq!(socket, None);
             assert_eq!(session.as_deref(), Some("work"));
@@ -754,7 +771,7 @@ fn herdr_snapshot_cli_parses_socket_and_session() {
         .expect("an explicit socket");
     match cli.command {
         Some(Command::Herdr {
-            action: HerdrAction::Snapshot { socket, session },
+            action: HerdrAction::Snapshot { socket, session, .. },
         }) => {
             assert_eq!(socket, Some(std::path::PathBuf::from(r"C:\D\herdr.sock")));
             assert_eq!(session, None);

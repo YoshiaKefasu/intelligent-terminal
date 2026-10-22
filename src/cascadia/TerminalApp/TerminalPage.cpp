@@ -95,6 +95,13 @@ static constexpr auto sidebarHistoryRefreshInterval = std::chrono::seconds{ 60 }
 // Yazi pane width, as a fraction of the tab: a file manager needs a readable
 // column of names and a preview, and the terminal beside it keeps the rest.
 static constexpr float yaziPaneSplitSize = 0.35f;
+// How often the yazi pane asks herdr where its focused Space is. A Space switch
+// is a deliberate key press, so a second of lag is invisible. Note: each tick
+// spawns one short-lived `wta herdr snapshot`, which is the cheapest way to read
+// a named pipe herdr owns without holding a handle open across ticks; the
+// `--root-pid` check makes that spawn return before it ever touches the pipe for
+// a tab that runs no herdr.
+static constexpr auto yaziFollowInterval = std::chrono::seconds{ 1 };
 
 #define HOOKUP_ACTION(action) _actionDispatch->action({ this, &TerminalPage::_Handle##action });
 
@@ -312,6 +319,7 @@ namespace winrt::TerminalApp::implementation
             _sidebarIntroductionTimer.Stop();
         }
         _StopSidebarHistoryRefreshTimer();
+        _StopYaziFollowTimer();
         if constexpr (Feature_RichTabProviders::IsEnabled())
         {
             std::vector<::Microsoft::Terminal::RichTab::Provider::ProviderBroker::AttachmentId> attachments;
@@ -6831,16 +6839,16 @@ namespace winrt::TerminalApp::implementation
     // of is gone, the pane is not) and closes through the ordinary close-pane
     // paths. A second press finds the pane it made and closes it.
 
-    // Locate yazi.exe:
+    // Locate a tool by file name:
     //   1. Co-located next to the running module (MSIX / packaged). The wapproj
-    //      links dep\yazi\<arch>\yazi.exe to the package root, so this is the
-    //      installed case and the one a user actually runs.
-    //   2. Walk up from the module looking for dep\yazi\<arch>\yazi.exe, the
+    //      links dep\yazi\<arch>\{yazi,ya}.exe to the package root, so this is
+    //      the installed case and the one a user actually runs.
+    //   2. Walk up from the module looking for dep\yazi\<arch>\<name>, the
     //      layout a dev build runs from. Same shape as _DetectWtaPath's walk.
-    //   3. The system PATH, for a yazi the user installed themselves.
-    // Empty when none of the three answers, in which case the toggle does
+    //   3. The system PATH, for a copy the user installed themselves.
+    // Empty when none of the three answers, in which case the caller does
     // nothing rather than opening a pane that would immediately fail.
-    winrt::hstring TerminalPage::_DetectYaziPath()
+    winrt::hstring TerminalPage::_DetectBundledTool(const std::wstring& fileName)
     {
         const auto modulePath = std::filesystem::path{ wil::GetModuleFileNameW<std::wstring>(nullptr) };
         const auto moduleDir = modulePath.parent_path();
@@ -6848,7 +6856,7 @@ namespace winrt::TerminalApp::implementation
 
         // 1. Co-located with the running module.
         {
-            const auto sibling = moduleDir / L"yazi.exe";
+            const auto sibling = moduleDir / fileName;
             if (std::filesystem::exists(sibling, ec))
             {
                 return winrt::hstring{ sibling.lexically_normal().wstring() };
@@ -6866,7 +6874,7 @@ namespace winrt::TerminalApp::implementation
         auto cursor = moduleDir;
         while (!cursor.empty())
         {
-            const auto candidate = cursor / L"dep" / L"yazi" / arch / L"yazi.exe";
+            const auto candidate = cursor / L"dep" / L"yazi" / arch / fileName;
             if (std::filesystem::exists(candidate, ec))
             {
                 return winrt::hstring{ candidate.lexically_normal().wstring() };
@@ -6881,12 +6889,42 @@ namespace winrt::TerminalApp::implementation
         }
 
         // 3. The system PATH.
+        const auto stem = std::filesystem::path{ fileName }.stem().wstring();
         wchar_t buffer[MAX_PATH];
-        if (SearchPathW(nullptr, L"yazi", L".exe", MAX_PATH, buffer, nullptr) > 0)
+        if (SearchPathW(nullptr, stem.c_str(), L".exe", MAX_PATH, buffer, nullptr) > 0)
         {
             return winrt::hstring{ buffer };
         }
 
+        return winrt::hstring{};
+    }
+
+    winrt::hstring TerminalPage::_DetectYaziPath()
+    {
+        return _DetectBundledTool(L"yazi.exe");
+    }
+
+    // `ya.exe` is yazi's own CLI: `ya emit-to <id> cd <path>` is the only way to
+    // tell a running yazi instance to move, which is what makes the pane follow
+    // a Space switch instead of staying where it was opened.
+    winrt::hstring TerminalPage::_DetectYaPath()
+    {
+        return _DetectBundledTool(L"ya.exe");
+    }
+
+    // yazi shells out to `file` for the entry description column. Windows has
+    // no `file` on PATH, so yazi prints "Cannot find 'file'" and leaves the
+    // column empty until YAZI_FILE_ONE names the binary explicitly. Git for
+    // Windows ships one; a machine without Git gets an empty answer and yazi
+    // keeps its own behaviour.
+    winrt::hstring TerminalPage::_DetectFileCommandPath()
+    {
+        constexpr auto gitFile = LR"(C:\Program Files\Git\usr\bin\file.exe)";
+        std::error_code ec;
+        if (std::filesystem::exists(std::filesystem::path{ gitFile }, ec))
+        {
+            return winrt::hstring{ gitFile };
+        }
         return winrt::hstring{};
     }
 
@@ -6911,6 +6949,92 @@ namespace winrt::TerminalApp::implementation
         });
     }
 
+    // Does any tab of this window still hold a yazi pane? The follow timer is
+    // per page, not per tab, so it may only stop once every pane is gone.
+    bool TerminalPage::_AnyYaziPane() const
+    {
+        for (const auto& tab : _tabs)
+        {
+            if (_FindYaziPane(_GetTabImpl(tab)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The leaf the yazi pane mirrors. The reader may have clicked into yazi to
+    // browse, which makes the active pane yazi itself; following that would ask
+    // yazi where yazi is. The first other terminal leaf stands in, so the pane
+    // follows the shell beside it either way.
+    std::shared_ptr<Pane> TerminalPage::_YaziSourcePane(const winrt::com_ptr<Tab>& tab)
+    {
+        if (!tab)
+        {
+            return nullptr;
+        }
+        const auto rootPane = tab->GetRootPane();
+        if (!rootPane)
+        {
+            return nullptr;
+        }
+        const auto yaziPane = _FindYaziPane(tab);
+        if (const auto activePane = tab->GetActivePane();
+            activePane && activePane != yaziPane && activePane->GetTerminalControl())
+        {
+            return activePane;
+        }
+        return rootPane->WalkTree([&yaziPane](const std::shared_ptr<Pane>& pane) -> std::shared_ptr<Pane> {
+            if (pane != yaziPane && pane->GetTerminalControl())
+            {
+                return pane;
+            }
+            return nullptr;
+        });
+    }
+
+    // The pane's root process, which is the shell the reader is typing into.
+    // Zero for a non-terminal pane or a connection that never started; both
+    // mean "do not ask herdr", so a zero is the safe answer.
+    uint32_t TerminalPage::_PaneRootProcessId(const std::shared_ptr<Pane>& pane)
+    {
+        if (!pane)
+        {
+            return 0;
+        }
+        const auto termControl = pane->GetTerminalControl();
+        if (!termControl)
+        {
+            return 0;
+        }
+        const auto conn = termControl.Connection();
+        if (!conn)
+        {
+            return 0;
+        }
+        const auto conpty = conn.try_as<ConptyConnection>();
+        if (!conpty)
+        {
+            return 0;
+        }
+        const auto handle = conpty.RootProcessHandle();
+        if (!handle)
+        {
+            return 0;
+        }
+        return static_cast<uint32_t>(GetProcessId(reinterpret_cast<HANDLE>(handle)));
+    }
+
+    winrt::hstring TerminalPage::_YaziClientId(const std::shared_ptr<Pane>& yaziPane)
+    {
+        if (!yaziPane)
+        {
+            return {};
+        }
+        const auto id = yaziPane->GetSessionVariable(winrt::hstring{ YaziClientIdSessionVariable });
+        return id ? *id : winrt::hstring{};
+    }
+
     safe_void_coroutine TerminalPage::_ToggleGitSidebar()
     {
         const auto activeTab = _GetFocusedTabImpl();
@@ -6924,6 +7048,11 @@ namespace winrt::TerminalApp::implementation
         // remaining pane takes the focus back. This half never suspends: the
         // close is the answer the user is waiting for, and it needs nothing
         // from herdr, so it must not queue behind a background hop.
+        //
+        // The follow timer is deliberately left running: a pane in another tab
+        // is still followed, so stopping here would silence it as collateral.
+        // The next tick finds no pane in the focused tab and stops the timer
+        // only once no tab holds one.
         if (const auto existing = _FindYaziPane(activeTab))
         {
             _HandleClosePaneRequested(existing);
@@ -6940,21 +7069,25 @@ namespace winrt::TerminalApp::implementation
             co_return;
         }
 
-        // The tab's own folder is the fallback. Read it here, before the hop:
-        // it comes from the terminal control, which is a UI-thread object.
-        const auto fallbackDirectory = _FocusedTabWorkingDirectory();
+        // Both inputs to the folder decision are UI-thread objects, so they are
+        // read here, before the hop. The source pane is the shell beside the
+        // yazi pane (or the focused pane when there is no yazi yet).
+        const auto sourcePane = _YaziSourcePane(activeTab);
+        const auto rootPid = _PaneRootProcessId(sourcePane);
+        const auto sourceControl = sourcePane ? sourcePane->GetTerminalControl() : nullptr;
+        const auto fallbackDirectory = sourceControl ? sourceControl.WorkingDirectory() : _FocusedTabWorkingDirectory();
         const auto weakThis = get_weak();
         const auto weakTab = activeTab->get_weak();
         const auto dispatcher = Dispatcher();
 
-        // Herdr's focused Space wins while herdr is running: that pane is the
-        // folder the reader is looking at, while the tab's own folder is only
-        // the shell's starting point. The lookup reads a named pipe, so it runs
-        // off the UI thread: a wedged server would otherwise freeze the window
-        // for the whole timeout, and a late pane is a far smaller cost than a
-        // window that stops painting.
+        // Herdr's focused Space wins while herdr runs in this tab: that pane is
+        // the folder the reader is looking at, while the tab's own folder is
+        // only the shell's starting point. The lookup reads a named pipe, so it
+        // runs off the UI thread: a wedged server would otherwise freeze the
+        // window for the whole timeout, and a late pane is a far smaller cost
+        // than a window that stops painting.
         co_await winrt::resume_background();
-        const auto directory = _YaziStartDirectory(fallbackDirectory);
+        const auto directory = _YaziStartDirectory(fallbackDirectory, rootPid);
 
         co_await wil::resume_foreground(dispatcher);
         // Hold a strong reference to `this` after the co_await; we may have been
@@ -6975,55 +7108,274 @@ namespace winrt::TerminalApp::implementation
         }
 
         strong->_OpenYaziPane(tab, yaziPath, directory);
+        // The folder the pane opened in is the baseline, and its client id the
+        // instance the ticks address. Without the baseline the first tick would
+        // read the same Space and yank yazi back to it, throwing away whatever
+        // the reader had already navigated to.
+        strong->_yaziFollowClientId = strong->_YaziClientId(strong->_FindYaziPane(tab));
+        strong->_yaziLastDirectory = directory;
+        strong->_StartYaziFollowTimer();
     }
 
-    // The folder the yazi pane opens in: herdr's focused Space when herdr is
-    // running, otherwise `fallback`. Static and free of page state so the
-    // toggle may run it off the UI thread.
-    winrt::hstring TerminalPage::_YaziStartDirectory(winrt::hstring fallback)
+    // The folder herdr's focused Space reports, or empty. `rootPid` scopes the
+    // question to one tab: `wta herdr snapshot --root-pid` answers only when
+    // that process tree really holds a herdr.exe, so a plain PowerShell tab
+    // keeps its own folder instead of adopting another window's Space.
+    winrt::hstring TerminalPage::_HerdrFocusedDirectory(uint32_t rootPid)
     {
-        auto directory = std::move(fallback);
-        const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
-        if (!wtaPath.empty())
+        if (rootPid == 0)
         {
-            // `wta herdr snapshot` answers in a few milliseconds when herdr is
-            // healthy; the timeout only covers herdr being down or wedged, so it
-            // stays short to keep the pane launch snappy. Synchronous by design,
-            // so the caller decides which thread pays for it.
-            const auto snapshot = ::Microsoft::Terminal::WtaProcess::RunWtaCapture(wtaPath, L"herdr snapshot", 2'000, nullptr, false);
-            if (snapshot.completed && snapshot.exitCode == 0)
-            {
-                const auto herdrCwd = _ExtractHerdrFocusedCwd(std::optional<std::string>{ snapshot.output });
-                if (!herdrCwd.empty())
-                {
-                    directory = herdrCwd;
-                }
-            }
+            return {};
+        }
+        const auto wtaPath = ::Microsoft::Terminal::WtaProcess::ResolveWtaExePath();
+        if (wtaPath.empty())
+        {
+            return {};
+        }
+        // `wta herdr snapshot` answers in a few milliseconds when herdr is
+        // healthy; the timeout only covers herdr being down or wedged, so it
+        // stays short to keep the pane launch and the follow tick snappy.
+        // Synchronous by design, so the caller decides which thread pays.
+        const auto args = fmt::format(FMT_COMPILE(L"herdr snapshot --root-pid {}"), rootPid);
+        const auto snapshot = ::Microsoft::Terminal::WtaProcess::RunWtaCapture(wtaPath, args, 2'000, nullptr, false);
+        if (!snapshot.completed || snapshot.exitCode != 0)
+        {
+            return {};
+        }
+        return _ExtractHerdrFocusedCwd(std::optional<std::string>{ snapshot.output });
+    }
+
+    // The folder the yazi pane opens in: herdr's focused Space when herdr runs
+    // under `rootPid`, otherwise `fallback`. Static and free of page state so
+    // the toggle may run it off the UI thread.
+    winrt::hstring TerminalPage::_YaziStartDirectory(winrt::hstring fallback, uint32_t rootPid)
+    {
+        auto directory = _HerdrFocusedDirectory(rootPid);
+        if (directory.empty())
+        {
+            directory = std::move(fallback);
         }
         return directory;
     }
 
-    // Splits `tab` on the right and runs yazi there, in `directory`. The mark
-    // is set before the split so the pane is identifiable from the moment it is
-    // in the tree; a split that fails takes the pane with it.
+    // Splits `tab` on the right and runs yazi there, in `directory`.
+    //
+    // yazi is given a `--client-id` of our own, recorded on the pane: yazi keeps
+    // one instance per client id, and `ya emit-to <id> cd <path>` is the only
+    // way to tell a running instance to move. A tick-count id is unique enough
+    // across the panes of one window and needs no coordination.
+    //
+    // The mark is set before the split so the pane is identifiable from the
+    // moment it is in the tree; a split that fails takes the pane with it.
     void TerminalPage::_OpenYaziPane(const winrt::com_ptr<Tab>& tab, const winrt::hstring& yaziPath, const winrt::hstring& directory)
     {
+        const auto clientId = winrt::to_hstring(std::to_string(GetTickCount64()));
+
         NewTerminalArgs terminalArgs;
-        terminalArgs.Commandline(yaziPath);
+        // Quoted: the bundle lives under a user-chosen install root, and an
+        // unquoted path with a space is split into a bogus program name.
+        terminalArgs.Commandline(winrt::hstring{ L"\"" + std::wstring{ yaziPath.c_str() } + L"\" --client-id " + std::wstring{ clientId.c_str() } });
         if (!directory.empty())
         {
             terminalArgs.StartingDirectory(directory);
         }
         terminalArgs.TabTitle(L"Yazi");
 
-        const auto newPane = _MakePane(terminalArgs, nullptr);
+        // YAZI_FILE_ONE names the `file` binary yazi shells out to. Windows has
+        // no `file` on PATH, so without it yazi prints "Cannot find 'file'" and
+        // leaves the description column empty. A machine without Git for
+        // Windows gets no override and yazi keeps its own behaviour.
+        IMapView<winrt::hstring, winrt::hstring> overrides{ nullptr };
+        std::unordered_map<winrt::hstring, winrt::hstring> environment;
+        if (const auto fileCommand = _DetectFileCommandPath(); !fileCommand.empty())
+        {
+            environment.emplace(winrt::hstring{ L"YAZI_FILE_ONE" }, fileCommand);
+            overrides = winrt::single_threaded_map(std::move(environment)).GetView();
+        }
+
+        const auto newPane = _MakePane(terminalArgs, nullptr, nullptr, overrides);
         if (!newPane)
         {
             return;
         }
         newPane->SetSessionVariable(winrt::hstring{ YaziPaneSessionVariable }, L"1");
+        newPane->SetSessionVariable(winrt::hstring{ YaziClientIdSessionVariable }, clientId);
 
         _SplitPane(tab, SplitDirection::Right, yaziPaneSplitSize, newPane, true);
+    }
+
+    // Polls herdr's focused Space while a yazi pane is open, so a Space switch
+    // moves the pane with the reader instead of leaving it on the folder it was
+    // opened in. One timer per page: the pane is per tab, so the tick looks up
+    // the focused tab's pane each time rather than binding to one.
+    void TerminalPage::_StartYaziFollowTimer()
+    {
+        if (!_yaziFollowTimer)
+        {
+            _yaziFollowTimer = Windows::UI::Xaml::DispatcherTimer{};
+            _yaziFollowTimer.Interval(yaziFollowInterval);
+            _yaziFollowTimer.Tick([weakThis{ get_weak() }](auto&&, auto&&) {
+                if (const auto page = weakThis.get())
+                {
+                    page->_FollowYaziToHerdrSpace();
+                }
+            });
+        }
+        _yaziFollowTimer.Start();
+    }
+
+    void TerminalPage::_StopYaziFollowTimer()
+    {
+        if (_yaziFollowTimer)
+        {
+            _yaziFollowTimer.Stop();
+        }
+        _yaziFollowClientId.clear();
+        _yaziLastDirectory.clear();
+    }
+
+    // One follow tick: ask herdr where its focused Space is and tell the yazi
+    // pane to move when that changed. The spawn happens off the UI thread, so a
+    // wedged herdr costs a skipped tick rather than a frozen window.
+    safe_void_coroutine TerminalPage::_FollowYaziToHerdrSpace()
+    {
+        if (_yaziFollowInFlight)
+        {
+            co_return;
+        }
+
+        // The tick suspends twice, so the page must not be destroyed underneath
+        // it: a strong reference for the duration of one tick keeps `this` and
+        // the pane tree alive, and the destructor's _StopYaziFollowTimer is what
+        // ends the chain after that.
+        const auto strong = get_strong();
+
+        const auto activeTab = _GetFocusedTabImpl();
+        const auto yaziPane = activeTab ? _FindYaziPane(activeTab) : nullptr;
+        if (!activeTab || !yaziPane)
+        {
+            // Nothing to follow in the tab the reader is looking at. Another
+            // tab may still hold a pane, so the timer only stops once no tab
+            // does: closing this pane is not the same as closing every pane.
+            if (!_AnyYaziPane())
+            {
+                _StopYaziFollowTimer();
+            }
+            co_return;
+        }
+
+        const auto clientId = _YaziClientId(yaziPane);
+        if (clientId.empty())
+        {
+            // A pane from a build that did not record an id cannot be moved.
+            co_return;
+        }
+
+        const auto sourcePane = _YaziSourcePane(activeTab);
+        const auto rootPid = _PaneRootProcessId(sourcePane);
+        if (rootPid == 0)
+        {
+            // The shell beside yazi has exited; its tree cannot hold a herdr.
+            co_return;
+        }
+
+        // A different pane than the last tick followed: its own folder is the
+        // baseline, so the first read of the new pane is not treated as a move.
+        if (clientId != _yaziFollowClientId)
+        {
+            _yaziFollowClientId = clientId;
+            _yaziLastDirectory.clear();
+        }
+        const auto previous = _yaziLastDirectory;
+
+        // The dispatcher is a UI-thread object, so it is read before the hop
+        // like the rest of the inputs: the way back must not depend on reaching
+        // `this` from another thread.
+        const auto dispatcher = Dispatcher();
+        _yaziFollowInFlight = true;
+        winrt::hstring directory;
+        try
+        {
+            co_await winrt::resume_background();
+            directory = _HerdrFocusedDirectory(rootPid);
+        }
+        catch (...)
+        {
+            // A throw here would otherwise escape past the flag and leave it
+            // set, which no later tick ever clears: one failed read would stop
+            // following for the life of the page.
+            LOG_CAUGHT_EXCEPTION();
+        }
+
+        co_await wil::resume_foreground(dispatcher);
+        // Cleared here rather than through a scope guard: the guard would run on
+        // whichever thread the coroutine ended on, and this flag is read on the
+        // UI thread by the next tick.
+        _yaziFollowInFlight = false;
+
+        if (directory.empty() || directory == previous)
+        {
+            // herdr is not running in this tab, or the Space did not move. The
+            // remembered folder stays as it was so a later tick can still see
+            // the change.
+            co_return;
+        }
+        _yaziLastDirectory = directory;
+
+        // A closed pane or a replaced instance must not be moved.
+        if (!_FindYaziPane(_GetFocusedTabImpl()))
+        {
+            if (!_AnyYaziPane())
+            {
+                _StopYaziFollowTimer();
+            }
+            co_return;
+        }
+
+        // Resolved here, on the way out, so a machine without `ya.exe` costs no
+        // process spawns at all rather than one per tick that silently fails.
+        const auto yaPath = _DetectYaPath();
+        if (yaPath.empty())
+        {
+            _StopYaziFollowTimer();
+            co_return;
+        }
+
+        const std::wstring ya{ yaPath.c_str() };
+        const winrt::hstring target{ directory };
+        co_await winrt::resume_background();
+        _EmitYaziCd(ya, clientId, target);
+    }
+
+    // `ya emit-to <id> cd <path>`. Synchronous and silent: yazi answers on
+    // stderr when the instance is gone, which is expected when the pane closed
+    // between the read and the emit, and is not worth a dialog.
+    //
+    // The path goes through AgentPaneRestore::AppendQuoted, which quotes for
+    // CommandLineToArgvW — what `ya` (clap) parses with. The generic
+    // QuoteAndEscapeCommandlineArg would also escape `;` for wt's own action
+    // separator, and that backslash would survive into the path.
+    void TerminalPage::_EmitYaziCd(const std::wstring& yaPath, const winrt::hstring& clientId, const winrt::hstring& directory)
+    {
+        std::wstring commandline{ L'"' };
+        commandline.append(yaPath).append(L"\" emit-to ");
+        commandline.append(clientId.c_str()).append(L" cd ");
+        ::Microsoft::Terminal::AgentPaneRestore::AppendQuoted(commandline, directory.c_str());
+
+        STARTUPINFOW si{};
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        PROCESS_INFORMATION pi{};
+        std::wstring mutableCommand{ commandline };
+        if (CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+        {
+            wil::unique_handle process{ pi.hProcess };
+            wil::unique_handle thread{ pi.hThread };
+            // `ya` exits as soon as the message is queued, so a short wait is
+            // enough to reap it without leaving a zombie for the session.
+            WaitForSingleObject(process.get(), 1'000);
+        }
     }
 
     void TerminalPage::_OnVerticalRailCollapseRequested(const IInspectable&, const IInspectable&)
@@ -15918,7 +16270,8 @@ namespace winrt::TerminalApp::implementation
     //   Pane for this connection.
     std::shared_ptr<Pane> TerminalPage::_MakeTerminalPane(const NewTerminalArgs& newTerminalArgs,
                                                           const winrt::TerminalApp::Tab& sourceTab,
-                                                          TerminalConnection::ITerminalConnection existingConnection)
+                                                          TerminalConnection::ITerminalConnection existingConnection,
+                                                          const IMapView<winrt::hstring, winrt::hstring>& environmentOverrides)
     {
         // First things first - Check for making a pane from content ID.
         if (newTerminalArgs &&
@@ -16103,6 +16456,27 @@ namespace winrt::TerminalApp::implementation
             controlSettings = Settings::TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs);
         }
 
+        // A caller that launches a specific tool (rather than the profile's own
+        // shell) adds the variables that tool needs here: they belong to this
+        // one launch and must not leak into the profile.
+        if (environmentOverrides)
+        {
+            const auto defaultSettings = controlSettings.DefaultSettings();
+            std::unordered_map<winrt::hstring, winrt::hstring> environment;
+            if (const auto inherited = defaultSettings->EnvironmentVariables())
+            {
+                for (const auto& [key, value] : inherited)
+                {
+                    environment.emplace(key, value);
+                }
+            }
+            for (const auto& [key, value] : environmentOverrides)
+            {
+                environment.insert_or_assign(key, value);
+            }
+            defaultSettings->EnvironmentVariables(winrt::single_threaded_map(std::move(environment)).GetView());
+        }
+
         const auto restoredAgent = newTerminalArgs ?
                                        ::Microsoft::Terminal::AgentPaneRestore::ParseResumeCommandline(newTerminalArgs.Commandline()) :
                                        ::Microsoft::Terminal::AgentPaneRestore::ResumeTarget{};
@@ -16227,14 +16601,15 @@ namespace winrt::TerminalApp::implementation
     // value gracefully.
     std::shared_ptr<Pane> TerminalPage::_MakePane(const INewContentArgs& contentArgs,
                                                   const winrt::TerminalApp::Tab& sourceTab,
-                                                  TerminalConnection::ITerminalConnection existingConnection)
+                                                  TerminalConnection::ITerminalConnection existingConnection,
+                                                  const IMapView<winrt::hstring, winrt::hstring>& environmentOverrides)
 
     {
         const auto& newTerminalArgs{ contentArgs.try_as<NewTerminalArgs>() };
         if (contentArgs == nullptr || newTerminalArgs != nullptr || contentArgs.Type().empty())
         {
             // Terminals are of course special, and have to deal with debug taps, duplicating the tab, etc.
-            return _MakeTerminalPane(newTerminalArgs, sourceTab, existingConnection);
+            return _MakeTerminalPane(newTerminalArgs, sourceTab, existingConnection, environmentOverrides);
         }
 
         IPaneContent content{ nullptr };

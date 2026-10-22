@@ -370,6 +370,15 @@ namespace winrt::TerminalApp::implementation
         std::unordered_map<std::wstring, winrt::hstring> _historyUnresolvedActivations;
         bool _preserveSidebarHistory{ false };
         Windows::UI::Xaml::DispatcherTimer _historyRefreshTimer{ nullptr };
+        // Polls herdr's focused Space while a yazi pane is open, so the pane
+        // follows a Space switch instead of staying where it was opened.
+        Windows::UI::Xaml::DispatcherTimer _yaziFollowTimer{ nullptr };
+        bool _yaziFollowInFlight{ false };
+        // The instance the last tick moved, and the folder it was moved to. Both
+        // reset when the followed pane changes, so two tabs' panes cannot
+        // suppress each other's move.
+        winrt::hstring _yaziFollowClientId;
+        winrt::hstring _yaziLastDirectory;
         Windows::UI::Xaml::DispatcherTimer _historyMasterRecoveryTimer{ nullptr };
         bool _historyRefreshInFlight{ false };
         bool _historyRefreshPending{ false };
@@ -1076,15 +1085,46 @@ namespace winrt::TerminalApp::implementation
         // the toggle idempotent: a second press finds the pane it created and
         // closes it instead of stacking a second copy.
         static constexpr std::wstring_view YaziPaneSessionVariable{ L"IS_YAZI_PANE" };
-        // Locate the bundled yazi.exe:
+        // The yazi instance's `--client-id`, so `ya emit-to` can name the pane
+        // the toggle opened. Absent on a pane an older build made.
+        static constexpr std::wstring_view YaziClientIdSessionVariable{ L"YAZI_CLIENT_ID" };
+        // Locate a tool by file name:
         //   1. Co-located next to the running module (MSIX / packaged)
-        //   2. dep\yazi\<arch>\yazi.exe found by walking up from the module (dev tree)
+        //   2. dep\yazi\<arch>\<name> found by walking up from the module (dev tree)
         //   3. SearchPathW fallback on the system PATH
         // Empty when none of the three answers.
+        static winrt::hstring _DetectBundledTool(const std::wstring& fileName);
         static winrt::hstring _DetectYaziPath();
+        // `ya.exe`, yazi's own CLI: the only way to tell a running yazi to move.
+        static winrt::hstring _DetectYaPath();
+        // `file.exe` from Git for Windows, which yazi shells out to for entry
+        // descriptions. Empty when Git for Windows is not installed.
+        static winrt::hstring _DetectFileCommandPath();
         // The yazi pane of `tab`, or nullptr when the tab has none. A leaf only:
         // a parent carries no content and therefore no session variable.
         static std::shared_ptr<Pane> _FindYaziPane(const winrt::com_ptr<Tab>& tab);
+        // The leaf of `tab` the yazi pane mirrors: the active pane unless that
+        // is yazi itself, else the first other terminal leaf. The toggle and
+        // the follow timer both read it, so a reader who has clicked into yazi
+        // still gets the shell's folder and PID rather than yazi's own.
+        static std::shared_ptr<Pane> _YaziSourcePane(const winrt::com_ptr<Tab>& tab);
+        // Whether any tab of this window still holds a yazi pane. The follow
+        // timer is per page, so it may only stop once every pane is gone.
+        bool _AnyYaziPane() const;
+        // The yazi pane's `--client-id`, or empty when the pane carries none.
+        static winrt::hstring _YaziClientId(const std::shared_ptr<Pane>& yaziPane);
+        // The pane's root process, which is the shell the reader is typing into.
+        // Zero for a non-terminal pane or a connection that never started.
+        static uint32_t _PaneRootProcessId(const std::shared_ptr<Pane>& pane);
+        // Moves the yazi pane with the reader: while one is open, herdr's
+        // focused Space is polled and `ya emit-to <id> cd` follows it. Stops
+        // itself once the pane is gone.
+        void _StartYaziFollowTimer();
+        void _StopYaziFollowTimer();
+        safe_void_coroutine _FollowYaziToHerdrSpace();
+        // Tells the yazi instance `clientId` names to move to `directory`.
+        // Synchronous, so the caller decides which thread pays for the spawn.
+        static void _EmitYaziCd(const std::wstring& yaPath, const winrt::hstring& clientId, const winrt::hstring& directory);
         // Opens the yazi pane on the right of the focused tab, or closes the one
         // already there. `Terminal.ToggleGitSidebar` and the tab-row button are
         // the two entry points; both land here.
@@ -1095,12 +1135,17 @@ namespace winrt::TerminalApp::implementation
         // completes before the first suspension, so a second press never waits
         // on the hop to answer "close".
         safe_void_coroutine _ToggleGitSidebar();
+        // The folder herdr's focused Space reports, or empty when herdr is not
+        // running under `rootPid`, says nothing, or names a pane it does not
+        // list. `rootPid` is what keeps a plain shell tab from adopting another
+        // window's Space. Synchronous, so the caller decides the thread.
+        static winrt::hstring _HerdrFocusedDirectory(uint32_t rootPid);
         // The folder the yazi pane opens in: herdr's focused Space when herdr is
-        // running, otherwise `fallback` (the focused tab's own folder, which the
-        // caller reads on the UI thread because it comes from the control).
-        // Static and free of page state, so the toggle may run it off the UI
-        // thread.
-        static winrt::hstring _YaziStartDirectory(winrt::hstring fallback);
+        // running under `rootPid`, otherwise `fallback` (the tab's own folder,
+        // which the caller reads on the UI thread because it comes from the
+        // control). Static and free of page state, so the toggle may run it off
+        // the UI thread.
+        static winrt::hstring _YaziStartDirectory(winrt::hstring fallback, uint32_t rootPid);
         // Splits `tab` on the right and runs yazi there, in `directory`.
         void _OpenYaziPane(const winrt::com_ptr<Tab>& tab, const winrt::hstring& yaziPath, const winrt::hstring& directory);
         // The folder herdr's focused pane reports, out of `wta herdr snapshot`:
@@ -1480,10 +1525,12 @@ namespace winrt::TerminalApp::implementation
         TerminalApp::IPaneContent _makeSettingsContent();
         std::shared_ptr<Pane> _MakeTerminalPane(const Microsoft::Terminal::Settings::Model::NewTerminalArgs& newTerminalArgs = nullptr,
                                                 const winrt::TerminalApp::Tab& sourceTab = nullptr,
-                                                winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
+                                                winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr,
+                                                const Windows::Foundation::Collections::IMapView<winrt::hstring, winrt::hstring>& environmentOverrides = nullptr);
         std::shared_ptr<Pane> _MakePane(const Microsoft::Terminal::Settings::Model::INewContentArgs& newContentArgs = nullptr,
                                         const winrt::TerminalApp::Tab& sourceTab = nullptr,
-                                        winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
+                                        winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr,
+                                        const Windows::Foundation::Collections::IMapView<winrt::hstring, winrt::hstring>& environmentOverrides = nullptr);
 
         void _RefreshUIForSettingsReload();
 
