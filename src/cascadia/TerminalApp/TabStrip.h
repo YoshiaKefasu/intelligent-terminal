@@ -16,7 +16,6 @@
 #include "TabStripDroppedOutsideEventArgs.g.h"
 #include "TabStripHistoryItem.g.h"
 #include "TabStripHistoryActivationEventArgs.g.h"
-#include "TabStripRailItem.g.h"
 #include "TabStripPaneItem.g.h"
 #include "TabStripDisplayItem.g.h"
 #include "TabStripPaneEventArgs.g.h"
@@ -126,27 +125,6 @@ namespace winrt::TerminalApp::implementation
     public:
         explicit TabStripHistoryActivationEventArgs(TerminalApp::TabStripHistoryItem item) :
             _Item{ std::move(item) } {}
-    };
-
-    // One row of the Git and Files side panel. Written once by the host before
-    // the row joins its section, so these stay plain properties: raising change
-    // notifications would only cost the binding subscribers a marshalling hop.
-    struct TabStripRailItem : TabStripRailItemT<TabStripRailItem>
-    {
-        TabStripRailItem() = default;
-        WINRT_PROPERTY(winrt::hstring, Badge);
-        WINRT_PROPERTY(winrt::hstring, Title);
-        WINRT_PROPERTY(winrt::hstring, Detail);
-        WINRT_PROPERTY(winrt::hstring, ToolTip);
-        WINRT_PROPERTY(winrt::Windows::UI::Xaml::Style, AccentStyle, nullptr);
-        // Files tree only: the entry's full path, and whether it is a folder.
-        // The tree nests itself, so a row carries no indent of its own.
-        WINRT_PROPERTY(winrt::hstring, Path);
-        WINRT_PROPERTY(bool, IsFolder, false);
-        WINRT_PROPERTY(winrt::hstring, Icon);
-
-    public:
-        til::property_changed_event PropertyChanged;
     };
 
     struct TabStripPaneItem : TabStripPaneItemT<TabStripPaneItem>
@@ -636,10 +614,9 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripHistoryItem> _historyItems{ nullptr };
         std::vector<TerminalApp::TabStripHistoryItem> _historySnapshot;
 
-        // Workspace footer state lives in TerminalPage now: the Herdr and Git
-        // sections are a full-height right panel (GitSidebarPanel), not a strip
-        // squeezed under the tab list. Nothing here is part of the ListView
-        // above.
+        // The history list's own search state. The workspace footer that used
+        // to sit beside it (Herdr and Git sections) is gone: the file manager
+        // is now a split pane inside the tab, so nothing here is part of it.
         std::vector<std::vector<winrt::hstring>> _historySearchTerms;
         winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable>::VectorChanged_revoker _vectorChangedRevoker;
         winrt::Windows::UI::ViewManagement::AccessibilitySettings _accessibilitySettings;

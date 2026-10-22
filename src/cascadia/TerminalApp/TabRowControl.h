@@ -38,7 +38,7 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::UI::Xaml::Controls::Button VerticalRailToggleButton() const noexcept { return _verticalRailToggleButton; }
         winrt::Microsoft::UI::Xaml::Controls::SplitButton VerticalNewTabButton() const noexcept { return _verticalNewTabButton; }
         void SidebarToggleKeyChordText(const winrt::hstring& value);
-        // The Git and Files panel's own chord (ToggleGitSidebar). Kept apart
+        // The file-manager pane's own chord (ToggleGitSidebar). Kept apart
         // from SidebarToggleKeyChordText, which labels the vertical rail's
         // collapse toggle: the two are different surfaces.
         void GitSidebarToggleKeyChordText(const winrt::hstring& value);

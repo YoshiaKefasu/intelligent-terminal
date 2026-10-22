@@ -1823,11 +1823,10 @@ namespace winrt::TerminalApp::implementation
         args.Handled(true);
     }
 
-    // The Git and Files panel has no chrome of its own in vertical layout: the
-    // tab-row button that opens it lives in TabView.TabStripFooter, which is
-    // collapsed there. This action is the layout-independent entry point, so
-    // the panel stays reachable from a keychord and the command palette in
-    // both layouts.
+    // The yazi pane has no chrome of its own in vertical layout: the tab-row
+    // button that opens it lives in TabView.TabStripFooter, which is collapsed
+    // there. This action is the layout-independent entry point, so the pane
+    // stays reachable from a keychord and the command palette in both layouts.
     void TerminalPage::_HandleToggleGitSidebar(const IInspectable&, const ActionEventArgs& args)
     {
         _ToggleGitSidebar();

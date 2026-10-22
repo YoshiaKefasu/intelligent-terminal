@@ -242,7 +242,7 @@
                 </mux:SplitButton>
 
                 <!--  Tab-row mirrors of the bottom bar's main toggles:
-                      session list + sidebar ("Show/Hide Git and Files").
+                      session list + file manager ("Show/Hide File Manager").
                       The old agent chat pane toggle was retired (DEBLOAT):
                       its button is now the sidebar toggle. Click handlers are
                       bound in TerminalPage::Create; lit state is mirrored in
@@ -327,7 +327,7 @@
                     </Grid>
                 </Button>
 
-                <!--  Sidebar (Git & Files panel) open/close. Bound in
+                <!--  File manager (yazi split pane) open/close. Bound in
                       TerminalPage::Create to _ToggleGitSidebar; the same action
                       is reachable from the palette and from Ctrl+Shift+E.  -->
                 <Button x:Name="SidebarToggleTabRowButton"
@@ -342,7 +342,7 @@
                     <ToolTipService.ToolTip>
                         <ToolTip>
                             <StackPanel>
-                                <TextBlock Text="Show/Hide Git and Files"
+                                <TextBlock Text="Show/Hide File Manager"
                                            FontFamily="Segoe UI Variable"
                                            FontSize="12"
                                            FontWeight="Normal"

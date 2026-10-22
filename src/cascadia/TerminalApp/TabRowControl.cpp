@@ -263,7 +263,7 @@ namespace winrt::TerminalApp::implementation
 
         // The chord is mirrored only onto the vertical rail's own toggle (built
         // in _ensureVerticalChrome). The tab-row button next to [+] owns the
-        // Git and Files panel, a different surface with its own chord, which is
+        // file-manager pane, a different surface with its own chord, which is
         // handled by GitSidebarToggleKeyChordText below.
     }
 

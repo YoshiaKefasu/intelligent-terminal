@@ -24,7 +24,6 @@
 #include "TabStripItemTemplateSelector.g.cpp"
 #include "TabStripHistoryHeader.g.cpp"
 #include "TabStripHistoryHeaderAutomationPeer.g.cpp"
-#include "TabStripRailItem.g.cpp"
 
 using namespace winrt;
 using namespace winrt::Windows::Foundation;

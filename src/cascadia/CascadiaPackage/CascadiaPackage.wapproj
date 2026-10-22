@@ -149,6 +149,35 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <!-- Deploy yazi.exe and ya.exe (file manager) into the package root.
+       Each item is guarded by Exists() for the same reason the wta.exe items
+       above are: a tree that has not run tools/fetch-yazi.ps1 still builds a
+       package, it just ships without the file manager. Without the guard the
+       wapproj fails outright on a missing dep\yazi\<arch>\ file. -->
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <Content Include="$(SolutionDir)dep\yazi\x64\yazi.exe"
+             Condition="Exists('$(SolutionDir)dep\yazi\x64\yazi.exe')">
+      <Link>yazi.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(SolutionDir)dep\yazi\x64\ya.exe"
+             Condition="Exists('$(SolutionDir)dep\yazi\x64\ya.exe')">
+      <Link>ya.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup Condition="'$(Platform)' == 'arm64'">
+    <Content Include="$(SolutionDir)dep\yazi\arm64\yazi.exe"
+             Condition="Exists('$(SolutionDir)dep\yazi\arm64\yazi.exe')">
+      <Link>yazi.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(SolutionDir)dep\yazi\arm64\ya.exe"
+             Condition="Exists('$(SolutionDir)dep\yazi\arm64\ya.exe')">
+      <Link>ya.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <ItemGroup>
     <Content Include="$(SolutionDir)src\cascadia\RichTabProviders\GitStatus\provider.json">
       <Link>RichTabProviders\GitStatus\provider.json</Link>

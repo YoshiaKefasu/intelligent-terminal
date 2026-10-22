@@ -312,3 +312,10 @@ tmpclaude-*
 
 # Local-only superpowers plan/spec notes (kept out of source control)
 docs/superpowers/
+
+# yazi.exe/ya.exe are committed so a fresh clone builds a working package.
+# The generic build-output rules above (x64/, ARM64/) would otherwise swallow
+# dep/yazi/<arch>/, so re-include the whole subtree. The pattern covers the arch
+# folders themselves as well as the files inside them, which is what makes the
+# negation stick: git cannot re-include a file whose parent folder stays ignored.
+!dep/yazi/**
