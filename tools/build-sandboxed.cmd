@@ -18,7 +18,7 @@ if "%TARGET_SCRIPT%"=="" set TARGET_SCRIPT=_build_msix_x64.cmd
 
 echo [SANDBOX] Launching %TARGET_SCRIPT% on CPU cores 0-3 (Affinity: %AFFINITY_MASK%, BelowNormal Priority)...
 
-start /b /wait /below /affinity %AFFINITY_MASK% cmd /c "%TARGET_SCRIPT%" %2 %3 %4 %5
+start /b /wait /belownormal /affinity %AFFINITY_MASK% cmd /c "%TARGET_SCRIPT%" %2 %3 %4 %5
 set BUILD_EXIT=%ERRORLEVEL%
 
 echo [SANDBOX] Build finished with exit code: %BUILD_EXIT%

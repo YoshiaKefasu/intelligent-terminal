@@ -39,6 +39,7 @@ if ($proc) {
         Write-Warning "Could not adjust process priority/affinity: $_"
     }
     $proc.WaitForExit()
-    Write-Host ("[SANDBOX] Exit code: " + $proc.ExitCode) -ForegroundColor ($proc.ExitCode -eq 0 ? 'Green' : 'Red')
+    $color = if ($proc.ExitCode -eq 0) { 'Green' } else { 'Red' }
+    Write-Host ("[SANDBOX] Exit code: " + $proc.ExitCode) -ForegroundColor $color
     exit $proc.ExitCode
 }
