@@ -13501,12 +13501,15 @@ fn sidebar_history_discovery_checks_policy_before_installation() {
         panic!("blocked agents must not be probed");
     })
     .is_empty());
-    let installed = ["copilot", "claude", "codex", "opencode"];
+    let installed = ["copilot", "claude", "codex", "opencode", "pi"];
     assert_eq!(
         host_history_agent_ids(None, |id| installed.contains(&id)),
         ["copilot", "claude", "codex"]
     );
-    assert!(host_history_agent_ids(None, |id| matches!(id, "opencode" | "antigravity")).is_empty());
+    assert!(
+        host_history_agent_ids(None, |id| matches!(id, "opencode" | "antigravity" | "pi"))
+            .is_empty()
+    );
     assert!(host_history_agent_ids(None, |_| false).is_empty());
 }
 
@@ -13555,12 +13558,12 @@ fn sidebar_history_discovery_excludes_background_only_agents_but_allows_explicit
         checked.push(id.to_owned());
         true
     });
-    // Gemini, Antigravity, and OpenCode remain excluded from sidebar history
-    // discovery, while every other known ACP-capable agent (including Pi via
-    // its pi-acp adapter) is probed. The exclusions run before the availability
-    // probe, so no `agy_acp_server.exe` / `opencode acp` process is started by
+    // Gemini, Antigravity, OpenCode, and Pi remain excluded from sidebar
+    // history discovery, while every other known ACP-capable agent is probed.
+    // The exclusions run before the availability probe, so no
+    // `agy_acp_server.exe` / `opencode acp` / `npx pi-acp` process is started by
     // background history alone.
-    assert_eq!(ids, ["copilot", "claude", "codex", "pi"]);
+    assert_eq!(ids, ["copilot", "claude", "codex"]);
     assert_eq!(checked, ids);
 
     let allowed = allow_set(&["gemini"]);
@@ -13568,12 +13571,12 @@ fn sidebar_history_discovery_excludes_background_only_agents_but_allows_explicit
         panic!("Gemini must not be probed for sidebar discovery");
     })
     .is_empty());
-    let allowed = allow_set(&["antigravity", "opencode"]);
+    let allowed = allow_set(&["antigravity", "opencode", "pi"]);
     assert!(host_history_agent_ids(Some(&allowed), |_| {
-        panic!("Antigravity and OpenCode must not be probed for sidebar discovery");
+        panic!("Antigravity, OpenCode, and Pi must not be probed for sidebar discovery");
     })
     .is_empty());
-    for id in ["gemini", "antigravity", "opencode"] {
+    for id in ["gemini", "antigravity", "opencode", "pi"] {
         let (command, resolved) = resolve(None, Some(id), None);
         assert_eq!(resolved.as_deref(), Some(id));
         assert_eq!(

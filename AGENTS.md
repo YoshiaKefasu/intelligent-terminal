@@ -24,8 +24,8 @@ Agent or human CLI --> wta/wtcli --> COM IProtocolServer --> Windows Terminal
   CLI processes keyed by agent identity, execution source, and command; helpers
   using the same key share one process and multiplex sessions through it.
   Installed, policy-allowed native host agents other than Gemini, Antigravity,
-  and OpenCode initialize in the background at master startup and remain
-  resident. Those three are excluded from automatic sidebar discovery; explicit
+  OpenCode, and Pi initialize in the background at master startup and remain
+  resident. Those four are excluded from automatic sidebar discovery; explicit
   selections initialize on demand.
 - **WT Protocol** is the terminal-control boundary. `wtcli.exe` activates
   `IProtocolServer` through the package COM registration.

@@ -7712,12 +7712,14 @@ fn history_sync_status(failures: &[HistoryRefreshFailure]) -> HistorySyncStatus 
 /// a few hundred milliseconds of small reads, so the sessions view has Pi rows
 /// on its very first `sessions/list` instead of an empty list and a shimmer.
 ///
-/// `upsert_if_absent` (never `upsert`) is load-bearing: the ACP listing arrives
-/// later and reconciles onto these exact identities, so a disk row must never
-/// overwrite a live row that a helper already bound to a pane.
+/// `upsert_if_absent` (never `upsert`) is load-bearing: Pi is excluded from
+/// background host history discovery (see [`host_history_agent_ids`]), so this
+/// scan is the only source of Pi rows until a pane explicitly opens Pi and its
+/// ACP listing arrives and reconciles onto these exact identities. A disk row
+/// must never overwrite a live row that a helper already bound to a pane.
 ///
 /// Best-effort and startup-only. A missing store, an unreadable file, or a
-/// disabled Pi simply seeds nothing and the ACP path still owns the list.
+/// disabled Pi simply seeds nothing.
 ///
 /// Note: a disk row is NOT pruned by reconcile, because
 /// [`is_stale_host_history_row`] only drops ids the listing agent itself
@@ -7849,12 +7851,13 @@ fn host_history_agent_ids(
 ) -> Vec<&'static str> {
     crate::agent_registry::KNOWN_AGENTS
         .iter()
-        // Gemini, Antigravity, and OpenCode remain available for chat/explicit
+        // Gemini, Antigravity, OpenCode, and Pi remain available for chat/explicit
         // invocation, but must not start solely for background sidebar history.
         .filter(|profile| {
             profile.id != crate::agent_registry::GEMINI_AGENT_ID
                 && profile.id != crate::agent_registry::ANTIGRAVITY_AGENT_ID
                 && profile.id != crate::agent_registry::OPENCODE_AGENT_ID
+                && profile.id != crate::agent_registry::PI_AGENT_ID
         })
         // Delegate-only agents have no ACP server to answer a history query.
         .filter(|profile| profile.supports_acp())

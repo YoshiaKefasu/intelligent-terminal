@@ -9,13 +9,16 @@
 //!
 //! Why this exists: the only other way master learns about Pi's sessions is
 //! ACP `session/list`, which needs `npx -y pi-acp` to cold-start (Node.js
-//! bootstrap + `initialize` handshake — seconds, sometimes a timeout). Reading
-//! the files directly is a handful of small reads, so master can seed its
-//! registry at startup and the sessions view has rows to show immediately; the
-//! ACP listing then arrives later and reconciles onto the same identities
-//! (`provider_id = "pi"`, `location = Host`, `session_universe = None` — the
-//! exact key [`crate::session_registry::agent_session_to_session_info`] derives
-//! from an ACP row, so `upsert_if_absent` cannot create duplicates).
+//! bootstrap + `initialize` handshake — seconds, sometimes a timeout). Pi is
+//! excluded from background host history discovery
+//! (`master::host_history_agent_ids`), so that adapter only starts when a pane
+//! actually opens Pi. Reading the files directly is a handful of small reads,
+//! so master seeds its registry at startup and the sessions view has rows to
+//! show immediately; a later ACP listing (once Pi is explicitly opened)
+//! reconciles onto the same identities (`provider_id = "pi"`, `location = Host`,
+//! `session_universe = None` — the exact key
+//! [`crate::session_registry::agent_session_to_session_info`] derives from an
+//! ACP row, so `upsert_if_absent` cannot create duplicates).
 //!
 //! ## Sub-agent exclusion
 //!

@@ -61,8 +61,8 @@ WTA is normally launched **by Windows Terminal**, not by hand. WT spawns one
 `wta-helper` per agent pane (renders this TUI and speaks ACP to master over a
 named pipe). Helpers selecting the same agent identity, source, and command
 share one agent process. Master warms installed, policy-allowed native host agents
-other than Gemini, Antigravity, and OpenCode in the background at startup; those
-three stay on-demand, as do all other selections. Bare `wta` with
+other than Gemini, Antigravity, OpenCode, and Pi in the background at startup;
+those four stay on-demand, as do all other selections. Bare `wta` with
 no subcommand and neither `--master`
 nor `--connect-master` exits with an error — there is no standalone agent / TUI
 mode.
@@ -218,9 +218,11 @@ as soon as its named pipe is ready, without waiting for the sidebar to open. It 
 the native agent CLI and required `npx` prerequisite before starting ACP, reuses
 matching connections in the agent pool, and merges each supported `session/list`
 response into the registry. No chat session or prompt is created by discovery.
-Gemini, Antigravity, and OpenCode are excluded before availability checks and ACP
-startup, even when installed and policy-allowed, so background history discovery
-never launches `gemini`, `agy_acp_server.exe`, or `opencode acp`. Explicit chat
+Gemini, Antigravity, OpenCode, and Pi are excluded before availability checks and
+ACP startup, even when installed and policy-allowed, so background history
+discovery never launches `gemini`, `agy_acp_server.exe`, `opencode acp`, or
+`npx -y pi-acp`. Pi's own rows still arrive immediately because its session
+files are read straight off disk (see `pi_disk_sessions.rs`). Explicit chat
 selections for them remain supported; once one is running, the resident pool keeps
 refreshing its own history, and rows already registered by other paths are not
 filtered out of the sidebar.
