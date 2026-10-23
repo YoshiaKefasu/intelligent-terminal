@@ -218,6 +218,7 @@ pub(crate) async fn run(command: Command, json_mode: bool) -> Result<()> {
         }
         Command::ProbeSessions { agent } => probes::run_sessions(&agent).await,
         Command::ProbeHostSessions { agent } => probes::run_host_sessions(&agent).await,
+        Command::PiAcp => crate::pi_acp::run().await,
     }
 }
 

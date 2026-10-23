@@ -72,7 +72,14 @@ namespace Microsoft::Terminal::AcpModels
         }
         if (agentId == L"pi")
         {
-            return L"npx -y pi-acp@0.0.34";
+            // Pi has no ACP support of its own. On Windows, WTA ships a native
+            // Rust bridge (`wta pi-acp`) that translates ACP to `pi --mode
+            // rpc`, so no Node.js/npx adapter is involved.
+            //
+            // Inside a WSL distro that bridge cannot run (it is a Windows
+            // executable), so WSL keeps the npx adapter — that path already
+            // requires Node anyway.
+            return runsInWsl ? L"npx -y pi-acp@0.0.34" : L"wta pi-acp";
         }
         if (agentId == L"opencode")
         {

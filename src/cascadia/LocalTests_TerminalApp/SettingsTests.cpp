@@ -1963,7 +1963,9 @@ namespace TerminalAppLocalTests
         snapshot.npxFound = false;
         snapshot.availability.emplace(L"claude", HostAgentAvailability{ true, false, true });
         VERIFY_IS_TRUE(NeedsFreNodeBootstrap(snapshot, L"CLAUDE"));
-        // Pi's ACP surface is the npx-distributed pi-acp adapter.
+        // Pi's host ACP surface is WTA's native bridge (`wta pi-acp`), so it
+        // needs no npx. A synthetic `requires_npx` entry still exercises the
+        // parser's node-bootstrap branch.
         snapshot.availability.emplace(L"pi", HostAgentAvailability{ true, false, true });
         VERIFY_IS_TRUE(NeedsFreNodeBootstrap(snapshot, L"PI"));
         snapshot.npxFound = true;

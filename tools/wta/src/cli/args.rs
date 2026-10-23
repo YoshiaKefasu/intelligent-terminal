@@ -517,6 +517,16 @@ pub(crate) enum Command {
         #[arg(long)]
         agent: String,
     },
+    /// Run the native ACP bridge for Pi on stdio.
+    ///
+    /// Pi does not speak ACP itself, so this subcommand translates between ACP
+    /// (on stdin/stdout) and `pi --mode rpc` (a child process). It replaces the
+    /// Node.js `pi-acp` adapter, so Pi needs no Node.js installation at all.
+    ///
+    /// Windows Terminal launches this as Pi's ACP server; it is not a
+    /// human-facing command.
+    #[command(hide = true)]
+    PiAcp,
     /// Read a running herdr server's session snapshot (focused pane folder and
     /// agents) and print it as JSON. Prints nothing to stdout and exits 0 when
     /// herdr is not running.

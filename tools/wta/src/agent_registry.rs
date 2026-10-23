@@ -15,6 +15,22 @@ pub const OPENCODE_AGENT_ID: &str = "opencode";
 pub const ANTIGRAVITY_AGENT_ID: &str = "antigravity";
 pub const PI_AGENT_ID: &str = "pi";
 
+/// The launch command for an ACP server that WTA itself provides as a
+/// subcommand, rather than an external executable.
+///
+/// Pi is the only such agent today: it has no ACP support of its own, and WTA
+/// hosts the translation in-process (`wta pi-acp`) so Pi needs no Node.js.
+///
+/// Resolving this command is special in two ways, both handled by
+/// [`AgentProfile::acp_launch_is_self_bridge`] consumers:
+///
+/// * **Availability** follows the *agent CLI* (`pi`), not the bridge — the
+///   bridge always exists because it is part of WTA.
+/// * **Spawning** must use this exact executable, not whatever `wta.exe` PATH
+///   resolves to. A dev build's master would otherwise start an older packaged
+///   WTA that may not even have the subcommand.
+pub const SELF_ACP_BRIDGE_COMMAND: &str = "wta pi-acp";
+
 /// How the agent CLI accepts a startup prompt in delegate mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptFlag {
@@ -147,6 +163,16 @@ impl AgentProfile {
                 .next()
                 .unwrap_or(self.cli_executable)
         }
+    }
+
+    /// Whether the ACP server for this agent is WTA's own subcommand
+    /// ([`SELF_ACP_BRIDGE_COMMAND`]) rather than an external executable.
+    ///
+    /// Host-only by design: the bridge is a Windows binary and cannot run
+    /// inside a WSL distro, so [`Self::acp_command_override`] keeps a real
+    /// external command for the WSL source.
+    pub fn acp_launch_is_self_bridge(&self, source: &crate::agent_source::AgentSource) -> bool {
+        self.acp_command_override(source) == SELF_ACP_BRIDGE_COMMAND
     }
 }
 
@@ -315,8 +341,13 @@ pub const KNOWN_AGENTS: &[AgentProfile] = &[
         cli_executable: "pi",
         exe_search_order: &[".cmd", ".exe"],
         acp_flags: &[],
-        acp_launch_command: "npx -y pi-acp@0.0.34",
-        wsl_acp_launch_command: "",
+        acp_launch_command: SELF_ACP_BRIDGE_COMMAND,
+        // The native bridge is a Windows executable, so it cannot run inside a
+        // WSL distro. Pi in WSL therefore keeps the npx adapter: that path
+        // already requires Node, and leaving it on npx keeps WSL Pi working
+        // exactly as before. The host path — the one that was burning CPU on
+        // every agent pane — needs no Node at all.
+        wsl_acp_launch_command: "npx -y pi-acp@0.0.34",
         acp_companion_executable: None,
         wsl_acp_companion_executable: None,
         acp_model_flags: &[],
@@ -413,6 +444,10 @@ const ACP_LAUNCH_COMMAND_ALIASES: &[(&str, &str)] = &[
     ("npx -y @agentclientprotocol/codex-acp", CODEX_AGENT_ID),
     ("npx -y @zed-industries/codex-acp", CODEX_AGENT_ID),
     ("npx -y pi-acp", PI_AGENT_ID),
+    // Pi's ACP surface used to be the npx-distributed `pi-acp` adapter. Older
+    // hosts and saved settings can still hand us that command line, so keep
+    // identifying it as Pi even though the native bridge replaces it.
+    ("npx -y pi-acp@0.0.34", PI_AGENT_ID),
 ];
 
 fn adapter_profile_from_tokens(tokens: &[String]) -> Option<&'static AgentProfile> {
@@ -1070,7 +1105,9 @@ mod tests {
         assert_eq!(profile.cli_executable, "pi");
         assert_eq!(profile.exe_search_order, &[".cmd", ".exe"]);
         assert!(profile.acp_flags.is_empty());
-        assert_eq!(profile.acp_launch_command, "npx -y pi-acp@0.0.34");
+        // Pi is hosted by WTA's own native ACP bridge, so no Node.js/npx is
+        // involved at any point.
+        assert_eq!(profile.acp_launch_command, "wta pi-acp");
         assert!(profile.acp_model_flags.is_empty());
         assert_eq!(profile.acp_auth_flow, AcpAuthFlow::External);
         assert_eq!(profile.byok_mode, ByokMode::Unsupported);
@@ -1089,12 +1126,16 @@ mod tests {
         assert_eq!(resolve_agent_id_from_cmd("pi --model mimo"), "pi");
         assert_eq!(resolve_agent_id_from_cmd("npx -y pi-acp@0.0.34"), "pi");
         assert_eq!(resolve_agent_id_from_cmd("npx -y pi-acp"), "pi");
-        // Pi ACP launches via adapter, so build_acp_command returns the adapter command.
-        assert_eq!(build_acp_command("pi", None), "npx -y pi-acp@0.0.34");
+        // Pi ACP launches through WTA's native bridge, so build_acp_command
+        // returns that command rather than an npx adapter.
+        assert_eq!(build_acp_command("pi", None), "wta pi-acp");
+        assert_eq!(build_acp_command("pi", Some("mimo")), "wta pi-acp");
         assert_eq!(
-            build_acp_command("pi", Some("mimo")),
-            "npx -y pi-acp@0.0.34"
+            strip_acp_flags_for_delegate("wta pi-acp"),
+            Some("pi".to_string())
         );
+        // Legacy adapter command lines still identify as Pi so an older host
+        // build keeps working.
         assert_eq!(
             strip_acp_flags_for_delegate("npx -y pi-acp@0.0.34"),
             Some("pi".to_string())

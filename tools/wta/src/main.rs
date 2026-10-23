@@ -33,6 +33,7 @@ mod logging;
 mod master;
 mod osc52;
 mod pane_context;
+mod pi_acp;
 mod pi_disk_sessions;
 mod protocol;
 mod rtl;
@@ -261,6 +262,7 @@ fn process_label(cli: &Cli) -> String {
         | Some(Command::ProbeAgentSources { .. })
         | Some(Command::ProbeSessions { .. })
         | Some(Command::ProbeHostSessions { .. }) => "probe".to_string(),
+        Some(Command::PiAcp) => "pi-acp".to_string(),
         Some(Command::Hooks {
             action: HooksAction::Install { .. },
         }) => "install-hooks".to_string(),

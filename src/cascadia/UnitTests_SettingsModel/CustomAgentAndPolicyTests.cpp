@@ -616,8 +616,8 @@ namespace SettingsModelUnitTests
     {
         namespace Registry = ::Microsoft::Terminal::Settings::Model::AgentRegistry;
         VERIFY_ARE_EQUAL(size_t{ 7 }, Registry::BuiltinNativeProfileAgents.size());
-        // Pi hosts ACP through the pi-acp adapter; it exposes no session
-        // hooks and its icon asset is packaged.
+        // Pi hosts ACP through WTA's native `wta pi-acp` bridge; it exposes no
+        // session hooks and its icon asset is packaged.
         const auto piFlags = [](const auto& agent) { return agent.id == L"pi" && !agent.supportsSessionHooks && agent.hasIconAsset; };
         VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinAcpAgents, piFlags));
         VERIFY_IS_TRUE(std::ranges::any_of(Registry::BuiltinDelegateAgents, piFlags));
@@ -904,9 +904,10 @@ namespace SettingsModelUnitTests
 
     void CustomAgentAndPolicyTests::EffectiveAcpAgentAcpCapableBuiltinPasses()
     {
-        // Pi hosts ACP through the pi-acp adapter, so the non-ACP rejection in
-        // EffectiveAcpAgent (which guards a hand-edited builtin without ACP
-        // support) must not collapse it: it stays a valid ACP selection.
+        // Pi hosts ACP through WTA's native `wta pi-acp` bridge, so the
+        // non-ACP rejection in EffectiveAcpAgent (which guards a hand-edited
+        // builtin without ACP support) must not collapse it: it stays a valid
+        // ACP selection.
         const auto settings = MakeSettings(R"("acpAgent": "pi", "delegateAgent": "pi")");
         SetPolicy(MakePolicy());
         VERIFY_ARE_EQUAL(winrt::hstring{ L"pi" }, settings->GlobalSettings().EffectiveAcpAgent());

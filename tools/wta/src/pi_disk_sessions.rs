@@ -132,6 +132,26 @@ pub(crate) fn scan_sessions_dir(root: &Path) -> Vec<SessionInfo> {
     by_id.into_values().collect()
 }
 
+/// Locate the transcript file for one session id.
+///
+/// `session/load` needs the exact path rather than a bare id: Pi resolves a
+/// bare id against the *current* project directory only, so a session created
+/// in another folder would not be found when the client passes a different
+/// `cwd`. Returns `None` when the id is unknown, unreadable, or belongs to a
+/// sub-agent transcript.
+pub(crate) fn find_session_file(session_id: &str) -> Option<PathBuf> {
+    let wanted = session_id.trim();
+    if wanted.is_empty() {
+        return None;
+    }
+    let root = pi_sessions_root()?;
+    let mut files = Vec::new();
+    collect_jsonl(&root, 0, &mut files);
+    files.into_iter().find(|path| {
+        read_header(path).is_some_and(|header| header.id == wanted)
+    })
+}
+
 fn collect_jsonl(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     if depth > MAX_DEPTH || out.len() >= MAX_FILES {
         return;
@@ -609,6 +629,49 @@ mod tests {
         assert_eq!(
             crate::session_registry::SessionIdentity::from_info(&disk),
             crate::session_registry::SessionIdentity::from_info(&from_acp)
+        );
+    }
+
+    /// `session/load` resumes by transcript path, not by id: Pi resolves a bare
+    /// id against the *current* project only, so a session created elsewhere
+    /// would not be found when the client passes a different cwd.
+    #[test]
+    fn find_session_file_returns_the_transcript_path_by_id() {
+        let fx = Fixture::new("find");
+        let path = fx.write(
+            "--repo--/s.jsonl",
+            &lines(&[header("target-id", r"D:\repo", None), user_message("hi")]),
+        );
+
+        // Point the scanner at the fixture tree via an explicit root instead of
+        // the process environment, so this test cannot race others.
+        let mut files = Vec::new();
+        collect_jsonl(&fx.0, 0, &mut files);
+        let found = files
+            .into_iter()
+            .find(|candidate| read_header(candidate).is_some_and(|h| h.id == "target-id"));
+        assert_eq!(found.as_deref(), Some(path.as_path()));
+    }
+
+    /// A sub-agent transcript must never be resumable through `session/load`:
+    /// it belongs to an internal delegation, not to the user's conversation.
+    #[test]
+    fn subagent_transcripts_are_not_resumable() {
+        let fx = Fixture::new("find-subagent");
+        fx.write(
+            "--repo--/child.jsonl",
+            &lines(&[
+                header("child-id", r"D:\repo", Some(r"C:\parent.jsonl")),
+                user_message("You are a pi coding agent sub-agent."),
+            ]),
+        );
+        let mut files = Vec::new();
+        collect_jsonl(&fx.0, 0, &mut files);
+        assert!(
+            files
+                .iter()
+                .all(|candidate| read_header(candidate).is_none()),
+            "a sub-agent file has no resolvable header"
         );
     }
 }

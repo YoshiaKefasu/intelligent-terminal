@@ -119,6 +119,13 @@ pub fn find_exe(agent_id: &str) -> Option<String> {
 /// of an optional interactive CLI distributed by the same provider.
 pub fn find_acp_exe(agent_id: &str) -> Option<String> {
     let profile = agent_registry::lookup_profile_by_id(agent_id);
+    // A self-hosted bridge is part of WTA itself, so "is the ACP server
+    // installed" reduces to "is the agent CLI installed" — the bridge cannot
+    // be missing while WTA is running. Reporting the bridge's own path here
+    // would make every WTA install claim Pi is launch-ready.
+    if profile.acp_launch_is_self_bridge(&crate::agent_source::AgentSource::Host) {
+        return find_exe(agent_id);
+    }
     let executable = profile.acp_executable(&crate::agent_source::AgentSource::Host);
     if executable.is_empty() || executable == profile.cli_executable {
         return find_exe(agent_id);

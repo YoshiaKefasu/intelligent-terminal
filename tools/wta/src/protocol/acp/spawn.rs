@@ -335,12 +335,18 @@ fn spawn_host_agent_process(
         .copied()
         .ok_or_else(|| anyhow!("empty agent command"))?;
     let args: Vec<&str> = parts[1..].to_vec();
-    let resolved_program = if resolve_spawn_profile(agent_cmd, agent_id).id
-        == crate::agent_registry::ANTIGRAVITY_AGENT_ID
+    let profile = resolve_spawn_profile(agent_cmd, agent_id);
+    let resolved_program = if profile.id == crate::agent_registry::ANTIGRAVITY_AGENT_ID
         && raw_program.eq_ignore_ascii_case("agy_acp_server.exe")
     {
         crate::agent_check::find_acp_exe(crate::agent_registry::ANTIGRAVITY_AGENT_ID)
             .context("Antigravity ACP is not ready after dependency preparation")?
+    } else if profile.acp_launch_is_self_bridge(&crate::agent_source::AgentSource::Host) {
+        // Spawn THIS executable, not whatever `wta.exe` resolves to on PATH.
+        // A dev build's master must drive its own bridge: a packaged WTA on
+        // PATH may predate the subcommand entirely, and even when it has it,
+        // mixing versions across the ACP boundary is not a supported pairing.
+        crate::protocol::acp::spawn::self_bridge_executable()?
     } else {
         crate::agent_registry::resolve_bare_agent_name(raw_program)
     };
@@ -537,6 +543,17 @@ fn resolve_spawn_profile(
     let agent_id =
         agent_id.unwrap_or_else(|| crate::agent_registry::resolve_agent_id_from_cmd(agent_cmd));
     crate::agent_registry::lookup_profile_by_id(agent_id)
+}
+
+/// Absolute path of the running `wta` executable, for agents whose ACP server is
+/// WTA's own subcommand (`wta pi-acp`).
+///
+/// Never resolved through PATH: the bridge must be the exact binary this process
+/// is, so a dev build and a packaged install cannot be crossed.
+pub(crate) fn self_bridge_executable() -> Result<String> {
+    let path = std::env::current_exe()
+        .context("failed to resolve the running wta executable for the ACP bridge")?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn configure_child_environment(
@@ -1039,6 +1056,40 @@ mod tests {
             let error = configure_adapter_executable_environment(&mut command, profile, |_| None)
                 .unwrap_err();
             assert!(error.to_string().contains("not found"));
+        }
+    }
+
+    /// The bridge must be the running executable, never PATH's `wta.exe`: a
+    /// dev build would otherwise hand its ACP traffic to a possibly older
+    /// packaged install that may not even have the subcommand.
+    #[test]
+    fn the_self_bridge_spawns_the_running_executable() {
+        let resolved = self_bridge_executable().unwrap();
+        let current = std::env::current_exe().unwrap();
+        assert_eq!(std::path::Path::new(&resolved), current.as_path());
+        assert!(
+            std::path::Path::new(&resolved).is_absolute(),
+            "a bare program name would be re-resolved through PATH"
+        );
+    }
+
+    /// Pi's host ACP server is WTA's own subcommand, so its launch readiness
+    /// must follow the agent CLI instead of the bridge executable.
+    #[test]
+    fn the_self_bridge_profile_reports_host_only_and_wsl_keeps_the_adapter() {
+        use crate::agent_source::AgentSource;
+        let profile = crate::agent_registry::lookup_profile_by_id("pi");
+        assert!(profile.acp_launch_is_self_bridge(&AgentSource::Host));
+        assert!(
+            !profile.acp_launch_is_self_bridge(&AgentSource::Wsl {
+                distro: "Ubuntu".into()
+            }),
+            "the Windows bridge cannot run inside a distro"
+        );
+        // Other agents never claim to be self-hosted.
+        for agent_id in ["copilot", "claude", "codex", "gemini", "opencode"] {
+            assert!(!crate::agent_registry::lookup_profile_by_id(agent_id)
+                .acp_launch_is_self_bridge(&AgentSource::Host));
         }
     }
 

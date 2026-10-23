@@ -52,9 +52,9 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
     // ACP-capable agents. Either the CLI itself speaks the Agent Client
     // Protocol (copilot, gemini, opencode), or an npm-distributed adapter does
     // (claude via @agentclientprotocol/claude-agent-acp, codex via
-    // @agentclientprotocol/codex-acp, pi via pi-acp), or a separate native
-    // server does (Antigravity). Only these agents can be hosted in an agent
-    // pane.
+    // @agentclientprotocol/codex-acp), or WTA's own native bridge hosts it
+    // (pi via `wta pi-acp`), or a separate native server does (Antigravity).
+    // Only these agents can be hosted in an agent pane.
     inline constexpr std::array<BuiltinAgent, 7> BuiltinAcpAgents{ {
         { L"copilot", L"GitHub Copilot", ByokMode::CopilotProviderEnvironment },
         { L"claude", L"Claude", ByokMode::Unsupported },
@@ -62,7 +62,7 @@ namespace Microsoft::Terminal::Settings::Model::AgentRegistry
         { L"gemini", L"Gemini", ByokMode::Unsupported },
         { L"opencode", L"OpenCode", ByokMode::OpenCodeConfigContent },
         { L"antigravity", L"Google Antigravity", ByokMode::Unsupported, true, L"agy" },
-        // ACP via the pi-acp adapter; no session hooks yet.
+        // ACP via WTA's native `wta pi-acp` bridge; no session hooks yet.
         { L"pi", L"Pi", ByokMode::Unsupported, false, L"pi", true },
     } };
 
