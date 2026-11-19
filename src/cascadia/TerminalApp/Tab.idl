@@ -9,6 +9,12 @@ namespace TerminalApp
     {
         String Title { get; };
         String Icon { get; };
+
+        // The workspace (2-tier tab group) this tab belongs to. A tab is only
+        // projected into the horizontal tab row while its workspace is the
+        // active one; the Tab object, its panes and its PTY stay alive either
+        // way. See TerminalPage::_ApplyWorkspaceFilter.
+        String Workspace { get; set; };
         Boolean ReadOnly { get; };
         Microsoft.Terminal.Settings.Model.TabCloseButtonVisibility CloseButtonVisibility { get; set; };
 

@@ -326,6 +326,15 @@ namespace winrt::TerminalApp::implementation
     }
 
     // Method Description:
+    // - Bound in the Xaml editor to the left-hand sidebar toggle. The host owns
+    //   the show/hide decision (it knows whether the rail is docked), so this
+    //   only raises the request.
+    void TabRowControl::OnWorkspaceRailToggleClick(const IInspectable&, const WUX::RoutedEventArgs&)
+    {
+        RailCollapseRequested.raise(*this, nullptr);
+    }
+
+    // Method Description:
     // - Bound in Drag&Drop of the Xaml editor to the [+] button.
     // Arguments:
     // <unused>

@@ -88,7 +88,6 @@ using namespace std::chrono_literals;
 
 static constexpr double railMin = 180.0;
 static constexpr double railMax = 480.0;
-static constexpr double railCollapsedWidth = 40.0;
 static constexpr auto sidebarHistoryMasterRecoveryTimeout = std::chrono::seconds{ 15 };
 static constexpr auto sidebarHistoryFastRefreshInterval = std::chrono::seconds{ 5 };
 static constexpr auto sidebarHistoryRefreshInterval = std::chrono::seconds{ 60 };
@@ -616,14 +615,20 @@ namespace winrt::TerminalApp::implementation
             titlebar.FlowDirection(flowDirection);
         }
 
-        // Spec A §1: layout is driven by the tabLayout global setting.
-        if (_settings.GlobalSettings().TabLayout() == TabLayout::Vertical)
+        // Spec A §1: layout is driven by the tabLayout global setting — except
+        // that the 2-tier workspace chrome always renders the tabs on the top
+        // row, so a vertical preference is ignored here (see _ApplyTabLayout for
+        // the rationale; the stored setting is never rewritten).
+        if (_settings.GlobalSettings().TabLayout() == TabLayout::Vertical && !_WorkspaceChromeForcesHorizontal())
         {
             _tabRow.IsVerticalLayout(true);
         }
         // Cache the layout mode so the routing helpers (_tabItems /
         // _selectedTabItem) don't have to reach into _tabRow on every call.
         _isVerticalLayout = _tabRow.IsVerticalLayout();
+        // The rail always renders the workspace list now, so it must not advertise
+        // the vertical-only chrome (tab search / projection filters) over it.
+        winrt::get_self<implementation::TabStrip>(_tabStrip)->SetVerticalPresentation(_isVerticalLayout);
         // SetSettings captures the runtime baseline before Create applies the layout.
         _lastAgentRuntimeConfig.sessionsInSidebar = _isVerticalLayout;
 
@@ -925,6 +930,12 @@ namespace winrt::TerminalApp::implementation
         }
         _tabRow.RailCollapseRequested({ this, &TerminalPage::_OnVerticalRailCollapseRequested });
         _tabStrip.RailCollapseRequested({ this, &TerminalPage::_OnVerticalRailCollapseRequested });
+
+        // 2-tier tabs: the sidebar's workspace rows drive the active workspace.
+        _tabStrip.WorkspaceActivated({ this, &TerminalPage::_OnWorkspaceActivated });
+        _tabStrip.WorkspaceCreateRequested({ this, &TerminalPage::_OnWorkspaceCreateRequested });
+        _EnsureWorkspaceRegistered(_activeWorkspace);
+        _SyncWorkspaceList();
         _tabStrip.CompactNewTabRequested([weakThis{ get_weak() }](auto&&, auto&&) {
             if (const auto page = weakThis.get(); page && page->_isVerticalLayout && !page->_changingTabLayout)
             {
@@ -6112,6 +6123,273 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
+    // ── Workspaces (2-tier tabs) ────────────────────────────────────
+    //
+    // The sidebar lists workspaces; the horizontal TabView lists the tabs of the
+    // active one. Everything below keeps those two projections in sync.
+
+    bool TerminalPage::_TabIsInActiveWorkspace(const winrt::TerminalApp::Tab& tab) const noexcept
+    {
+        return tab && tab.Workspace() == _activeWorkspace;
+    }
+
+    uint32_t TerminalPage::_CountTabsInWorkspace(const winrt::hstring& workspaceName) const
+    {
+        uint32_t count = 0;
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() == workspaceName)
+            {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    void TerminalPage::_EnsureWorkspaceRegistered(const winrt::hstring& workspaceName)
+    {
+        if (workspaceName.empty())
+        {
+            return;
+        }
+        if (std::find(_workspaces.begin(), _workspaces.end(), workspaceName) == _workspaces.end())
+        {
+            _workspaces.push_back(workspaceName);
+        }
+    }
+
+    // Rebuilds the sidebar's workspace rows. Cheap enough to call on tab
+    // create/close, but deliberately not on every projection refresh.
+    void TerminalPage::_SyncWorkspaceList()
+    {
+        if (!_tabStrip)
+        {
+            return;
+        }
+
+        // Stable creation order: switching workspaces must not reorder the rows
+        // under the pointer, so the active workspace is marked, not moved.
+        _EnsureWorkspaceRegistered(_activeWorkspace);
+        std::vector<winrt::hstring> names{ _workspaces.begin(), _workspaces.end() };
+
+        std::vector<uint32_t> counts;
+        counts.reserve(names.size());
+        for (const auto& name : names)
+        {
+            counts.push_back(_CountTabsInWorkspace(name));
+        }
+
+        winrt::get_self<implementation::TabStrip>(_tabStrip)->SyncWorkspaces(
+            winrt::single_threaded_vector<winrt::hstring>(std::move(names)),
+            winrt::single_threaded_vector<uint32_t>(std::move(counts)),
+            _activeWorkspace);
+    }
+
+    // Projects `_tabs` onto the horizontal TabView: a tab is in the row iff its
+    // workspace is the active one. Hidden tabs are removed from the TabView
+    // only — they stay in `_tabs`, their panes and their PTYs keep running.
+    void TerminalPage::_ApplyWorkspaceFilter()
+    {
+        if (!_tabView)
+        {
+            return;
+        }
+
+        if (_mutatingTabCollections || _rearranging)
+        {
+            // The caller re-runs the projection once the mutation is done.
+            _pendingWorkspaceFilter = true;
+            return;
+        }
+        _pendingWorkspaceFilter = false;
+
+        _EnsureWorkspaceRegistered(_activeWorkspace);
+
+        const auto items = _tabView.TabItems();
+        const bool previousMutating = _mutatingTabCollections;
+        // Suppress `_OnTabItemsChanged` while the collection is rewritten; the
+        // explicit repaint at the end covers what that handler would have done.
+        _mutatingTabCollections = true;
+
+        // 1. Drop the items that belong to a parked workspace. Walking backwards
+        //    keeps the indices of the not-yet-visited items valid.
+        for (int32_t index = static_cast<int32_t>(items.Size()) - 1; index >= 0; --index)
+        {
+            const auto item = items.GetAt(static_cast<uint32_t>(index));
+            bool keep = false;
+            for (const auto& tab : _tabs)
+            {
+                if (winrt::get_abi(tab.TabViewItem()) == winrt::get_abi(item) && _TabIsInActiveWorkspace(tab))
+                {
+                    keep = true;
+                    break;
+                }
+            }
+            if (!keep)
+            {
+                items.RemoveAt(static_cast<uint32_t>(index));
+            }
+        }
+
+        // 2. Make the row match `_tabs` order. The TabView holds a subset of
+        //    `_tabs` (the active workspace's tabs), so the canonical order is
+        //    recomputed rather than patched: a drag reorders the TabView
+        //    directly and a plain append would leave the row out of order.
+        std::vector<uint32_t> canonical;
+        canonical.reserve(_tabs.Size());
+        for (uint32_t index = 0; index < _tabs.Size(); ++index)
+        {
+            if (_TabIsInActiveWorkspace(_tabs.GetAt(index)))
+            {
+                canonical.push_back(index);
+            }
+        }
+
+        bool matches = canonical.size() == items.Size();
+        if (matches)
+        {
+            for (uint32_t position = 0; position < canonical.size(); ++position)
+            {
+                if (winrt::get_abi(items.GetAt(position)) != winrt::get_abi(_tabs.GetAt(canonical[position]).TabViewItem()))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+
+        if (!matches)
+        {
+            const auto selected = _tabView.SelectedItem();
+            items.Clear();
+            for (const auto index : canonical)
+            {
+                items.Append(_tabs.GetAt(index).TabViewItem());
+            }
+            // Clear() drops the selection; put it back so the same tab keeps focus.
+            if (selected)
+            {
+                _tabView.SelectedItem(selected);
+            }
+        }
+
+        _mutatingTabCollections = previousMutating;
+
+        // 3. Repaint: the row's own show/hide rules and the projection that
+        //    paints the (possibly changed) item set.
+        _UpdateTabView();
+        _ApplyTabListProjection();
+        _SyncWorkspaceList();
+    }
+
+    void TerminalPage::_SwitchToWorkspace(const winrt::hstring& workspaceName)
+    {
+        if (!_tabStrip || workspaceName.empty())
+        {
+            return;
+        }
+
+        // Remember where we were before leaving, so coming back lands on the
+        // same tab rather than whatever happens to be first.
+        if (const auto focused = _GetTabImpl(_GetFocusedTab()))
+        {
+            _workspaceLastTabId[std::wstring{ _activeWorkspace.c_str(), _activeWorkspace.size() }] = focused->StableId();
+        }
+
+        _activeWorkspace = workspaceName;
+        _EnsureWorkspaceRegistered(workspaceName);
+        _ApplyWorkspaceFilter();
+
+        // Pick the tab to focus: the one this workspace was left on, else the
+        // first tab it owns.
+        winrt::TerminalApp::Tab target{ nullptr };
+        const auto remembered = _workspaceLastTabId.find(std::wstring{ workspaceName.c_str(), workspaceName.size() });
+        if (remembered != _workspaceLastTabId.end())
+        {
+            for (const auto& tab : _tabs)
+            {
+                if (!_TabIsInActiveWorkspace(tab))
+                {
+                    continue;
+                }
+                const auto impl = _GetTabImpl(tab);
+                if (impl && impl->StableId() == remembered->second)
+                {
+                    target = tab;
+                    break;
+                }
+            }
+        }
+        if (!target)
+        {
+            for (const auto& tab : _tabs)
+            {
+                if (_TabIsInActiveWorkspace(tab))
+                {
+                    target = tab;
+                    break;
+                }
+            }
+        }
+
+        if (!target)
+        {
+            // A workspace with no tabs would otherwise leave a live terminal on
+            // screen that no tab claims. Give it one, same as a fresh window.
+            _CreateWorkspace(workspaceName);
+            return;
+        }
+
+        _SelectTab(_GetTabIndex(target).value_or(0));
+    }
+
+    void TerminalPage::_CreateWorkspace(const winrt::hstring& workspaceName)
+    {
+        if (!_tabStrip || workspaceName.empty() || workspaceName == _activeWorkspace)
+        {
+            return;
+        }
+
+        // Leave the current workspace on the tab it was left with, so coming
+        // back lands on the same tab rather than the first one it owns.
+        if (const auto focused = _GetTabImpl(_GetFocusedTab()))
+        {
+            _workspaceLastTabId[std::wstring{ _activeWorkspace.c_str(), _activeWorkspace.size() }] = focused->StableId();
+        }
+
+        _activeWorkspace = workspaceName;
+        _EnsureWorkspaceRegistered(workspaceName);
+        _ApplyWorkspaceFilter();
+
+        // `_OpenNewTab` reads `_activeWorkspace`, so the tab it creates lands in
+        // the workspace we just switched to.
+        LOG_IF_FAILED(_OpenNewTab(nullptr, false));
+    }
+
+    void TerminalPage::_OnWorkspaceActivated(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                             const winrt::TerminalApp::TabStripWorkspaceItem& item)
+    {
+        if (!item)
+        {
+            return;
+        }
+        _SwitchToWorkspace(item.Name());
+    }
+
+    void TerminalPage::_OnWorkspaceCreateRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                                   const winrt::Windows::Foundation::IInspectable& /*args*/)
+    {
+        // Workspaces are created on demand and carry no other identity yet, so the
+        // row label is simply the next free "Workspace N".
+        uint32_t next = 1;
+        winrt::hstring name;
+        do
+        {
+            name = winrt::hstring{ L"Workspace " } + winrt::to_hstring(next++);
+        } while (std::find(_workspaces.begin(), _workspaces.end(), name) != _workspaces.end() || name == _activeWorkspace);
+        _CreateWorkspace(name);
+    }
+
     void TerminalPage::_UpdateTabLayoutHost()
     {
         SessionToggleButton().Visibility(_isVerticalLayout ? Visibility::Collapsed : Visibility::Visible);
@@ -6222,8 +6500,14 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
-    bool TerminalPage::_ApplyTabLayout(const TabLayout targetLayout)
+    bool TerminalPage::_ApplyTabLayout(const TabLayout requestedLayout)
     {
+        // The 2-tier workspace chrome puts the tab strip on the top row and the
+        // workspace rail on the leading edge, so the vertical presentation would
+        // have nowhere to render tabs. Coerce here instead of writing the
+        // preference, so `tabLayout` in settings.json keeps saying what the user
+        // picked and regains control if this chrome is ever turned off.
+        const auto targetLayout = _WorkspaceChromeForcesHorizontal() ? TabLayout::Horizontal : requestedLayout;
         const bool targetVertical = targetLayout == TabLayout::Vertical;
         if (_changingTabLayout)
         {
@@ -6269,8 +6553,10 @@ namespace winrt::TerminalApp::implementation
             // The horizontal side rail is a layout-specific surface: retire both
             // its visibility and the remembered preference across a layout
             // change so neither layout inherits the other's rail state.
+            // The workspace rail is the one exception — it is the workspace
+            // switcher, so it always comes back with the chrome.
             _horizontalRailShown = false;
-            _horizontalRailVisible = false;
+            _horizontalRailVisible = _WorkspaceChromeForcesHorizontal();
             _tabItemMiddleClickPointerEntered.revoke();
             _tabItemMiddleClickPointerExited.revoke();
             _tabItemMiddleClickPointerCaptureLost.revoke();
@@ -6471,6 +6757,10 @@ namespace winrt::TerminalApp::implementation
         _changingTabLayout = false;
         _tabLayoutTransitionTarget.reset();
         _tabLayoutTransitionSelectedItem = nullptr;
+        // The layout flip reparents every TabViewItem between the rail and the
+        // horizontal TabView, so the workspace projection has to be re-asserted
+        // on the new collection before anything reads it.
+        _ApplyWorkspaceFilter();
         _ApplyTabListProjection();
         _UpdateRecentAgentSessionsVisibility();
         _ApplyPendingPinRequest();
@@ -6707,7 +6997,10 @@ namespace winrt::TerminalApp::implementation
         }
         if (_tabStrip)
         {
-            _tabStrip.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+            // Collapsed now means width 0, so the rail is genuinely hidden rather
+            // than a 40px icon sliver of workspace rows.
+            const auto stripVisible = visible && !_isVerticalRailCollapsed;
+            _tabStrip.Visibility(stripVisible ? Visibility::Visible : Visibility::Collapsed);
         }
 
         _tabStrip.IsRailCollapsed(_isVerticalRailCollapsed);
@@ -6715,7 +7008,9 @@ namespace winrt::TerminalApp::implementation
         _UpdateRecentAgentSessionsVisibility();
 
         const bool expanded = visible && !_isVerticalRailCollapsed;
-        const auto width = visible ? (_isVerticalRailCollapsed ? railCollapsedWidth : _verticalRailWidth) : 0.0;
+        // Collapsed means width 0: the sidebar is the workspace switcher in the
+        // 2-tier chrome, and a 40px sliver of workspace rows has nothing to show.
+        const auto width = expanded ? _verticalRailWidth : 0.0;
         const auto actionMap = _settings.ActionMap();
         for (const auto& [elementName, action] : {
                  std::pair{ L"AgentsOnlyFilterMenuItem", ShortcutAction::ToggleSidebarAgentsOnly },
@@ -7380,7 +7675,17 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_OnVerticalRailCollapseRequested(const IInspectable&, const IInspectable&)
     {
-        if (!_isVerticalLayout || !_isVerticalRailVisible)
+        if (!_isVerticalLayout)
+        {
+            // Horizontal layout: the rail is the workspace switcher, so it is
+            // shown/hidden whole (220 <-> 0) rather than collapsed to a rail.
+            // Same entry point as the ToggleSidebar action, so the tab-row button
+            // and the hotkey cannot drift apart.
+            _ToggleSidebarHotkey();
+            return;
+        }
+
+        if (!_isVerticalRailVisible)
         {
             return;
         }

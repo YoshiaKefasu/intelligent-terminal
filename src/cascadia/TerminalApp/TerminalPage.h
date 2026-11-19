@@ -353,8 +353,10 @@ namespace winrt::TerminalApp::implementation
         bool _isVerticalRailVisible{ true };
         bool _isVerticalRailCollapsed{ false };
         // Horizontal layout keeps its tab row on top; this is the user's
-        // show/hide preference for the rail that runs beside it.
-        bool _horizontalRailVisible{ false };
+        // show/hide preference for the rail that runs beside it. Defaults to
+        // shown: the rail is the workspace switcher, so hiding it would leave the
+        // window with no way to change workspace.
+        bool _horizontalRailVisible{ true };
         // What the rail is actually showing right now (the preference can be
         // true while focus mode or full screen hides the chrome).
         bool _horizontalRailShown{ false };
@@ -411,6 +413,21 @@ namespace winrt::TerminalApp::implementation
 
         Windows::Foundation::Collections::IObservableVector<TerminalApp::Tab> _tabs;
         Windows::Foundation::Collections::IObservableVector<TerminalApp::Tab> _mruTabs;
+
+        // ── Workspaces (2-tier tabs) ────────────────────────────────────
+        // The sidebar lists workspaces and the horizontal tab row shows only the
+        // tabs whose `Tab::Workspace` equals `_activeWorkspace`. Tabs that belong
+        // to another workspace are removed from the TabView *only*: `_tabs`, their
+        // panes, their PTYs and every subsystem keep running, so background work
+        // in a parked workspace is never interrupted.
+        winrt::hstring _activeWorkspace{ L"Default" };
+        // Every workspace this window has shown, in first-seen order.
+        std::vector<winrt::hstring> _workspaces;
+        // Last focused tab per workspace, keyed by `Tab::StableId`. An index into
+        // `_tabs` would shift whenever any tab closes, so the stable id is used.
+        std::unordered_map<std::wstring, winrt::hstring> _workspaceLastTabId;
+        // Set when the projection had to bail out mid-mutation; the caller re-runs it.
+        bool _pendingWorkspaceFilter{ false };
         static winrt::com_ptr<Tab> _GetTabImpl(const TerminalApp::Tab& tab);
 
         void _UpdateTabIndices();
@@ -976,6 +993,25 @@ namespace winrt::TerminalApp::implementation
         void _UpdateTitle(const Tab& tab);
         void _UpdateTabIcon(Tab& tab);
         void _UpdateTabView();
+
+        // ── Workspaces (2-tier tabs) ────────────────────────────────────
+        // `tabLayout` keeps its meaning for every other surface, but the 2-tier
+        // chrome puts the tab strip on the top row and the workspace rail on the
+        // leading edge, so the vertical presentation would have nowhere to put
+        // tabs. Coerced here rather than in the settings layer so the stored
+        // preference is left untouched.
+        bool _WorkspaceChromeForcesHorizontal() const noexcept { return true; }
+        void _ApplyWorkspaceFilter();
+        void _SwitchToWorkspace(const winrt::hstring& workspaceName);
+        void _CreateWorkspace(const winrt::hstring& workspaceName);
+        void _EnsureWorkspaceRegistered(const winrt::hstring& workspaceName);
+        void _SyncWorkspaceList();
+        uint32_t _CountTabsInWorkspace(const winrt::hstring& workspaceName) const;
+        bool _TabIsInActiveWorkspace(const winrt::TerminalApp::Tab& tab) const noexcept;
+        void _OnWorkspaceActivated(const winrt::Windows::Foundation::IInspectable& sender,
+                                   const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        void _OnWorkspaceCreateRequested(const winrt::Windows::Foundation::IInspectable& sender,
+                                         const winrt::Windows::Foundation::IInspectable& args);
         void _ApplyTabListProjection(
             const TerminalApp::Tab& changedTab = nullptr,
             bool refreshPaneItems = true,

@@ -84,6 +84,17 @@ namespace TerminalApp
         TabStripHistoryItem Item { get; };
     };
 
+    // One row of the sidebar's workspace list. The sidebar shows workspaces
+    // only (the tabs themselves live in the horizontal TabView), so this is the
+    // whole item surface of the rail.
+    [default_interface] runtimeclass TabStripWorkspaceItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
+    {
+        String Name { get; };
+        String DisplayName { get; };
+        UInt32 TabCount;
+        Boolean IsActive;
+    };
+
     [default_interface] runtimeclass TabStripPaneItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
     {
         Microsoft.UI.Xaml.Controls.TabViewItem Tab { get; };
@@ -202,6 +213,17 @@ namespace TerminalApp
         Boolean HistoryActive;
         Boolean HistoryLoading;
         String HistoryError;
+
+        // ── Workspaces (2-tier tabs) ────────────────────────────────
+        // The sidebar lists workspaces instead of tabs; the active workspace's
+        // tabs are rendered by the horizontal TabView. `SyncWorkspaces`
+        // replaces the whole list, so the host never has to diff rows itself.
+        Windows.Foundation.Collections.IObservableVector<TabStripWorkspaceItem> WorkspaceItems { get; };
+        void SyncWorkspaces(Windows.Foundation.Collections.IVector<String> names,
+                            Windows.Foundation.Collections.IVector<UInt32> tabCounts,
+                            String activeName);
+        event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceActivated;
+        event Windows.Foundation.TypedEventHandler<TabStrip, Object> WorkspaceCreateRequested;
 
         // Hosts the complete vertical chrome when no titlebar is available.
         Windows.UI.Xaml.UIElement TopChromeContent;

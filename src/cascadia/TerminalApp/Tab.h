@@ -283,6 +283,11 @@ namespace winrt::TerminalApp::implementation
         // The TabViewNumTabs is the number of Tab objects in TerminalPage's _tabs vector.
         WINRT_PROPERTY(uint32_t, TabViewNumTabs, 0);
 
+        // The workspace this tab belongs to (default: "Default"). TerminalPage
+        // sets it when the tab is created and filters the horizontal tab row on
+        // it; nothing here reacts to a change.
+        WINRT_PROPERTY(winrt::hstring, Workspace, L"Default");
+
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, Title, PropertyChanged.raise);
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, Icon, PropertyChanged.raise);
         WINRT_OBSERVABLE_PROPERTY(bool, ReadOnly, PropertyChanged.raise, false);

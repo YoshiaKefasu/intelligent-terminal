@@ -137,6 +137,13 @@ namespace winrt::TerminalApp::implementation
     {
         newTabImpl->Initialize();
 
+        // 2-tier tabs: a new tab joins the workspace that is active right now, so
+        // the top row shows it as soon as it is created. Everything else about the
+        // tab (panes, PTY, session routing) is untouched by the workspace it sits
+        // in — a parked workspace's tab keeps running exactly as before.
+        newTabImpl->Workspace(_activeWorkspace);
+        _EnsureWorkspaceRegistered(_activeWorkspace);
+
         if (_pendingNewTabLoadSession)
         {
             auto pending = std::move(*_pendingNewTabLoadSession);
@@ -269,7 +276,11 @@ namespace winrt::TerminalApp::implementation
             winrt::get_self<implementation::TabStrip>(_tabStrip)->PrepareTabItem(tabViewItem);
         }
 
-        _tabItems().InsertAt(insertPosition, tabViewItem);
+        // The TabView may hold only the active workspace's items, so a `_tabs`
+        // index is not a valid TabView index. Append here and let
+        // `_ApplyWorkspaceFilter` (end of this method) place the item correctly.
+        const auto viewItems = _tabItems();
+        viewItems.InsertAt(viewItems.Size(), tabViewItem);
 
         tabViewItem.PointerPressed({ this, &TerminalPage::_OnTabPointerPressed });
 
@@ -398,6 +409,10 @@ namespace winrt::TerminalApp::implementation
                 dispatcher.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low, std::move(initializeDeferred));
             }
         }
+
+        // The sidebar row for the workspace this tab just joined has a new tab
+        // count. Deferred (not awaited) so tab creation never blocks on it.
+        _ApplyWorkspaceFilter();
     }
 
     // Method Description:
@@ -491,11 +506,12 @@ namespace winrt::TerminalApp::implementation
         // The tab row should only be visible if:
         // - we're not in focus mode
         // - we're not in full screen, or the user has enabled fullscreen tabs
-        // - there is more than one tab, or the user has chosen to always show tabs
+        // - there is more than one tab in the active workspace, or the user has
+        //   chosen to always show tabs
         const auto isVisible = !_isInFocusMode &&
                                (!_isFullscreen || _showTabsFullscreen) &&
                                (_hasTitlebarHost ||
-                                (_tabs.Size() > 1) ||
+                                (_CountTabsInWorkspace(_activeWorkspace) > 1) ||
                                 _settings.GlobalSettings().AlwaysShowTabs());
 
         if (_tabView)
@@ -511,10 +527,11 @@ namespace winrt::TerminalApp::implementation
             _tabRow.Height(isVisible ? NAN : 0);
         }
 
-        // The horizontal side rail follows the same chrome rules as the tab
-        // row. Focus mode and full screen hide it without forgetting the
-        // user's preference, so leaving them brings it back.
-        _SetHorizontalRailShown(_horizontalRailVisible && isVisible);
+        // The horizontal side rail follows the same chrome rules as the tab row,
+        // with one exception: it is the workspace switcher now, so it stays up
+        // even when the tab row is collapsed (a single-tab workspace).
+        const auto railChromeVisible = !_isInFocusMode && (!_isFullscreen || _showTabsFullscreen);
+        _SetHorizontalRailShown(_horizontalRailVisible && railChromeVisible);
     }
 
     // Method Description:
@@ -1153,6 +1170,32 @@ namespace winrt::TerminalApp::implementation
         }
         _UpdateTabIndices();
 
+        // 2-tier tabs: the workspace's row count changed. If the closed tab was
+        // the last one in a parked workspace the workspace itself is dropped
+        // from the sidebar — an empty workspace has nothing to switch to.
+        if (const auto impl = _GetTabImpl(tab))
+        {
+            const auto closedWorkspace = impl->Workspace();
+            if (closedWorkspace != _activeWorkspace && _CountTabsInWorkspace(closedWorkspace) == 0)
+            {
+                _workspaces.erase(std::remove(_workspaces.begin(), _workspaces.end(), closedWorkspace), _workspaces.end());
+            }
+            // Drop the "last focused tab" memo too, so a long session cannot grow
+            // the map with the stable ids of tabs that no longer exist.
+            for (auto entry = _workspaceLastTabId.begin(); entry != _workspaceLastTabId.end();)
+            {
+                if (entry->second == closedTabStableId)
+                {
+                    entry = _workspaceLastTabId.erase(entry);
+                }
+                else
+                {
+                    ++entry;
+                }
+            }
+        }
+        _ApplyWorkspaceFilter();
+
         // To close the window here, we need to close the hosting window.
         if (_tabs.Size() == 0)
         {
@@ -1362,10 +1405,21 @@ namespace winrt::TerminalApp::implementation
 
         // GH#1117: This is a workaround because _tabView.SelectedIndex()
         //          sometimes return incorrect result after removing some tabs
-        uint32_t focusedIndex;
-        if (_tabItems().IndexOf(_selectedTabItem(), focusedIndex))
+        //
+        // Identity is compared against `_tabs` rather than looked up in
+        // `_tabItems()`: with 2-tier workspaces the TabView only holds the active
+        // workspace's items, so a TabView index is not a `_tabs` index any more.
+        const auto selected = _selectedTabItem();
+        if (!selected)
         {
-            return focusedIndex;
+            return std::nullopt;
+        }
+        for (uint32_t index = 0; index < _tabs.Size(); ++index)
+        {
+            if (winrt::get_abi(_tabs.GetAt(index).TabViewItem()) == winrt::get_abi(selected))
+            {
+                return index;
+            }
         }
         return std::nullopt;
     }
@@ -1414,12 +1468,18 @@ namespace winrt::TerminalApp::implementation
     //   so make sure to check the result!
     winrt::TerminalApp::Tab TerminalPage::_GetTabByTabViewItem(const IInspectable& tabViewItem) const noexcept
     {
-        uint32_t tabIndexFromControl{};
-        const auto items{ _tabItems() };
-        if (items.IndexOf(tabViewItem, tabIndexFromControl) && tabIndexFromControl < _tabs.Size())
+        if (!tabViewItem)
         {
-            // If IndexOf returns true, we've actually got an index
-            return _tabs.GetAt(tabIndexFromControl);
+            return nullptr;
+        }
+        // Identity, not position: the horizontal TabView only contains the active
+        // workspace's items, so its index is not the tab's index in `_tabs`.
+        for (const auto& tab : _tabs)
+        {
+            if (winrt::get_abi(tab.TabViewItem()) == winrt::get_abi(tabViewItem))
+            {
+                return tab;
+            }
         }
         return nullptr;
     }
@@ -1891,6 +1951,13 @@ namespace winrt::TerminalApp::implementation
         {
             _ApplyTabListProjection();
         }
+
+        // A workspace projection that had to bail out mid-mutation is re-run
+        // here, once the collection has settled.
+        if (_pendingWorkspaceFilter)
+        {
+            _ApplyWorkspaceFilter();
+        }
     }
 
     void TerminalPage::_OnTabPointerPressed(const IInspectable& sender, const Windows::UI::Xaml::Input::PointerRoutedEventArgs& e)
@@ -1982,6 +2049,17 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_UpdatedSelectedTab(const winrt::TerminalApp::Tab& tab)
     {
+        // 2-tier tabs: remember which tab this workspace was left on, so switching
+        // away and back restores the same tab instead of the first one.
+        if (tab)
+        {
+            const auto impl = _GetTabImpl(tab);
+            if (impl)
+            {
+                _workspaceLastTabId[std::wstring{ _activeWorkspace.c_str(), _activeWorkspace.size() }] = impl->StableId();
+            }
+        }
+
         // Unfocus all the tabs.
         for (const auto& tab : _tabs)
         {
@@ -2492,20 +2570,23 @@ namespace winrt::TerminalApp::implementation
     {
         if (!_changingTabLayout && !_rearranging && !_removing && !_mutatingTabCollections)
         {
-            // Look up selection via the router — works for both TabView and
-            // TabStrip because _selectedTabItem and _tabItems both branch on
-            // _isVerticalLayout.
+            // Look up selection by identity. `_tabItems()` is not necessarily
+            // `_tabs` with 2-tier workspaces: the TabView holds only the active
+            // workspace's items, so a TabView index is not a `_tabs` index.
             if (const auto selectedItem = _selectedTabItem())
             {
-                uint32_t selectedIndex{};
-                if (_tabItems().IndexOf(selectedItem, selectedIndex) && selectedIndex < _tabs.Size())
+                for (const auto& candidate : _tabs)
                 {
-                    const auto selectedTab = _tabs.GetAt(selectedIndex);
-                    _UpdatedSelectedTab(selectedTab);
-                    if (const auto tab = _GetTabImpl(selectedTab))
+                    if (winrt::get_abi(candidate.TabViewItem()) != winrt::get_abi(selectedItem))
                     {
-                        _RefreshRichTabForTab(*tab, true);
+                        continue;
                     }
+                    _UpdatedSelectedTab(candidate);
+                    if (const auto impl = _GetTabImpl(candidate))
+                    {
+                        _RefreshRichTabForTab(*impl, true);
+                    }
+                    break;
                 }
             }
             // Flush any deferred agent-stack rebuild now that a real
@@ -2677,8 +2758,16 @@ namespace winrt::TerminalApp::implementation
             }
             else
             {
-                _tabItems().RemoveAt(currentTabIndex);
-                _tabItems().InsertAt(newTabIndex, tabViewItem);
+                // Indices here are `_tabs` positions; the TabView only holds the
+                // active workspace's items, so find the item by identity and let
+                // the workspace projection below settle the final order.
+                const auto items = _tabItems();
+                uint32_t itemIndex{};
+                if (items.IndexOf(tabViewItem, itemIndex))
+                {
+                    items.RemoveAt(itemIndex);
+                }
+                items.InsertAt(items.Size(), tabViewItem);
             }
             _selectedTabItem(selectMoved ? tabViewItem : previouslySelected);
 
@@ -2689,6 +2778,10 @@ namespace winrt::TerminalApp::implementation
             if (selectMoved && previouslySelected != tabViewItem)
             {
                 _OnSelectionChangedCore();
+            }
+            if (_pendingWorkspaceFilter)
+            {
+                _ApplyWorkspaceFilter();
             }
             _UpdateTabView();
             _ApplyTabListProjection(tab);
@@ -2776,7 +2869,12 @@ namespace winrt::TerminalApp::implementation
             canonicalItems.reserve(_tabs.Size());
             for (const auto& tab : _tabs)
             {
-                canonicalItems.emplace_back(tab.TabViewItem());
+                // Only the active workspace's tabs belong in the horizontal row;
+                // a full `_tabs` sweep would resurrect parked tabs.
+                if (_TabIsInActiveWorkspace(tab))
+                {
+                    canonicalItems.emplace_back(tab.TabViewItem());
+                }
             }
             if (_isVerticalLayout)
             {
@@ -2809,6 +2907,10 @@ namespace winrt::TerminalApp::implementation
         _tabDragReorderAuthorized = false;
         _tabDragSelectedItem = nullptr;
         winrt::get_self<implementation::TabStrip>(_tabStrip)->ProjectionControlsEnabled(true);
+        if (_pendingWorkspaceFilter)
+        {
+            _ApplyWorkspaceFilter();
+        }
         _ApplyTabListProjection();
         _ApplyPendingPinRequest();
 

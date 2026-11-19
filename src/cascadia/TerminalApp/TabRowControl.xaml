@@ -46,6 +46,26 @@
         <mux:TabView.TabStripHeader>
             <StackPanel x:Name="HorizontalChromeHeader"
                         Orientation="Horizontal">
+                <!--  Left-hand sidebar toggle. The sidebar is the workspace
+                      switcher, so this is the only control that shows/hides it
+                      in the horizontal chrome; it raises the same
+                      RailCollapseRequested the vertical rail toggle does.  -->
+                <Button x:Name="WorkspaceRailToggleTabRowButton"
+                        x:Uid="WorkspaceRailToggleButton"
+                        Width="32"
+                        Height="24"
+                        Margin="4,4,0,4"
+                        Padding="0"
+                        VerticalAlignment="Stretch"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="0"
+                        Click="OnWorkspaceRailToggleClick">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="14"
+                              Glyph="&#xE700;" />
+                </Button>
+
                 <!--  EA18 is the "Shield" glyph  -->
                 <FontIcon x:Name="ElevationShieldIcon"
                           x:Uid="ElevationShield"

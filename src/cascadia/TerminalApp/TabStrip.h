@@ -15,6 +15,7 @@
 #include "TabStripDragStartingEventArgs.g.h"
 #include "TabStripDroppedOutsideEventArgs.g.h"
 #include "TabStripHistoryItem.g.h"
+#include "TabStripWorkspaceItem.g.h"
 #include "TabStripHistoryActivationEventArgs.g.h"
 #include "TabStripPaneItem.g.h"
 #include "TabStripDisplayItem.g.h"
@@ -289,6 +290,31 @@ namespace winrt::TerminalApp::implementation
             _Tab{ std::move(tab) }, _Item{ std::move(item) } {}
     };
 
+    // One workspace row in the sidebar. The sidebar no longer lists tabs —
+    // those live in the horizontal TabView — so this is the only item type the
+    // rail's primary list renders.
+    struct TabStripWorkspaceItem : TabStripWorkspaceItemT<TabStripWorkspaceItem>
+    {
+        TabStripWorkspaceItem() = default;
+        explicit TabStripWorkspaceItem(winrt::hstring name) :
+            _Name{ std::move(name) },
+            _DisplayName{ _Name } {}
+
+        // Getter-only in the IDL: the name is the row's identity.
+        winrt::hstring Name() const noexcept { return _Name; }
+        winrt::hstring DisplayName() const noexcept { return _DisplayName; }
+
+        WINRT_OBSERVABLE_PROPERTY(uint32_t, TabCount, PropertyChanged.raise, 0);
+        WINRT_OBSERVABLE_PROPERTY(bool, IsActive, PropertyChanged.raise, false);
+
+    public:
+        til::property_changed_event PropertyChanged;
+
+    private:
+        winrt::hstring _Name{};
+        winrt::hstring _DisplayName{};
+    };
+
     struct TabStrip : TabStripT<TabStrip>
     {
         TabStrip();
@@ -368,6 +394,16 @@ namespace winrt::TerminalApp::implementation
         void SearchQuery(winrt::hstring const& value);
         bool FocusTabSearch();
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripHistoryItem> HistoryItems() const { return _historyItems; }
+
+        // ── Workspaces (2-tier tabs) ────────────────────────────────
+        // The sidebar renders one row per workspace; the tabs themselves are
+        // owned by the horizontal TabView and filtered by the host.
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripWorkspaceItem> WorkspaceItems() const { return _workspaceItems; }
+        void SyncWorkspaces(winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& names,
+                            winrt::Windows::Foundation::Collections::IVector<uint32_t> const& tabCounts,
+                            winrt::hstring const& activeName);
+        void SetWorkspacesVisible(bool value);
+        bool WorkspacesVisible() const noexcept { return _workspacesVisible; }
         void CommitHistorySnapshot(std::vector<TerminalApp::TabStripHistoryItem> items, bool ready = false);
         void InvalidateHistorySnapshotReadiness() noexcept { _historySnapshotReady = false; }
         void TryCompleteAgentFilterTelemetry();
@@ -434,7 +470,11 @@ namespace winrt::TerminalApp::implementation
 
         // XAML-bound event handlers.
         void OnListSelectionChanged(winrt::Windows::Foundation::IInspectable const& sender,
-                                     winrt::Windows::UI::Xaml::Controls::SelectionChangedEventArgs const& e);
+                                    winrt::Windows::UI::Xaml::Controls::SelectionChangedEventArgs const& e);
+        void OnWorkspaceCreateClick(winrt::Windows::Foundation::IInspectable const& sender,
+                                    winrt::Windows::UI::Xaml::RoutedEventArgs const& e);
+        void OnWorkspaceItemClick(winrt::Windows::Foundation::IInspectable const& sender,
+                                  winrt::Windows::UI::Xaml::Controls::ItemClickEventArgs const& e);
         void OnDragItemsStarting(winrt::Windows::Foundation::IInspectable const& sender,
                                   winrt::Windows::UI::Xaml::Controls::DragItemsStartingEventArgs const& e);
         void OnDragItemsCompleted(winrt::Windows::UI::Xaml::Controls::ListViewBase const& sender,
@@ -552,6 +592,8 @@ namespace winrt::TerminalApp::implementation
         til::typed_event<TerminalApp::TabStrip, winrt::Windows::Foundation::IInspectable> HistoryRequested;
         til::typed_event<TerminalApp::TabStrip, winrt::Windows::Foundation::IInspectable> HistoryClosed;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripHistoryActivationEventArgs> HistoryActivationRequested;
+        til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceActivated;
+        til::typed_event<TerminalApp::TabStrip, winrt::Windows::Foundation::IInspectable> WorkspaceCreateRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripPaneEventArgs> PaneActivationRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripPaneEventArgs> PaneCloseRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripCloseRequestedEventArgs> TabRenameRequested;
@@ -613,6 +655,12 @@ namespace winrt::TerminalApp::implementation
         }
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripHistoryItem> _historyItems{ nullptr };
         std::vector<TerminalApp::TabStripHistoryItem> _historySnapshot;
+
+        // Workspace rows. The vector instance is stable; SyncWorkspaces replaces
+        // its contents so the ListView's binding never has to be re-pointed.
+        winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripWorkspaceItem> _workspaceItems{ winrt::single_threaded_observable_vector<TerminalApp::TabStripWorkspaceItem>() };
+        bool _workspacesVisible{ true };
+        void _applyWorkspaceProjection();
 
         // The history list's own search state. The workspace footer that used
         // to sit beside it (Herdr and Git sections) is gone: the file manager

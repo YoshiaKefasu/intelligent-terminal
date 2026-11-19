@@ -677,6 +677,10 @@ namespace winrt::TerminalApp::implementation
             } }),
             true);
         _vectorChangedRevoker = _tabItems.VectorChanged(auto_revoke, { get_weak(), &TabStrip::_onItemsVectorChanged });
+
+        // Workspaces are the rail's only visible surface; hide the tab rows the
+        // projection still populates underneath before the first frame.
+        _applyWorkspaceProjection();
         _highContrast = _accessibilitySettings.HighContrast();
         _highContrastChangedRevoker = _accessibilitySettings.HighContrastChanged(auto_revoke, [weakThis{ get_weak() }, dispatcher{ Dispatcher() }](auto&&, auto&&) {
             try
@@ -1474,8 +1478,126 @@ namespace winrt::TerminalApp::implementation
         {
             _tabsVisible = value;
             const auto historyVisible = _isVerticalPresentation && _sidebarFilters.RecentAgentSessionsVisible() && !_isRailCollapsed;
-            ItemsList().Visibility(value || historyVisible ? Visibility::Visible : Visibility::Collapsed);
+            ItemsList().Visibility(!_workspacesVisible && (value || historyVisible) ? Visibility::Visible : Visibility::Collapsed);
         }
+        _applyWorkspaceProjection();
+    }
+
+    // ── Workspaces (2-tier tabs) ────────────────────────────────────
+    // The sidebar's primary list renders workspaces. The tab-row projection is
+    // still driven by ItemsList so nothing above has to know the rail changed
+    // shape, but that list is kept collapsed while workspaces are visible.
+    void TabStrip::SyncWorkspaces(winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& names,
+                                  winrt::Windows::Foundation::Collections::IVector<uint32_t> const& tabCounts,
+                                  winrt::hstring const& activeName)
+    {
+        // Names the host still reports. Anything not in here is dropped below,
+        // so a workspace that vanished takes its row with it.
+        std::vector<winrt::hstring> live;
+        live.reserve(names.Size());
+
+        for (uint32_t index = 0; index < names.Size(); ++index)
+        {
+            const auto name = names.GetAt(index);
+
+            bool alreadyListed = false;
+            for (const auto& seen : live)
+            {
+                if (seen == name)
+                {
+                    alreadyListed = true;
+                    break;
+                }
+            }
+            if (alreadyListed)
+            {
+                continue;
+            }
+            live.push_back(name);
+
+            const auto count = index < tabCounts.Size() ? tabCounts.GetAt(index) : 0;
+            const auto active = name == activeName;
+
+            TerminalApp::TabStripWorkspaceItem existing{ nullptr };
+            for (const auto& candidate : _workspaceItems)
+            {
+                if (candidate.Name() == name)
+                {
+                    existing = candidate;
+                    break;
+                }
+            }
+
+            if (existing)
+            {
+                existing.TabCount(count);
+                existing.IsActive(active);
+                continue;
+            }
+
+            auto item = winrt::make<TabStripWorkspaceItem>(name);
+            item.TabCount(count);
+            item.IsActive(active);
+            _workspaceItems.Append(item);
+        }
+
+        for (int32_t index = static_cast<int32_t>(_workspaceItems.Size()) - 1; index >= 0; --index)
+        {
+            const auto name = _workspaceItems.GetAt(static_cast<uint32_t>(index)).Name();
+            bool stillLive = false;
+            for (const auto& seen : live)
+            {
+                if (seen == name)
+                {
+                    stillLive = true;
+                    break;
+                }
+            }
+            if (!stillLive)
+            {
+                _workspaceItems.RemoveAt(static_cast<uint32_t>(index));
+            }
+        }
+
+        _applyWorkspaceProjection();
+    }
+
+    void TabStrip::SetWorkspacesVisible(bool value)
+    {
+        if (_workspacesVisible == value)
+        {
+            return;
+        }
+        _workspacesVisible = value;
+        _applyWorkspaceProjection();
+    }
+
+    void TabStrip::_applyWorkspaceProjection()
+    {
+        if (!WorkspacesPanel())
+        {
+            return;
+        }
+        WorkspacesPanel().Visibility(_workspacesVisible ? Visibility::Visible : Visibility::Collapsed);
+        ItemsList().Visibility(!_workspacesVisible && _tabsVisible ? Visibility::Visible : Visibility::Collapsed);
+        WorkspacesList().ItemsSource(_workspaceItems);
+    }
+
+    void TabStrip::OnWorkspaceItemClick(winrt::Windows::Foundation::IInspectable const& /*sender*/,
+                                        winrt::Windows::UI::Xaml::Controls::ItemClickEventArgs const& e)
+    {
+        const auto item = e.ClickedItem().try_as<TerminalApp::TabStripWorkspaceItem>();
+        if (!item)
+        {
+            return;
+        }
+        WorkspaceActivated.raise(*this, item);
+    }
+
+    void TabStrip::OnWorkspaceCreateClick(winrt::Windows::Foundation::IInspectable const& /*sender*/,
+                                          winrt::Windows::UI::Xaml::RoutedEventArgs const& /*e*/)
+    {
+        WorkspaceCreateRequested.raise(*this, nullptr);
     }
     void TabStrip::IsRailCollapsed(bool value)
     {
@@ -2912,7 +3034,7 @@ namespace winrt::TerminalApp::implementation
         ToolTipService::SetToolTip(FilterTabsButton(), box_value(detailsLabel));
         WUX::Automation::AutomationProperties::SetName(FilterTabsButton(), detailsLabel);
         WUX::Automation::AutomationProperties::SetHelpText(FilterTabsButton(), detailsLabel);
-        ItemsList().Visibility(visible || _tabsVisible ? Visibility::Visible : Visibility::Collapsed);
+        ItemsList().Visibility(!_workspacesVisible && (visible || _tabsVisible) ? Visibility::Visible : Visibility::Collapsed);
         FilterStatusBar().Visibility(_isVerticalPresentation && _sidebarFilters.AgentsOnlyEffective() ?
                                          Visibility::Visible :
                                          Visibility::Collapsed);
