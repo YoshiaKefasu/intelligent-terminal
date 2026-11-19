@@ -417,6 +417,28 @@
             </mux:TeachingTip.Content>
         </mux:TeachingTip>
 
+        <!--
+            Renaming a workspace. Same shape as the WindowRenamer above, and
+            for the same reason: a TextBox inside a ContentDialog doesn't get
+            _any_ keypresses under Xaml Islands (GH#12021), so we use a
+            TeachingTip instead.
+        -->
+        <mux:TeachingTip x:Name="WorkspaceRenamer"
+                         x:Load="False"
+                         ActionButtonClick="_WorkspaceRenamerActionClick"
+                         ActionButtonStyle="{ThemeResource AccentButtonStyle}"
+                         IsLightDismissEnabled="True">
+            <mux:TeachingTip.Content>
+                <TextBox x:Name="WorkspaceRenameBox"
+                         KeyDown="_WorkspaceRenamerKeyDown"
+                         KeyUp="_WorkspaceRenamerKeyUp">
+                    <TextBox.ContextFlyout>
+                        <mtu:TextMenuFlyout />
+                    </TextBox.ContextFlyout>
+                </TextBox>
+            </mux:TeachingTip.Content>
+        </mux:TeachingTip>
+
         <mux:TeachingTip x:Name="WindowCwdToast"
                          x:Uid="WindowCwdToast"
                          Title="{x:Bind WindowProperties.VirtualWorkingDirectory, Mode=OneWay}"

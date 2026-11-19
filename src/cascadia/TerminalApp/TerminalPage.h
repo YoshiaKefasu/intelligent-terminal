@@ -925,6 +925,11 @@ namespace winrt::TerminalApp::implementation
         int _renamerLayoutCount{ 0 };
         bool _renamerPressedEnter{ false };
 
+        winrt::Windows::UI::Xaml::Controls::TextBox::LayoutUpdated_revoker _workspaceRenamerLayoutUpdatedRevoker;
+        int _workspaceRenamerLayoutCount{ 0 };
+        bool _workspaceRenamerPressedEnter{ false };
+        winrt::hstring _workspaceBeingRenamed;
+
         TerminalApp::WindowProperties _WindowProperties{ nullptr };
         PaneResources _paneResources;
 
@@ -1039,7 +1044,11 @@ namespace winrt::TerminalApp::implementation
                                         const winrt::TerminalApp::TabStripWorkspaceItem& item);
         winrt::hstring _MakeUniqueWorkspaceName(const winrt::hstring& prefix) const;
         void _RenameWorkspace(const winrt::hstring& oldName, const winrt::hstring& newName);
-        winrt::Windows::Foundation::IAsyncAction _ShowRenameWorkspaceDialog(const winrt::hstring& workspaceName);
+        void _OpenWorkspaceRenamer(const winrt::hstring& workspaceName);
+        void _WorkspaceRenamerActionClick(const IInspectable& sender, const IInspectable& eventArgs);
+        void _WorkspaceRenamerKeyDown(const IInspectable& sender, const winrt::Windows::UI::Xaml::Input::KeyRoutedEventArgs& e);
+        void _WorkspaceRenamerKeyUp(const IInspectable& sender, const winrt::Windows::UI::Xaml::Input::KeyRoutedEventArgs& e);
+        void _WorkspaceRenamerClosed(IInspectable sender, IInspectable eventArgs);
         void _DuplicateWorkspace(const winrt::hstring& sourceName);
         winrt::Windows::Foundation::IAsyncAction _CloseWorkspace(const winrt::hstring& workspaceName);
         void _ApplyTabListProjection(

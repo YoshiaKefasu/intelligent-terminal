@@ -6420,7 +6420,7 @@ namespace winrt::TerminalApp::implementation
         {
             return;
         }
-        _ShowRenameWorkspaceDialog(item.Name());
+        _OpenWorkspaceRenamer(item.Name());
     }
 
     void TerminalPage::_OnWorkspaceColorChanged(const winrt::Windows::Foundation::IInspectable& /*sender*/,
@@ -6554,96 +6554,155 @@ namespace winrt::TerminalApp::implementation
     }
 
     // Method Description:
-    // - Asks for a new name and applies it. Cancel (or an unchanged name)
-    //   leaves the workspace alone.
-    winrt::Windows::Foundation::IAsyncAction TerminalPage::_ShowRenameWorkspaceDialog(const winrt::hstring& workspaceName)
+    // - Opens the workspace renamer (a TeachingTip) for `workspaceName`.
+    //   We're not using a ContentDialog with a TextBox here on purpose: under
+    //   Xaml Islands a TextBox in a ContentDialog doesn't receive _any_
+    //   keypresses (GH#12021), which is also why the WindowRenamer uses this
+    //   exact same TeachingTip trick.
+    // Arguments:
+    // - workspaceName: the workspace as it's named right now
+    void TerminalPage::_OpenWorkspaceRenamer(const winrt::hstring& workspaceName)
     {
-        const auto weak = get_weak();
-        if (!Dispatcher().HasThreadAccess())
+        if (WorkspaceRenamer() == nullptr)
         {
-            co_await wil::resume_foreground(Dispatcher());
-        }
-        if (!weak.get())
-        {
-            co_return;
-        }
-
-        // Yield one low-priority tick so any open MenuFlyout (such as the
-        // workspace row ContextFlyout that invoked this handler) finishes
-        // dismissing before showing the ContentDialog.
-        co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Low);
-        if (!weak.get())
-        {
-            co_return;
-        }
-
-        try
-        {
-            winrt::Windows::UI::Xaml::Controls::TextBox box{};
-            box.Text(workspaceName);
-
-            winrt::Windows::UI::Xaml::Controls::ContentDialog dialog{};
-            // Do not set dialog.XamlRoot() before Content is initialized; TerminalWindow::ShowDialog
-            // attaches the dialog to the Xaml island root automatically.
-            dialog.Title(winrt::box_value(RS_(L"RenameWorkspaceDialogTitle")));
-            dialog.Content(winrt::box_value(box));
-            dialog.PrimaryButtonText(RS_(L"RenameWorkspacePrimary"));
-            dialog.CloseButtonText(RS_(L"RenameWorkspaceCancel"));
-            dialog.DefaultButton(winrt::Windows::UI::Xaml::Controls::ContentDialogButton::Primary);
-
-            std::wstring confirmedText;
-            auto loadedRevoker = box.Loaded(winrt::auto_revoke, [&box](auto&&, auto&&) {
-                try
-                {
-                    box.SelectAll();
-                }
-                CATCH_LOG()
-            });
-            auto primaryClickRevoker = dialog.PrimaryButtonClick(winrt::auto_revoke, [&box, &confirmedText](auto&&, auto&&) {
-                try
-                {
-                    const auto typedText = box.Text();
-                    confirmedText = { typedText.c_str(), typedText.size() };
-                }
-                CATCH_LOG()
-            });
-
-            if (auto presenter{ _dialogPresenter.get() })
+            // We need to use FindName to lazy-load this object
+            if (auto tip{ FindName(L"WorkspaceRenamer").try_as<MUX::Controls::TeachingTip>() })
             {
-                const auto result = co_await presenter.ShowDialog(dialog);
-                // Allow TerminalWindow::ShowDialog and WinUI popup teardown (including
-                // any dismissing row MenuFlyout) to settle before mutating _workspaceItems.
-                co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Low);
-                // ShowDialog blocks until the dialog is dismissed, so `this` may be
-                // gone by the time we resume.
-                const auto strong = weak.get();
-                if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary || confirmedText.empty())
-                {
-                    co_return;
-                }
-
-                // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
-                // sidebar rows), so surrounding whitespace is not silently kept.
-                std::wstring candidate = std::move(confirmedText);
-                const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
-                while (!candidate.empty() && isSpace(candidate.back()))
-                {
-                    candidate.pop_back();
-                }
-                while (!candidate.empty() && isSpace(candidate.front()))
-                {
-                    candidate.erase(candidate.begin());
-                }
-                if (!candidate.empty())
-                {
-                    strong->_RenameWorkspace(workspaceName, winrt::hstring{ candidate });
-                }
+                tip.Closed({ get_weak(), &TerminalPage::_WorkspaceRenamerClosed });
             }
         }
-        catch (...)
+
+        _UpdateTeachingTipTheme(WorkspaceRenamer().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
+
+        WorkspaceRenamer().Title(RS_(L"RenameWorkspaceDialogTitle"));
+        WorkspaceRenamer().ActionButtonContent(winrt::box_value(RS_(L"RenameWorkspacePrimary")));
+        WorkspaceRenamer().CloseButtonContent(winrt::box_value(RS_(L"RenameWorkspaceCancel")));
+
+        // Hold on to the old name: that's the key `_RenameWorkspace` moves over.
+        _workspaceBeingRenamed = workspaceName;
+        WorkspaceRenameBox().Text(workspaceName);
+
+        // BODGY: GH#12021 - TeachingTip doesn't provide an Opened event, so we
+        // wait for the text box to show up in the visual tree instead. The
+        // _first_ LayoutUpdated isn't enough to take focus, the second one is;
+        // subsequent opens only ever fire one LayoutUpdated, but by then
+        // focusing works on it. Same dance as _HandleOpenWindowRenamer.
+        _workspaceRenamerLayoutUpdatedRevoker.revoke();
+        _workspaceRenamerLayoutCount = 0;
+        _workspaceRenamerLayoutUpdatedRevoker = WorkspaceRenameBox().LayoutUpdated(winrt::auto_revoke, [weakThis = get_weak()](auto&&, auto&&) {
+            const auto self{ weakThis.get() };
+            if (!self)
+            {
+                return;
+            }
+
+            auto& count{ self->_workspaceRenamerLayoutCount };
+            // Don't just always increment this, we don't want to deal with
+            // overflow situations
+            if (count < 2)
+            {
+                count++;
+            }
+
+            if (count >= 2)
+            {
+                self->_workspaceRenamerLayoutUpdatedRevoker.revoke();
+                self->WorkspaceRenameBox().Focus(FocusState::Programmatic);
+                // Start from a clean slate, so typing replaces the old name
+                self->WorkspaceRenameBox().SelectAll();
+            }
+        });
+
+        // The Enter that opened this (from the workspace row's context menu)
+        // must not be mistaken for "commit the rename".
+        _workspaceRenamerPressedEnter = false;
+        WorkspaceRenamer().IsOpen(true);
+    }
+
+    // Method Description:
+    // - Called when the user hits the "Save" button of the workspace renamer,
+    //   or presses Enter in its text box. Cancel (or an unchanged name) leaves
+    //   the workspace alone.
+    // Arguments:
+    // - <unused>
+    void TerminalPage::_WorkspaceRenamerActionClick(const IInspectable& /*sender*/,
+                                                   const IInspectable& /*eventArgs*/)
+    {
+        const auto typed = WorkspaceRenameBox().Text();
+        // `_WorkspaceRenamerClosed` clears this, so read it before closing.
+        const auto oldName = _workspaceBeingRenamed;
+        WorkspaceRenamer().IsOpen(false);
+
+        // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
+        // sidebar rows), so surrounding whitespace is not silently kept.
+        std::wstring candidate{ typed.c_str(), typed.size() };
+        const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
+        while (!candidate.empty() && isSpace(candidate.back()))
         {
-            LOG_CAUGHT_EXCEPTION();
+            candidate.pop_back();
         }
+        while (!candidate.empty() && isSpace(candidate.front()))
+        {
+            candidate.erase(candidate.begin());
+        }
+        if (!candidate.empty())
+        {
+            _RenameWorkspace(oldName, winrt::hstring{ candidate });
+        }
+    }
+
+    // Method Description:
+    // - Used to track if the user pressed enter with the workspace renamer
+    //   open, so the Enter that opened it can't also commit the rename.
+    // Arguments:
+    // - e: the KeyRoutedEventArgs describing the key that was pressed
+    // Return Value:
+    // - <none>
+    void TerminalPage::_WorkspaceRenamerKeyDown(const IInspectable& /*sender*/,
+                                                const winrt::Windows::UI::Xaml::Input::KeyRoutedEventArgs& e)
+    {
+        if (e.OriginalKey() == Windows::System::VirtualKey::Enter)
+        {
+            _workspaceRenamerPressedEnter = true;
+        }
+    }
+
+    // Method Description:
+    // - Manually handle Enter and Escape for committing and dismissing a
+    //   workspace rename. Highly similar to the TabHeaderControl's KeyUp
+    //   handler.
+    // Arguments:
+    // - e: the KeyRoutedEventArgs describing the key that was released
+    // Return Value:
+    // - <none>
+    void TerminalPage::_WorkspaceRenamerKeyUp(const IInspectable& sender,
+                                             const winrt::Windows::UI::Xaml::Input::KeyRoutedEventArgs& e)
+    {
+        const auto key = e.OriginalKey();
+        if (key == Windows::System::VirtualKey::Enter && _workspaceRenamerPressedEnter)
+        {
+            // User is done making changes, close the rename box
+            _WorkspaceRenamerActionClick(sender, nullptr);
+        }
+        else if (key == Windows::System::VirtualKey::Escape)
+        {
+            // User wants to discard the changes they made
+            WorkspaceRenameBox().Text(_workspaceBeingRenamed);
+            WorkspaceRenamer().IsOpen(false);
+            _workspaceRenamerPressedEnter = false;
+        }
+    }
+
+    // Method Description:
+    // - Called when the workspace renamer closes, however it was dismissed.
+    // - Drops the pending rename and hands focus back to the terminal.
+    void TerminalPage::_WorkspaceRenamerClosed(IInspectable /*sender*/,
+                                              IInspectable /*eventArgs*/)
+    {
+        _workspaceRenamerLayoutUpdatedRevoker.revoke();
+        _workspaceRenamerPressedEnter = false;
+        _workspaceBeingRenamed = winrt::hstring{};
+        _FocusActiveControl(nullptr, nullptr);
     }
 
     // Method Description:

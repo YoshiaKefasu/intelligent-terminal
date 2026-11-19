@@ -2318,6 +2318,13 @@ void Pane::_SetupEntranceAnimation()
         // * apply the animation to the Width or Height property.
         Media::Animation::Storyboard s;
         s.Duration(AnimationDuration);
+        // By default a DoubleAnimation "holds" its final value
+        // (FillBehavior::HoldEnd), and an animated value outranks the local
+        // value we set in the Completed handler below. Without Stop, the grid
+        // would stay pinned at the size it animated to forever, instead of
+        // stretching to fill the pane again.
+        s.FillBehavior(Media::Animation::FillBehavior::Stop);
+        animation.FillBehavior(Media::Animation::FillBehavior::Stop);
         s.Children().Append(animation);
         s.SetTarget(animation, childGrid);
         s.SetTargetProperty(animation, splitWidth ? L"Width" : L"Height");
