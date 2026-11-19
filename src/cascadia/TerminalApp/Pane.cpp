@@ -1835,6 +1835,7 @@ void Pane::_CloseChild(const bool closeFirst)
 
 void Pane::_CloseChildRoutine(const bool closeFirst)
 {
+    _StopEntranceAnimations();
     // This will query if animations are enabled via the "Show animations in
     // Windows" setting in the OS
     winrt::Windows::UI::ViewManagement::UISettings uiSettings;
@@ -2394,12 +2395,25 @@ void Pane::_SetupEntranceAnimation()
 
         // Start the animation.
         s.Begin();
+        _entranceStoryboards.push_back(s);
     };
 
     // TODO: GH#7365 - animating the first child right now doesn't _really_ do
     // anything. We could do better though.
     setupAnimation(firstSize, true);
     setupAnimation(secondSize, false);
+}
+
+void Pane::_StopEntranceAnimations()
+{
+    for (auto& s : _entranceStoryboards)
+    {
+        if (s)
+        {
+            s.Stop();
+        }
+    }
+    _entranceStoryboards.clear();
 }
 
 // Method Description:
@@ -2784,6 +2798,8 @@ void Pane::Restore(std::shared_ptr<Pane> zoomedPane)
 // - <none>
 void Pane::HidePane(std::shared_ptr<Pane> hiddenPane)
 {
+    _StopEntranceAnimations();
+    hiddenPane->_StopEntranceAnimations();
     hiddenPane->_hidden = true;
     if (!_IsLeaf())
     {

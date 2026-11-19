@@ -23,6 +23,8 @@
 #include "TaskbarState.h"
 #include "TerminalPaneContent.h"
 
+#include <vector>
+
 // fwdecl unittest classes
 namespace TerminalAppLocalTests
 {
@@ -328,6 +330,10 @@ private:
     void _setPaneContent(winrt::TerminalApp::IPaneContent content, std::optional<uint32_t> contentId = std::nullopt);
     bool _HasChild(const std::shared_ptr<Pane> child);
     winrt::TerminalApp::TerminalPaneContent _getTerminalContent() const;
+
+    std::vector<winrt::Windows::UI::Xaml::Media::Animation::Storyboard> _entranceStoryboards;
+
+    void _StopEntranceAnimations();
 
     std::pair<std::shared_ptr<Pane>, std::shared_ptr<Pane>> _Split(winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType,
                                                                    const float splitSize,

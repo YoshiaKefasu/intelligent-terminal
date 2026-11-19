@@ -4032,6 +4032,13 @@ namespace winrt::TerminalApp::implementation
                                                         bool focusPane,
                                                         std::wstring_view initialYoloControlOwner)
     {
+        // Agent chat pane has been debloated; skip background pre-warm and stash
+        // to prevent stale entrance animation (FillBehavior::HoldEnd) from pinning
+        // inactive tabs' panes at 50% width (850px) and leaving transparent gaps.
+        if (autoStash)
+        {
+            return false;
+        }
         if (!tab || !tab->GetActiveTerminalControl())
         {
             return false;
