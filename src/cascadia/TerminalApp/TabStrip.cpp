@@ -1665,7 +1665,10 @@ namespace winrt::TerminalApp::implementation
         }
         WorkspacesPanel().Visibility(_workspacesVisible ? Visibility::Visible : Visibility::Collapsed);
         ItemsList().Visibility(!_workspacesVisible && _tabsVisible ? Visibility::Visible : Visibility::Collapsed);
-        WorkspacesList().ItemsSource(_workspaceItems);
+        if (WorkspacesList().ItemsSource() != _workspaceItems)
+        {
+            WorkspacesList().ItemsSource(_workspaceItems);
+        }
     }
 
     void TabStrip::OnWorkspaceItemClick(winrt::Windows::Foundation::IInspectable const& /*sender*/,

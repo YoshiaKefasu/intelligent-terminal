@@ -63,6 +63,11 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         WINRT_PROPERTY(winrt::Windows::Foundation::IReference<Model::LaunchPosition>, InitialPosition, nullptr);
         WINRT_PROPERTY(winrt::Windows::Foundation::IReference<winrt::Windows::Foundation::Size>, InitialSize, nullptr);
         WINRT_PROPERTY(winrt::Windows::Foundation::IReference<Model::LaunchMode>, LaunchMode, nullptr);
+        WINRT_PROPERTY(winrt::hstring, ActiveWorkspace, L"");
+        WINRT_PROPERTY(Windows::Foundation::Collections::IVector<winrt::hstring>, WorkspaceNames, nullptr);
+        WINRT_PROPERTY(Windows::Foundation::Collections::IVector<uint32_t>, WorkspaceColors, nullptr);
+        WINRT_PROPERTY(Windows::Foundation::Collections::IVector<uint32_t>, WorkspaceLastTabIndices, nullptr);
+        WINRT_PROPERTY(Windows::Foundation::Collections::IVector<winrt::hstring>, TabWorkspaceNames, nullptr);
 
         friend ::Microsoft::Terminal::Settings::Model::JsonUtils::ConversionTrait<Model::WindowLayout>;
     };

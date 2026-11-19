@@ -24,6 +24,11 @@ namespace Microsoft.Terminal.Settings.Model
         Windows.Foundation.IReference<LaunchPosition> InitialPosition;
         Windows.Foundation.IReference<Windows.Foundation.Size> InitialSize;
         Windows.Foundation.IReference<LaunchMode> LaunchMode;
+        String ActiveWorkspace;
+        Windows.Foundation.Collections.IVector<String> WorkspaceNames;
+        Windows.Foundation.Collections.IVector<UInt32> WorkspaceColors;
+        Windows.Foundation.Collections.IVector<UInt32> WorkspaceLastTabIndices;
+        Windows.Foundation.Collections.IVector<String> TabWorkspaceNames;
     };
 
     [default_interface] runtimeclass ApplicationState {

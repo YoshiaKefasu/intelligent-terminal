@@ -20,6 +20,11 @@ static constexpr std::string_view TabLayoutKey{ "tabLayout" };
 static constexpr std::string_view InitialPositionKey{ "initialPosition" };
 static constexpr std::string_view InitialSizeKey{ "initialSize" };
 static constexpr std::string_view LaunchModeKey{ "launchMode" };
+static constexpr std::string_view ActiveWorkspaceKey{ "activeWorkspace" };
+static constexpr std::string_view WorkspaceNamesKey{ "workspaceNames" };
+static constexpr std::string_view WorkspaceColorsKey{ "workspaceColors" };
+static constexpr std::string_view WorkspaceLastTabIndicesKey{ "workspaceLastTabIndices" };
+static constexpr std::string_view TabWorkspaceNamesKey{ "tabWorkspaceNames" };
 
 namespace Microsoft::Terminal::Settings::Model::JsonUtils
 {
@@ -36,6 +41,11 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
             GetValueForKey(json, InitialPositionKey, layout->_InitialPosition);
             GetValueForKey(json, LaunchModeKey, layout->_LaunchMode);
             GetValueForKey(json, InitialSizeKey, layout->_InitialSize);
+            GetValueForKey(json, ActiveWorkspaceKey, layout->_ActiveWorkspace);
+            GetValueForKey(json, WorkspaceNamesKey, layout->_WorkspaceNames);
+            GetValueForKey(json, WorkspaceColorsKey, layout->_WorkspaceColors);
+            GetValueForKey(json, WorkspaceLastTabIndicesKey, layout->_WorkspaceLastTabIndices);
+            GetValueForKey(json, TabWorkspaceNamesKey, layout->_TabWorkspaceNames);
 
             return *layout;
         }
@@ -53,6 +63,11 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
             SetValueForKey(json, InitialPositionKey, val.InitialPosition());
             SetValueForKey(json, LaunchModeKey, val.LaunchMode());
             SetValueForKey(json, InitialSizeKey, val.InitialSize());
+            SetValueForKey(json, ActiveWorkspaceKey, val.ActiveWorkspace());
+            SetValueForKey(json, WorkspaceNamesKey, val.WorkspaceNames());
+            SetValueForKey(json, WorkspaceColorsKey, val.WorkspaceColors());
+            SetValueForKey(json, WorkspaceLastTabIndicesKey, val.WorkspaceLastTabIndices());
+            SetValueForKey(json, TabWorkspaceNamesKey, val.TabWorkspaceNames());
 
             return json;
         }

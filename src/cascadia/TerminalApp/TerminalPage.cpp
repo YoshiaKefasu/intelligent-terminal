@@ -6534,10 +6534,20 @@ namespace winrt::TerminalApp::implementation
             _workspaceColors[std::wstring{ newName.c_str(), newName.size() }] = value;
         }
 
+        try
+        {
+            ApplicationState::SharedInstance().RenameWorkspace(oldName, newName);
+        }
+        CATCH_LOG()
+
         if (_activeWorkspace == oldName)
         {
             _activeWorkspace = newName;
-            _tabRow.WorkspaceName(_WindowProperties.WindowName());
+            if (_tabRow)
+            {
+                _tabRow.WorkspaceName(newName);
+            }
+            _ApplyWorkspaceFilter();
         }
 
         _SyncWorkspaceList();
@@ -6548,45 +6558,75 @@ namespace winrt::TerminalApp::implementation
     //   leaves the workspace alone.
     winrt::Windows::Foundation::IAsyncAction TerminalPage::_ShowRenameWorkspaceDialog(const winrt::hstring& workspaceName)
     {
+        const auto weak = get_weak();
+        if (!Dispatcher().HasThreadAccess())
+        {
+            co_await wil::resume_foreground(Dispatcher());
+        }
+        if (!weak.get())
+        {
+            co_return;
+        }
+
+        // Yield one low-priority tick so any open MenuFlyout (such as the
+        // workspace row ContextFlyout that invoked this handler) finishes
+        // dismissing before showing the ContentDialog.
+        co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Low);
+        if (!weak.get())
+        {
+            co_return;
+        }
+
         winrt::Windows::UI::Xaml::Controls::TextBox box{};
         box.Text(workspaceName);
         box.SelectAll();
 
         winrt::Windows::UI::Xaml::Controls::ContentDialog dialog{};
-        dialog.XamlRoot(Content().XamlRoot());
+        // Do not set dialog.XamlRoot() before Content is initialized; TerminalWindow::ShowDialog
+        // attaches the dialog to the Xaml island root automatically.
         dialog.Title(winrt::box_value(RS_(L"RenameWorkspaceDialogTitle")));
         dialog.Content(winrt::box_value(box));
         dialog.PrimaryButtonText(RS_(L"RenameWorkspacePrimary"));
         dialog.CloseButtonText(RS_(L"RenameWorkspaceCancel"));
         dialog.DefaultButton(winrt::Windows::UI::Xaml::Controls::ContentDialogButton::Primary);
 
-        const auto weak = get_weak();
         if (auto presenter{ _dialogPresenter.get() })
         {
-            const auto result = co_await presenter.ShowDialog(dialog);
-            // ShowDialog blocks until the dialog is dismissed, so `this` may be
-            // gone by the time we resume.
-            const auto strong = weak.get();
-            if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary)
+            try
             {
-                co_return;
-            }
+                const auto result = co_await presenter.ShowDialog(dialog);
+                // Allow TerminalWindow::ShowDialog and WinUI popup teardown (including
+                // any dismissing row MenuFlyout) to settle before mutating _workspaceItems.
+                co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Low);
+                // ShowDialog blocks until the dialog is dismissed, so `this` may be
+                // gone by the time we resume.
+                const auto strong = weak.get();
+                if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary)
+                {
+                    co_return;
+                }
 
-            // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
-            // sidebar rows), so surrounding whitespace is not silently kept.
-            std::wstring candidate{ box.Text().c_str(), box.Text().size() };
-            const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
-            while (!candidate.empty() && isSpace(candidate.back()))
-            {
-                candidate.pop_back();
+                const auto typedText = box.Text();
+                // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
+                // sidebar rows), so surrounding whitespace is not silently kept.
+                std::wstring candidate{ typedText.c_str(), typedText.size() };
+                const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
+                while (!candidate.empty() && isSpace(candidate.back()))
+                {
+                    candidate.pop_back();
+                }
+                while (!candidate.empty() && isSpace(candidate.front()))
+                {
+                    candidate.erase(candidate.begin());
+                }
+                if (!candidate.empty())
+                {
+                    strong->_RenameWorkspace(workspaceName, winrt::hstring{ candidate });
+                }
             }
-            while (!candidate.empty() && isSpace(candidate.front()))
+            catch (...)
             {
-                candidate.erase(candidate.begin());
-            }
-            if (!candidate.empty())
-            {
-                strong->_RenameWorkspace(workspaceName, winrt::hstring{ candidate });
+                LOG_CAUGHT_EXCEPTION();
             }
         }
     }
@@ -9317,6 +9357,43 @@ namespace winrt::TerminalApp::implementation
         // See GH#13136.
         auto suspend = _tabs.Size() > 0 && !forceFirstActionSynchronous;
 
+        const bool restoringStartupWorkspaces = (_startupState == StartupState::InStartup && !_startupTabWorkspaces.empty());
+        if (restoringStartupWorkspaces)
+        {
+            _startupTabActionCursor = 0;
+            // `_startupWorkspaceNames` (from `layout.WorkspaceNames()`) is the
+            // index-aligned order used when saving `wsColors` /
+            // `wsLastTabIndices`, and it also contains workspaces that currently
+            // have no tabs. Prefer it so colors and last-tab positions can't be
+            // applied to a different workspace, and so empty workspaces survive a
+            // restart. Fall back to the tab-derived list for older layouts.
+            _workspaces = _startupWorkspaceNames.empty() ? _startupTabWorkspaces : _startupWorkspaceNames;
+            if (!_startupActiveWorkspace.empty() &&
+                std::find(_workspaces.begin(), _workspaces.end(), _startupActiveWorkspace) == _workspaces.end())
+            {
+                _workspaces.push_back(_startupActiveWorkspace);
+            }
+            _workspaceColors.clear();
+            size_t colorIdx = 0;
+            for (const auto& ws : _workspaces)
+            {
+                if (colorIdx < _startupWorkspaceColors.size() && _startupWorkspaceColors[colorIdx] != 0)
+                {
+                    _workspaceColors[std::wstring{ ws.c_str(), ws.size() }] = _startupWorkspaceColors[colorIdx];
+                }
+                ++colorIdx;
+            }
+            if (!_startupTabWorkspaces.empty())
+            {
+                _activeWorkspace = _startupTabWorkspaces.front();
+            }
+            else if (!_startupActiveWorkspace.empty())
+            {
+                _activeWorkspace = _startupActiveWorkspace;
+            }
+            _EnsureWorkspaceRegistered(_activeWorkspace);
+        }
+
         ++_startupActionReplayDepth;
         auto clearReplaying = wil::scope_exit([this]() noexcept {
             if (_startupActionReplayDepth > 0)
@@ -9336,11 +9413,86 @@ namespace winrt::TerminalApp::implementation
                 co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Low);
             }
 
+            if (restoringStartupWorkspaces &&
+                _startupTabActionCursor < _startupTabWorkspaces.size() &&
+                (actions[i].Action() == ShortcutAction::NewTab || actions[i].Action() == ShortcutAction::OpenSettings))
+            {
+                const auto& targetWs = _startupTabWorkspaces[_startupTabActionCursor++];
+                if (!targetWs.empty() && targetWs != _activeWorkspace)
+                {
+                    _activeWorkspace = targetWs;
+                    _EnsureWorkspaceRegistered(targetWs);
+                }
+            }
+
             _actionDispatch->DoAction(actions[i]);
             suspend = true;
         }
 
         clearReplaying.reset();
+
+        if (restoringStartupWorkspaces)
+        {
+            if (!_startupActiveWorkspace.empty() && _startupActiveWorkspace != _activeWorkspace)
+            {
+                _SwitchToWorkspace(_startupActiveWorkspace);
+            }
+            else
+            {
+                _ApplyWorkspaceFilter();
+            }
+
+            size_t wsIdx = 0;
+            // Iterate `_workspaces`, not `_startupTabWorkspaces`: the saved
+            // indices are ordered by `WorkspaceNames()`.
+            for (const auto& wsName : _workspaces)
+            {
+                if (wsIdx < _startupWorkspaceLastTabIndices.size())
+                {
+                    const auto savedIdx = _startupWorkspaceLastTabIndices[wsIdx];
+                    if (savedIdx < _tabs.Size())
+                    {
+                        if (const auto impl = _GetTabImpl(_tabs.GetAt(savedIdx)))
+                        {
+                            _workspaceLastTabId[std::wstring{ wsName.c_str(), wsName.size() }] = impl->StableId();
+                        }
+                    }
+                }
+                ++wsIdx;
+            }
+
+            if (!_startupActiveWorkspace.empty() && _startupActiveWorkspace == _activeWorkspace)
+            {
+                const auto key = std::wstring{ _startupActiveWorkspace.c_str(), _startupActiveWorkspace.size() };
+                const auto remembered = _workspaceLastTabId.find(key);
+                if (remembered != _workspaceLastTabId.end())
+                {
+                    for (const auto& tab : _tabs)
+                    {
+                        if (_TabIsInActiveWorkspace(tab))
+                        {
+                            if (const auto impl = _GetTabImpl(tab))
+                            {
+                                if (impl->StableId() == remembered->second)
+                                {
+                                    _selectedTabItem(tab.TabViewItem());
+                                    _UpdatedSelectedTab(tab);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            _startupWorkspaceNames.clear();
+            _startupTabWorkspaces.clear();
+            _startupWorkspaceColors.clear();
+            _startupWorkspaceLastTabIndices.clear();
+            _startupActiveWorkspace = winrt::hstring{};
+            _startupTabActionCursor = 0;
+            _SyncWorkspaceList();
+        }
 
         // GH#6586: now that we're done processing all startup commands,
         // focus the active control. This will work as expected for both
@@ -14440,11 +14592,21 @@ namespace winrt::TerminalApp::implementation
         QuitRequested.raise(nullptr, nullptr);
     }
 
-    std::vector<ActionAndArgs> TerminalPage::_BuildPersistedTabActions(Tab* tab)
+    std::vector<ActionAndArgs> TerminalPage::_BuildPersistedTabActions(Tab* tab, const winrt::hstring& workspaceName)
     {
         _RefreshAgentRestoreIdentity(tab);
         auto actions = tab->BuildStartupActions(BuildStartupKind::Persist);
         _StampAgentResumeCommandlines(actions);
+        if (!workspaceName.empty() && !actions.empty())
+        {
+            if (const auto newTabArgs = actions.front().Args().try_as<NewTabArgs>())
+            {
+                if (const auto termArgs = newTabArgs.ContentArgs().try_as<NewTerminalArgs>())
+                {
+                    termArgs.TabTitle(termArgs.TabTitle().empty() && tab ? tab->Title() : termArgs.TabTitle());
+                }
+            }
+        }
         return actions;
     }
 
@@ -14459,11 +14621,17 @@ namespace winrt::TerminalApp::implementation
         }
 
         std::vector<ActionAndArgs> actions;
+        winrt::Windows::Foundation::Collections::IVector<winrt::hstring> tabWorkspaces{ winrt::single_threaded_vector<winrt::hstring>() };
 
         for (auto tab : _tabs)
         {
             auto t = winrt::get_self<implementation::Tab>(tab);
-            auto tabActions = _BuildPersistedTabActions(t);
+            const auto ws = t->Workspace().empty() ? winrt::hstring{ L"Default" } : t->Workspace();
+            auto tabActions = _BuildPersistedTabActions(t, ws);
+            if (!tabActions.empty())
+            {
+                tabWorkspaces.Append(ws);
+            }
             actions.insert(actions.end(), std::make_move_iterator(tabActions.begin()), std::make_move_iterator(tabActions.end()));
         }
 
@@ -14498,6 +14666,58 @@ namespace winrt::TerminalApp::implementation
 
         WindowLayout layout;
         layout.TabLayout(winrt::single_threaded_vector<ActionAndArgs>(std::move(actions)));
+        layout.TabWorkspaceNames(tabWorkspaces);
+        layout.ActiveWorkspace(_activeWorkspace);
+
+        winrt::Windows::Foundation::Collections::IVector<winrt::hstring> wsNames{ winrt::single_threaded_vector<winrt::hstring>() };
+        winrt::Windows::Foundation::Collections::IVector<uint32_t> wsColors{ winrt::single_threaded_vector<uint32_t>() };
+        winrt::Windows::Foundation::Collections::IVector<uint32_t> wsLastTabIndices{ winrt::single_threaded_vector<uint32_t>() };
+
+        std::vector<winrt::hstring> orderedWorkspaceNames{ _workspaces.begin(), _workspaces.end() };
+        for (const auto& ws : tabWorkspaces)
+        {
+            if (std::find(orderedWorkspaceNames.begin(), orderedWorkspaceNames.end(), ws) == orderedWorkspaceNames.end())
+            {
+                orderedWorkspaceNames.push_back(ws);
+            }
+        }
+        if (std::find(orderedWorkspaceNames.begin(), orderedWorkspaceNames.end(), _activeWorkspace) == orderedWorkspaceNames.end())
+        {
+            orderedWorkspaceNames.insert(orderedWorkspaceNames.begin(), _activeWorkspace);
+        }
+
+        for (const auto& name : orderedWorkspaceNames)
+        {
+            if (name.empty())
+            {
+                continue;
+            }
+            const auto key = std::wstring{ name.c_str(), name.size() };
+            wsNames.Append(name);
+            const auto colorIt = _workspaceColors.find(key);
+            wsColors.Append(colorIt != _workspaceColors.end() ? colorIt->second : 0u);
+
+            uint32_t lastIdx = tabCount;
+            const auto lastIt = _workspaceLastTabId.find(key);
+            if (lastIt != _workspaceLastTabId.end())
+            {
+                for (uint32_t i = 0; i < tabCount; ++i)
+                {
+                    if (const auto impl = _GetTabImpl(_tabs.GetAt(i)))
+                    {
+                        if (impl->StableId() == lastIt->second)
+                        {
+                            lastIdx = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            wsLastTabIndices.Append(lastIdx);
+        }
+        layout.WorkspaceNames(wsNames);
+        layout.WorkspaceColors(wsColors);
+        layout.WorkspaceLastTabIndices(wsLastTabIndices);
 
         auto mode = LaunchMode::DefaultMode;
         WI_SetFlagIf(mode, LaunchMode::FullscreenMode, _isFullscreen);
@@ -14540,6 +14760,11 @@ namespace winrt::TerminalApp::implementation
         }
 
         std::vector<ActionAndArgs> extraActions;
+        auto tabWorkspaces = visibleLayout ? visibleLayout.TabWorkspaceNames() : nullptr;
+        if (!tabWorkspaces)
+        {
+            tabWorkspaces = winrt::single_threaded_vector<winrt::hstring>();
+        }
         const auto available = _manager.KeptGroups();
         for (const auto& owner : _manager.KeptPages())
         {
@@ -14552,7 +14777,12 @@ namespace winrt::TerminalApp::implementation
                 {
                     continue;
                 }
-                auto actions = page->_BuildPersistedTabActions(impl);
+                const auto ws = impl->Workspace().empty() ? winrt::hstring{ L"Default" } : impl->Workspace();
+                auto actions = page->_BuildPersistedTabActions(impl, ws);
+                if (!actions.empty())
+                {
+                    tabWorkspaces.Append(ws);
+                }
                 extraActions.insert(extraActions.end(), std::make_move_iterator(actions.begin()), std::make_move_iterator(actions.end()));
             }
         }
@@ -14572,6 +14802,10 @@ namespace winrt::TerminalApp::implementation
             layout.InitialPosition(visibleLayout.InitialPosition());
             layout.InitialSize(visibleLayout.InitialSize());
             layout.LaunchMode(visibleLayout.LaunchMode());
+            layout.ActiveWorkspace(visibleLayout.ActiveWorkspace());
+            layout.WorkspaceNames(visibleLayout.WorkspaceNames());
+            layout.WorkspaceColors(visibleLayout.WorkspaceColors());
+            layout.WorkspaceLastTabIndices(visibleLayout.WorkspaceLastTabIndices());
         }
         actions.insert(actions.end(), std::make_move_iterator(extraActions.begin()), std::make_move_iterator(extraActions.end()));
         if (visibleLayout)
@@ -14582,6 +14816,7 @@ namespace winrt::TerminalApp::implementation
             }
         }
         layout.TabLayout(winrt::single_threaded_vector<ActionAndArgs>(std::move(actions)));
+        layout.TabWorkspaceNames(tabWorkspaces);
         return layout;
     }
 
@@ -17535,9 +17770,41 @@ namespace winrt::TerminalApp::implementation
     // - actions: a list of Actions to process on startup.
     // Return Value:
     // - <none>
-    void TerminalPage::SetStartupActions(std::vector<ActionAndArgs> actions)
+    void TerminalPage::SetStartupActions(std::vector<ActionAndArgs> actions,
+                                         const winrt::Microsoft::Terminal::Settings::Model::WindowLayout& layout)
     {
         _startupActions = std::move(actions);
+        // Reset everything first: a second call (e.g. a new window layout handed
+        // to a reused page) must not inherit the previous layout's workspaces.
+        _startupActiveWorkspace = winrt::hstring{};
+        _startupWorkspaceNames.clear();
+        _startupTabWorkspaces.clear();
+        _startupWorkspaceColors.clear();
+        _startupWorkspaceLastTabIndices.clear();
+        _startupTabActionCursor = 0;
+        if (layout)
+        {
+            _startupActiveWorkspace = layout.ActiveWorkspace();
+            if (const auto wn = layout.WorkspaceNames())
+            {
+                _startupWorkspaceNames.assign(wn.begin(), wn.end());
+            }
+            _startupTabWorkspaces.clear();
+            if (const auto tw = layout.TabWorkspaceNames())
+            {
+                _startupTabWorkspaces.assign(tw.begin(), tw.end());
+            }
+            _startupWorkspaceColors.clear();
+            if (const auto wc = layout.WorkspaceColors())
+            {
+                _startupWorkspaceColors.assign(wc.begin(), wc.end());
+            }
+            _startupWorkspaceLastTabIndices.clear();
+            if (const auto lt = layout.WorkspaceLastTabIndices())
+            {
+                _startupWorkspaceLastTabIndices.assign(lt.begin(), lt.end());
+            }
+        }
     }
 
     void TerminalPage::SetStartupConnection(ITerminalConnection connection)

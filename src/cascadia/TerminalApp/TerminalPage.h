@@ -205,7 +205,8 @@ namespace winrt::TerminalApp::implementation
         void Maximized(bool newMaximized);
         void RequestSetMaximized(bool newMaximized);
 
-        void SetStartupActions(std::vector<Microsoft::Terminal::Settings::Model::ActionAndArgs> actions);
+        void SetStartupActions(std::vector<Microsoft::Terminal::Settings::Model::ActionAndArgs> actions,
+                               const winrt::Microsoft::Terminal::Settings::Model::WindowLayout& layout = nullptr);
         void SetStartupTransfer(uint64_t transferId) noexcept { _startupTransferId = transferId; }
         void ContentTransferReceiverReady();
         void SetStartupConnection(winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection connection);
@@ -430,6 +431,18 @@ namespace winrt::TerminalApp::implementation
         // Keyed by workspace name so it survives the sidebar's row recycling and
         // a rename (which migrates the entry).
         std::unordered_map<std::wstring, uint32_t> _workspaceColors;
+        // Startup workspace state to restore when replaying persisted window layouts.
+        winrt::hstring _startupActiveWorkspace;
+        // Canonical workspace order as persisted in `WindowLayout::WorkspaceNames`.
+        // `WorkspaceColors` / `WorkspaceLastTabIndices` are saved in this exact
+        // order, so the restore path must rebuild `_workspaces` from it to keep
+        // the indices aligned. Unlike `_startupTabWorkspaces`, this also lists
+        // workspaces that currently own no tabs.
+        std::vector<winrt::hstring> _startupWorkspaceNames;
+        std::vector<winrt::hstring> _startupTabWorkspaces;
+        std::vector<uint32_t> _startupWorkspaceColors;
+        std::vector<uint32_t> _startupWorkspaceLastTabIndices;
+        size_t _startupTabActionCursor{ 0 };
         // Set when the projection had to bail out mid-mutation; the caller re-runs it.
         bool _pendingWorkspaceFilter{ false };
         static winrt::com_ptr<Tab> _GetTabImpl(const TerminalApp::Tab& tab);
@@ -1300,7 +1313,8 @@ namespace winrt::TerminalApp::implementation
         safe_void_coroutine _ExportTab(const Tab& tab, winrt::hstring filepath);
         void _RefreshAgentRestoreIdentity(Tab* tab);
         void _StampAgentResumeCommandlines(std::vector<winrt::Microsoft::Terminal::Settings::Model::ActionAndArgs>& actions);
-        std::vector<winrt::Microsoft::Terminal::Settings::Model::ActionAndArgs> _BuildPersistedTabActions(Tab* tab);
+        std::vector<winrt::Microsoft::Terminal::Settings::Model::ActionAndArgs> _BuildPersistedTabActions(Tab* tab,
+                                                                                                          const winrt::hstring& workspaceName = {});
         winrt::Microsoft::Terminal::Settings::Model::WindowLayout _AppendKeptTabsToStartupLayout(const winrt::Microsoft::Terminal::Settings::Model::WindowLayout& visibleLayout);
         // Pane ids whose terminal end event (`closed` / `failed`) already went
         // out on ProtocolVtSequenceReceived for the current TermControl
