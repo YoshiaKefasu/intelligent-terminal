@@ -426,6 +426,10 @@ namespace winrt::TerminalApp::implementation
         // Last focused tab per workspace, keyed by `Tab::StableId`. An index into
         // `_tabs` would shift whenever any tab closes, so the stable id is used.
         std::unordered_map<std::wstring, winrt::hstring> _workspaceLastTabId;
+        // Per-workspace indicator color, ARGB; an absent entry means "no color".
+        // Keyed by workspace name so it survives the sidebar's row recycling and
+        // a rename (which migrates the entry).
+        std::unordered_map<std::wstring, uint32_t> _workspaceColors;
         // Set when the projection had to bail out mid-mutation; the caller re-runs it.
         bool _pendingWorkspaceFilter{ false };
         static winrt::com_ptr<Tab> _GetTabImpl(const TerminalApp::Tab& tab);
@@ -1012,6 +1016,19 @@ namespace winrt::TerminalApp::implementation
                                    const winrt::TerminalApp::TabStripWorkspaceItem& item);
         void _OnWorkspaceCreateRequested(const winrt::Windows::Foundation::IInspectable& sender,
                                          const winrt::Windows::Foundation::IInspectable& args);
+        void _OnWorkspaceRenameRequested(const winrt::Windows::Foundation::IInspectable& sender,
+                                         const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        void _OnWorkspaceColorChanged(const winrt::Windows::Foundation::IInspectable& sender,
+                                      const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        void _OnWorkspaceDuplicateRequested(const winrt::Windows::Foundation::IInspectable& sender,
+                                            const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        void _OnWorkspaceCloseRequested(const winrt::Windows::Foundation::IInspectable& sender,
+                                        const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        winrt::hstring _MakeUniqueWorkspaceName(const winrt::hstring& prefix) const;
+        void _RenameWorkspace(const winrt::hstring& oldName, const winrt::hstring& newName);
+        winrt::Windows::Foundation::IAsyncAction _ShowRenameWorkspaceDialog(const winrt::hstring& workspaceName);
+        void _DuplicateWorkspace(const winrt::hstring& sourceName);
+        winrt::Windows::Foundation::IAsyncAction _CloseWorkspace(const winrt::hstring& workspaceName);
         void _ApplyTabListProjection(
             const TerminalApp::Tab& changedTab = nullptr,
             bool refreshPaneItems = true,

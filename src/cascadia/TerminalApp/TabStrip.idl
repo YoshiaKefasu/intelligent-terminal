@@ -93,6 +93,12 @@ namespace TerminalApp
         String DisplayName { get; };
         UInt32 TabCount;
         Boolean IsActive;
+        // 0 means "no per-workspace color": the row's indicator then falls
+        // back to the accent marker. Otherwise the low 32 bits are the ARGB
+        // of the workspace color.
+        UInt32 Color;
+        Windows.UI.Xaml.Media.Brush IndicatorBrush { get; };
+        Windows.UI.Xaml.Visibility IndicatorVisibility { get; };
     };
 
     [default_interface] runtimeclass TabStripPaneItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
@@ -221,9 +227,18 @@ namespace TerminalApp
         Windows.Foundation.Collections.IObservableVector<TabStripWorkspaceItem> WorkspaceItems { get; };
         void SyncWorkspaces(Windows.Foundation.Collections.IVector<String> names,
                             Windows.Foundation.Collections.IVector<UInt32> tabCounts,
+                            Windows.Foundation.Collections.IVector<UInt32> colors,
                             String activeName);
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceActivated;
         event Windows.Foundation.TypedEventHandler<TabStrip, Object> WorkspaceCreateRequested;
+        // Context-menu actions on a workspace row. The host owns the workspace
+        // state (name, color, tabs), so the rail only raises intent; the color
+        // one is raised after the row's own `Color` has already been updated so
+        // the host only has to persist it.
+        event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceRenameRequested;
+        event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceColorChanged;
+        event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceDuplicateRequested;
+        event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceCloseRequested;
 
         // Hosts the complete vertical chrome when no titlebar is available.
         Windows.UI.Xaml.UIElement TopChromeContent;

@@ -934,6 +934,10 @@ namespace winrt::TerminalApp::implementation
         // 2-tier tabs: the sidebar's workspace rows drive the active workspace.
         _tabStrip.WorkspaceActivated({ this, &TerminalPage::_OnWorkspaceActivated });
         _tabStrip.WorkspaceCreateRequested({ this, &TerminalPage::_OnWorkspaceCreateRequested });
+        _tabStrip.WorkspaceRenameRequested({ this, &TerminalPage::_OnWorkspaceRenameRequested });
+        _tabStrip.WorkspaceColorChanged({ this, &TerminalPage::_OnWorkspaceColorChanged });
+        _tabStrip.WorkspaceDuplicateRequested({ this, &TerminalPage::_OnWorkspaceDuplicateRequested });
+        _tabStrip.WorkspaceCloseRequested({ this, &TerminalPage::_OnWorkspaceCloseRequested });
         _EnsureWorkspaceRegistered(_activeWorkspace);
         _SyncWorkspaceList();
         _tabStrip.CompactNewTabRequested([weakThis{ get_weak() }](auto&&, auto&&) {
@@ -6174,14 +6178,19 @@ namespace winrt::TerminalApp::implementation
 
         std::vector<uint32_t> counts;
         counts.reserve(names.size());
+        std::vector<uint32_t> colors;
+        colors.reserve(names.size());
         for (const auto& name : names)
         {
             counts.push_back(_CountTabsInWorkspace(name));
+            const auto color = _workspaceColors.find(std::wstring{ name.c_str(), name.size() });
+            colors.push_back(color == _workspaceColors.end() ? 0 : color->second);
         }
 
         winrt::get_self<implementation::TabStrip>(_tabStrip)->SyncWorkspaces(
             winrt::single_threaded_vector<winrt::hstring>(std::move(names)),
             winrt::single_threaded_vector<uint32_t>(std::move(counts)),
+            winrt::single_threaded_vector<uint32_t>(std::move(colors)),
             _activeWorkspace);
     }
 
@@ -6340,7 +6349,26 @@ namespace winrt::TerminalApp::implementation
             return;
         }
 
-        _SelectTab(_GetTabIndex(target).value_or(0));
+        const auto targetIndex = _GetTabIndex(target);
+        if (targetIndex)
+        {
+            _SelectTab(*targetIndex);
+        }
+
+        // `_SelectTab` normally only *nominates* the tab: it assigns
+        // `_selectedTabItem` and waits for the TabView's `SelectionChanged`
+        // to run `_OnSelectionChangedCore`, which is what actually swaps
+        // `_tabContent`. That round trip is skipped whenever `_ApplyWorkspaceFilter`
+        // had to defer above (it re-runs later from `_OnTabItemsChanged`), because
+        // at nomination time the TabView still held the *outgoing* workspace's
+        // items, so the assignment produced no `SelectionChanged` at all. The
+        // visible result was the horizontal tab row showing the new workspace's
+        // tab while the terminal surface kept rendering the previous workspace.
+        // Paint the target explicitly and synchronously instead of depending on
+        // the event; `_UpdatedSelectedTab` is idempotent and is what every other
+        // tab-switch path funnels through anyway.
+        _selectedTabItem(target.TabViewItem());
+        _UpdatedSelectedTab(target);
     }
 
     void TerminalPage::_CreateWorkspace(const winrt::hstring& workspaceName)
@@ -6381,13 +6409,303 @@ namespace winrt::TerminalApp::implementation
     {
         // Workspaces are created on demand and carry no other identity yet, so the
         // row label is simply the next free "Workspace N".
-        uint32_t next = 1;
-        winrt::hstring name;
-        do
-        {
-            name = winrt::hstring{ L"Workspace " } + winrt::to_hstring(next++);
-        } while (std::find(_workspaces.begin(), _workspaces.end(), name) != _workspaces.end() || name == _activeWorkspace);
+        const auto name = _MakeUniqueWorkspaceName(L"Workspace ");
         _CreateWorkspace(name);
+    }
+
+    void TerminalPage::_OnWorkspaceRenameRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                                   const winrt::TerminalApp::TabStripWorkspaceItem& item)
+    {
+        if (!item || item.Name().empty())
+        {
+            return;
+        }
+        _ShowRenameWorkspaceDialog(item.Name());
+    }
+
+    void TerminalPage::_OnWorkspaceColorChanged(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                                const winrt::TerminalApp::TabStripWorkspaceItem& item)
+    {
+        if (!item)
+        {
+            return;
+        }
+        // TabStrip already painted the row (it owns `TabStripWorkspaceItem::Color`);
+        // keep a host-side copy so `_SyncWorkspaceList` re-applies it instead of
+        // wiping the row back to the accent.
+        const auto key = std::wstring{ item.Name().c_str(), item.Name().size() };
+        if (item.Color() == 0)
+        {
+            _workspaceColors.erase(key);
+        }
+        else
+        {
+            _workspaceColors[key] = item.Color();
+        }
+        _SyncWorkspaceList();
+    }
+
+    void TerminalPage::_OnWorkspaceDuplicateRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                                      const winrt::TerminalApp::TabStripWorkspaceItem& item)
+    {
+        if (!item)
+        {
+            return;
+        }
+        _DuplicateWorkspace(item.Name());
+    }
+
+    void TerminalPage::_OnWorkspaceCloseRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                                  const winrt::TerminalApp::TabStripWorkspaceItem& item)
+    {
+        if (!item)
+        {
+            return;
+        }
+        _CloseWorkspace(item.Name());
+    }
+
+    // Method Description:
+    // - Builds a workspace name that is not taken yet, "<prefix>N" with N the
+    //   smallest free positive number. Used by both the "+" button and the
+    //   duplicate action, so a duplicate never lands on an existing row label.
+    winrt::hstring TerminalPage::_MakeUniqueWorkspaceName(const winrt::hstring& prefix) const    {
+        const auto taken = [this](const winrt::hstring& candidate) {
+            return candidate == _activeWorkspace ||
+                   std::find(_workspaces.begin(), _workspaces.end(), candidate) != _workspaces.end();
+        };
+
+        uint32_t next = 1;
+        auto name = prefix + winrt::to_hstring(next++);
+        while (taken(name))
+        {
+            name = prefix + winrt::to_hstring(next++);
+        }
+        return name;
+    }
+
+    // Method Description:
+    // - Renames a workspace: the name on every tab that belongs to it, the
+    //   sidebar label and, when the workspace is the active one, the
+    //   `_activeWorkspace` the horizontal TabView filters on.
+    // Arguments:
+    // - oldName: the workspace as it is named right now
+    // - newName: the requested name; ignored when empty or already taken
+    void TerminalPage::_RenameWorkspace(const winrt::hstring& oldName, const winrt::hstring& newName)
+    {
+        if (newName.empty() || newName == oldName)
+        {
+            return;
+        }
+        for (const auto& candidate : _workspaces)
+        {
+            if (candidate == newName)
+            {
+                return;
+            }
+        }
+
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() == oldName)
+            {
+                tab.Workspace(newName);
+            }
+        }
+
+        std::replace(_workspaces.begin(), _workspaces.end(), oldName, newName);
+
+        // `_workspaceLastTabId` is keyed by workspace name; move the entry over
+        // so the remembered tab survives the rename.
+        const auto key = std::wstring{ oldName.c_str(), oldName.size() };
+        const auto remembered = _workspaceLastTabId.find(key);
+        if (remembered != _workspaceLastTabId.end())
+        {
+            const auto value = remembered->second;
+            _workspaceLastTabId.erase(remembered);
+            _workspaceLastTabId[std::wstring{ newName.c_str(), newName.size() }] = value;
+        }
+
+        const auto color = _workspaceColors.find(key);
+        if (color != _workspaceColors.end())
+        {
+            const auto value = color->second;
+            _workspaceColors.erase(color);
+            _workspaceColors[std::wstring{ newName.c_str(), newName.size() }] = value;
+        }
+
+        if (_activeWorkspace == oldName)
+        {
+            _activeWorkspace = newName;
+            _tabRow.WorkspaceName(_WindowProperties.WindowName());
+        }
+
+        _SyncWorkspaceList();
+    }
+
+    // Method Description:
+    // - Asks for a new name and applies it. Cancel (or an unchanged name)
+    //   leaves the workspace alone.
+    winrt::Windows::Foundation::IAsyncAction TerminalPage::_ShowRenameWorkspaceDialog(const winrt::hstring& workspaceName)
+    {
+        winrt::Windows::UI::Xaml::Controls::TextBox box{};
+        box.Text(workspaceName);
+        box.SelectAll();
+
+        winrt::Windows::UI::Xaml::Controls::ContentDialog dialog{};
+        dialog.XamlRoot(Content().XamlRoot());
+        dialog.Title(winrt::box_value(RS_(L"RenameWorkspaceDialogTitle")));
+        dialog.Content(winrt::box_value(box));
+        dialog.PrimaryButtonText(RS_(L"RenameWorkspacePrimary"));
+        dialog.CloseButtonText(RS_(L"RenameWorkspaceCancel"));
+        dialog.DefaultButton(winrt::Windows::UI::Xaml::Controls::ContentDialogButton::Primary);
+
+        const auto weak = get_weak();
+        if (auto presenter{ _dialogPresenter.get() })
+        {
+            const auto result = co_await presenter.ShowDialog(dialog);
+            // ShowDialog blocks until the dialog is dismissed, so `this` may be
+            // gone by the time we resume.
+            const auto strong = weak.get();
+            if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary)
+            {
+                co_return;
+            }
+
+            // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
+            // sidebar rows), so surrounding whitespace is not silently kept.
+            std::wstring candidate{ box.Text().c_str(), box.Text().size() };
+            const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
+            while (!candidate.empty() && isSpace(candidate.back()))
+            {
+                candidate.pop_back();
+            }
+            while (!candidate.empty() && isSpace(candidate.front()))
+            {
+                candidate.erase(candidate.begin());
+            }
+            if (!candidate.empty())
+            {
+                strong->_RenameWorkspace(workspaceName, winrt::hstring{ candidate });
+            }
+        }
+    }
+
+    // Method Description:
+    // - Copies every tab of `sourceName` into a fresh workspace. Each tab is
+    //   replayed from its own `BuildStartupActions`, which carries the profile,
+    //   the working directory and the panes, so the copy is the tab's layout and
+    //   not just a new tab on the default profile.
+    // Arguments:
+    // - sourceName: the workspace to clone
+    void TerminalPage::_DuplicateWorkspace(const winrt::hstring& sourceName)
+    {
+        std::vector<std::vector<Microsoft::Terminal::Settings::Model::ActionAndArgs>> layouts;
+        for (const auto& tab : _tabs)
+        {
+            const auto impl = _GetTabImpl(tab);
+            if (!impl || tab.Workspace() != sourceName)
+            {
+                continue;
+            }
+            layouts.emplace_back(impl->BuildStartupActions(winrt::TerminalApp::BuildStartupKind::None));
+        }
+        if (layouts.empty())
+        {
+            return;
+        }
+
+        const auto name = _MakeUniqueWorkspaceName(winrt::hstring{ sourceName } + winrt::hstring{ L" - Copy" });
+
+        // Register the new workspace and make it active *without* creating a tab
+        // first: `_CreateWorkspace` would leave a blank default-profile tab next
+        // to the replayed ones, and `_SwitchToWorkspace` creates one for a
+        // workspace with no tabs. The replays below create the first tab.
+        if (const auto focused = _GetTabImpl(_GetFocusedTab()))
+        {
+            _workspaceLastTabId[std::wstring{ _activeWorkspace.c_str(), _activeWorkspace.size() }] = focused->StableId();
+        }
+        _activeWorkspace = name;
+        _EnsureWorkspaceRegistered(name);
+
+        // `_actionDispatch` reads `_activeWorkspace` when it creates a tab, so
+        // the replays land in the new workspace.
+        for (const auto& layout : layouts)
+        {
+            for (const auto& action : layout)
+            {
+                _actionDispatch->DoAction(action);
+            }
+        }
+
+        // Replaying leaves the *last* replayed tab focused. Land on the copy's
+        // first tab instead, and paint it explicitly rather than relying on the
+        // selection event (see `_SwitchToWorkspace`).
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() == name)
+            {
+                _selectedTabItem(tab.TabViewItem());
+                _UpdatedSelectedTab(tab);
+                break;
+            }
+        }
+
+        _SyncWorkspaceList();
+    }
+
+    // Method Description:
+    // - Closes every tab of a workspace and drops the workspace itself. Closing
+    //   the last workspace would leave the window with nothing to switch to, so
+    //   a fresh one is created instead.
+    // Arguments:
+    // - workspaceName: the workspace to close
+    winrt::Windows::Foundation::IAsyncAction TerminalPage::_CloseWorkspace(const winrt::hstring& workspaceName)
+    {
+        const auto weak = get_weak();
+
+        std::vector<winrt::TerminalApp::Tab> tabs;
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() == workspaceName)
+            {
+                tabs.push_back(tab);
+            }
+        }
+
+        // Closing is awaited one tab at a time (each one tears down a PTY and
+        // may drop `_tabs`), so the list is a snapshot taken up front.
+        for (const auto& tab : tabs)
+        {
+            if (const auto strong = weak.get())
+            {
+                co_await strong->_HandleCloseTabRequested(tab, /*skipConfirmClose*/ true);
+            }
+        }
+
+        const auto strong = weak.get();
+        if (!strong)
+        {
+            co_return;
+        }
+
+        strong->_workspaces.erase(std::remove(strong->_workspaces.begin(), strong->_workspaces.end(), workspaceName),
+                                  strong->_workspaces.end());
+        strong->_workspaceLastTabId.erase(std::wstring{ workspaceName.c_str(), workspaceName.size() });
+        strong->_workspaceColors.erase(std::wstring{ workspaceName.c_str(), workspaceName.size() });
+
+        if (strong->_workspaces.empty())
+        {
+            // Keep at least one workspace: the sidebar and the tab row both
+            // assume there is something to show.
+            strong->_CreateWorkspace(strong->_MakeUniqueWorkspaceName(L"Workspace "));
+        }
+        else if (strong->_activeWorkspace == workspaceName)
+        {
+            strong->_SwitchToWorkspace(strong->_workspaces.front());
+        }
+
+        strong->_SyncWorkspaceList();
     }
 
     void TerminalPage::_UpdateTabLayoutHost()

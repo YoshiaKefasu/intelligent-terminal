@@ -61,9 +61,11 @@
                         BorderThickness="0"
                         CornerRadius="0"
                         Click="OnWorkspaceRailToggleClick">
+                    <!--  U+E8A0 is the panel / split-view "OpenPane" glyph, the
+                          same mark the vertical sidebar toggle uses.  -->
                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               FontSize="14"
-                              Glyph="&#xE700;" />
+                              Glyph="&#xE8A0;" />
                 </Button>
 
                 <!--  EA18 is the "Shield" glyph  -->

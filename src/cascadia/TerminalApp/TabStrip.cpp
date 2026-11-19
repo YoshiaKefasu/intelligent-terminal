@@ -19,6 +19,7 @@
 #include "TabStripDragStartingEventArgs.g.cpp"
 #include "TabStripDroppedOutsideEventArgs.g.cpp"
 #include "TabStripPaneItem.g.cpp"
+#include "TabStripWorkspaceItem.g.cpp"
 #include "TabStripDisplayItem.g.cpp"
 #include "TabStripPaneEventArgs.g.cpp"
 #include "TabStripItemTemplateSelector.g.cpp"
@@ -1487,8 +1488,89 @@ namespace winrt::TerminalApp::implementation
     // The sidebar's primary list renders workspaces. The tab-row projection is
     // still driven by ItemsList so nothing above has to know the rail changed
     // shape, but that list is kept collapsed while workspaces are visible.
+
+    void TabStripWorkspaceItem::IsActive(bool value)
+    {
+        if (_isActive == value)
+        {
+            return;
+        }
+        _isActive = value;
+        // The accent marker and the per-workspace color marker are two separate
+        // borders that overlap; whichever applies has to be re-evaluated, so both
+        // bound properties are invalidated together.
+        _raiseIndicatorChanged();
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"IsActive" });
+    }
+
+    void TabStripWorkspaceItem::Color(uint32_t value)
+    {
+        if (_color == value)
+        {
+            return;
+        }
+        _color = value;
+        _raiseIndicatorChanged();
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"Color" });
+    }
+
+    winrt::Windows::UI::Xaml::Media::SolidColorBrush TabStripWorkspaceItem::_colorBrush() const
+    {
+        // The brush is only handed to XAML (the 3px row indicator), and only when
+        // the color actually changes, so caching one instance per key is enough.
+        if (!_cachedColorBrush || _cachedColorBrushKey != _color)
+        {
+            _cachedColorBrushKey = _color;
+            _cachedColorBrush = winrt::Windows::UI::Xaml::Media::SolidColorBrush{
+                winrt::Windows::UI::Color{
+                    0xFF,
+                    static_cast<uint8_t>((_color >> 16) & 0xFF),
+                    static_cast<uint8_t>((_color >> 8) & 0xFF),
+                    static_cast<uint8_t>(_color & 0xFF) } };
+        }
+        return _cachedColorBrush;
+    }
+
+    void TabStripWorkspaceItem::_raiseIndicatorChanged()
+    {
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"IndicatorBrush" });
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"IndicatorVisibility" });
+    }
+
+    // Presets offered by the "color" sub-menu. Same palette as the tab color
+    // picker (ColorPickupFlyout.xaml) so the two surfaces agree.
+    struct WorkspaceColorPreset
+    {
+        winrt::hstring name;
+        uint32_t color;
+    };
+
+    static const std::array<WorkspaceColorPreset, 12> WorkspaceColorPresets{{
+        { L"Crimson", 0xFFDC143C },
+        { L"SteelBlue", 0xFF4682B4 },
+        { L"MediumSeaGreen", 0xFF3CB371 },
+        { L"DarkOrange", 0xFFFF8C00 },
+        { L"MediumVioletRed", 0xFFC71585 },
+        { L"DodgerBlue", 0xFF1E90FF },
+        { L"LimeGreen", 0xFF32CD32 },
+        { L"Goldenrod", 0xFFDAA520 },
+        { L"BlueViolet", 0xFF8A2BE2 },
+        { L"SlateBlue", 0xFF6A5ACD },
+        { L"Cyan", 0xFF00FFFF },
+        { L"DarkGray", 0xFFA9A9A9 },
+    }};
+
+    static winrt::Windows::UI::Xaml::Controls::FontIcon _workspaceMenuIcon(winrt::hstring const& glyph)
+    {
+        winrt::Windows::UI::Xaml::Controls::FontIcon icon{};
+        icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily{ L"Segoe Fluent Icons, Segoe MDL2 Assets" });
+        icon.Glyph(glyph);
+        return icon;
+    }
+
     void TabStrip::SyncWorkspaces(winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& names,
                                   winrt::Windows::Foundation::Collections::IVector<uint32_t> const& tabCounts,
+                                  winrt::Windows::Foundation::Collections::IVector<uint32_t> const& colors,
                                   winrt::hstring const& activeName)
     {
         // Names the host still reports. Anything not in here is dropped below,
@@ -1517,6 +1599,7 @@ namespace winrt::TerminalApp::implementation
 
             const auto count = index < tabCounts.Size() ? tabCounts.GetAt(index) : 0;
             const auto active = name == activeName;
+            const auto color = index < colors.Size() ? colors.GetAt(index) : 0;
 
             TerminalApp::TabStripWorkspaceItem existing{ nullptr };
             for (const auto& candidate : _workspaceItems)
@@ -1532,12 +1615,14 @@ namespace winrt::TerminalApp::implementation
             {
                 existing.TabCount(count);
                 existing.IsActive(active);
+                existing.Color(color);
                 continue;
             }
 
             auto item = winrt::make<TabStripWorkspaceItem>(name);
             item.TabCount(count);
             item.IsActive(active);
+            item.Color(color);
             _workspaceItems.Append(item);
         }
 
@@ -1598,6 +1683,128 @@ namespace winrt::TerminalApp::implementation
                                           winrt::Windows::UI::Xaml::RoutedEventArgs const& /*e*/)
     {
         WorkspaceCreateRequested.raise(*this, nullptr);
+    }
+
+    // Method Description:
+    // - Builds the right-click menu of a workspace row. Built in code rather
+    //   than declared in the DataTemplate: a MenuFlyoutItem's Click handler
+    //   inside a DataTemplate cannot reach this control's code-behind reliably,
+    //   and every item needs the owning `TabStripWorkspaceItem`, which only the
+    //   realized container knows.
+    // Arguments:
+    // - item: the workspace row the menu acts on
+    // Return Value:
+    // - the menu, ready to be attached as the row's ContextFlyout
+    winrt::Windows::UI::Xaml::Controls::MenuFlyout TabStrip::_BuildWorkspaceContextMenu(TerminalApp::TabStripWorkspaceItem const& item)
+    {
+        const auto weak = get_weak();
+
+        winrt::Windows::UI::Xaml::Controls::MenuFlyout menu{};
+
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem rename{};
+        rename.Text(RS_(L"WorkspaceRenameMenuItem"));
+        rename.Icon(_workspaceMenuIcon(L"\uE8AC")); // Rename
+        rename.Click([weak, item](auto&&, auto&&) {
+            if (const auto self = weak.get())
+            {
+                self->WorkspaceRenameRequested.raise(*self, item);
+            }
+        });
+        menu.Items().Append(rename);
+
+        // Colors are a sub-menu of presets rather than a nested flyout: a
+        // MenuFlyoutItem cannot open a second flyout without the parent's
+        // light-dismiss racing it.
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutSubItem colors{};
+        colors.Text(RS_(L"WorkspaceColorMenuItem"));
+        colors.Icon(_workspaceMenuIcon(L"\uE790")); // Color
+        for (const auto& preset : WorkspaceColorPresets)
+        {
+            winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem swatch{};
+            swatch.Text(preset.name);
+
+            winrt::Windows::UI::Xaml::Controls::FontIcon glyph{};
+            glyph.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily{ L"Segoe UI Symbol" });
+            glyph.Glyph(L"\x25CF"); // Black circle, tinted with the preset color
+            glyph.FontSize(14.0);
+            glyph.Foreground(winrt::Windows::UI::Xaml::Media::SolidColorBrush{ winrt::Windows::UI::Color{
+                0xFF,
+                static_cast<uint8_t>((preset.color >> 16) & 0xFF),
+                static_cast<uint8_t>((preset.color >> 8) & 0xFF),
+                static_cast<uint8_t>(preset.color & 0xFF) } });
+            swatch.Icon(glyph);
+
+            const auto color = preset.color;
+            swatch.Click([weak, item, color](auto&&, auto&&) mutable {
+                if (const auto self = weak.get())
+                {
+                    item.Color(color);
+                    self->WorkspaceColorChanged.raise(*self, item);
+                }
+            });
+            colors.Items().Append(swatch);
+        }
+
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem clearColor{};
+        clearColor.Text(RS_(L"WorkspaceColorClearMenuItem"));
+        clearColor.Icon(_workspaceMenuIcon(L"\uE74D")); // Delete
+        clearColor.Click([weak, item](auto&&, auto&&) mutable {
+            if (const auto self = weak.get())
+            {
+                item.Color(0);
+                self->WorkspaceColorChanged.raise(*self, item);
+            }
+        });
+        colors.Items().Append(clearColor);
+        menu.Items().Append(colors);
+
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem duplicate{};
+        duplicate.Text(RS_(L"WorkspaceDuplicateMenuItem"));
+        duplicate.Icon(_workspaceMenuIcon(L"\uE8C8")); // Copy
+        duplicate.Click([weak, item](auto&&, auto&&) {
+            if (const auto self = weak.get())
+            {
+                self->WorkspaceDuplicateRequested.raise(*self, item);
+            }
+        });
+        menu.Items().Append(duplicate);
+
+        menu.Items().Append(winrt::Windows::UI::Xaml::Controls::MenuFlyoutSeparator{});
+
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem close{};
+        close.Text(RS_(L"WorkspaceCloseMenuItem"));
+        close.Icon(_workspaceMenuIcon(L"\uE711")); // ChromeClose
+        close.Click([weak, item](auto&&, auto&&) {
+            if (const auto self = weak.get())
+            {
+                self->WorkspaceCloseRequested.raise(*self, item);
+            }
+        });
+        menu.Items().Append(close);
+
+        return menu;
+    }
+
+    // Method Description:
+    // - Attaches the workspace context menu to a realized row. Containers are
+    //   recycled, so this runs for every realization rather than once. The menu
+    //   hangs off the `ListViewItem` (as `Tab::_buildContextMenu` does for a
+    //   tab) rather than the DataTemplate root, which is not necessarily
+    //   realized at this point.
+    void TabStrip::OnWorkspaceContainerContentChanging(winrt::Windows::UI::Xaml::Controls::ListViewBase const& /*sender*/,
+                                                       winrt::Windows::UI::Xaml::Controls::ContainerContentChangingEventArgs const& e)
+    {
+        if (e.InRecycleQueue())
+        {
+            return;
+        }
+        const auto item = e.Item().try_as<TerminalApp::TabStripWorkspaceItem>();
+        const auto container = e.ItemContainer().try_as<winrt::Windows::UI::Xaml::Controls::ListViewItem>();
+        if (!item || !container)
+        {
+            return;
+        }
+        container.ContextFlyout(_BuildWorkspaceContextMenu(item));
     }
     void TabStrip::IsRailCollapsed(bool value)
     {
@@ -3028,7 +3235,11 @@ namespace winrt::TerminalApp::implementation
         {
             section.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
         }
-        TabsToolbar().Visibility(Visibility::Visible);
+        // TabsToolbar stays collapsed: the sidebar's only visible surface is the
+        // workspace list, so the old "Tabs" header row would be dead chrome
+        // pushing [Workspaces +] down. The element (and the search/filter
+        // buttons inside it) is kept rather than deleted because the
+        // projection code still drives those buttons.
         VerticalTabsHeader().Text(RS_(L"VerticalTabsHeader/Text"));
         const auto detailsLabel = RS_(L"VerticalTabsFilterButton/[using:Windows.UI.Xaml.Controls]ToolTipService/ToolTip");
         ToolTipService::SetToolTip(FilterTabsButton(), box_value(detailsLabel));

@@ -305,14 +305,31 @@ namespace winrt::TerminalApp::implementation
         winrt::hstring DisplayName() const noexcept { return _DisplayName; }
 
         WINRT_OBSERVABLE_PROPERTY(uint32_t, TabCount, PropertyChanged.raise, 0);
-        WINRT_OBSERVABLE_PROPERTY(bool, IsActive, PropertyChanged.raise, false);
+
+    public:
+        bool IsActive() const noexcept { return _isActive; }
+        void IsActive(bool value);
+        uint32_t Color() const noexcept { return _color; }
+        void Color(uint32_t value);
+        winrt::Windows::UI::Xaml::Media::Brush IndicatorBrush() const noexcept { return _color ? _colorBrush() : nullptr; }
+        winrt::Windows::UI::Xaml::Visibility IndicatorVisibility() const noexcept { return _color ? winrt::Windows::UI::Xaml::Visibility::Visible : winrt::Windows::UI::Xaml::Visibility::Collapsed; }
 
     public:
         til::property_changed_event PropertyChanged;
 
     private:
+        winrt::Windows::UI::Xaml::Media::SolidColorBrush _colorBrush() const;
+        void _raiseIndicatorChanged();
+
         winrt::hstring _Name{};
         winrt::hstring _DisplayName{};
+        bool _isActive{ false };
+        uint32_t _color{ 0 };
+        // The indicator brush is only handed to XAML and only changes together
+        // with `_color`, so caching one brush per key is enough. `mutable`
+        // because the IDL getter is const.
+        mutable winrt::Windows::UI::Xaml::Media::SolidColorBrush _cachedColorBrush{ nullptr };
+        mutable uint32_t _cachedColorBrushKey{ 0 };
     };
 
     struct TabStrip : TabStripT<TabStrip>
@@ -401,6 +418,7 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::Foundation::Collections::IObservableVector<TerminalApp::TabStripWorkspaceItem> WorkspaceItems() const { return _workspaceItems; }
         void SyncWorkspaces(winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& names,
                             winrt::Windows::Foundation::Collections::IVector<uint32_t> const& tabCounts,
+                            winrt::Windows::Foundation::Collections::IVector<uint32_t> const& colors,
                             winrt::hstring const& activeName);
         void SetWorkspacesVisible(bool value);
         bool WorkspacesVisible() const noexcept { return _workspacesVisible; }
@@ -475,6 +493,9 @@ namespace winrt::TerminalApp::implementation
                                     winrt::Windows::UI::Xaml::RoutedEventArgs const& e);
         void OnWorkspaceItemClick(winrt::Windows::Foundation::IInspectable const& sender,
                                   winrt::Windows::UI::Xaml::Controls::ItemClickEventArgs const& e);
+        void OnWorkspaceContainerContentChanging(winrt::Windows::UI::Xaml::Controls::ListViewBase const& sender,
+                                                 winrt::Windows::UI::Xaml::Controls::ContainerContentChangingEventArgs const& e);
+        winrt::Windows::UI::Xaml::Controls::MenuFlyout _BuildWorkspaceContextMenu(TerminalApp::TabStripWorkspaceItem const& item);
         void OnDragItemsStarting(winrt::Windows::Foundation::IInspectable const& sender,
                                   winrt::Windows::UI::Xaml::Controls::DragItemsStartingEventArgs const& e);
         void OnDragItemsCompleted(winrt::Windows::UI::Xaml::Controls::ListViewBase const& sender,
@@ -594,6 +615,10 @@ namespace winrt::TerminalApp::implementation
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripHistoryActivationEventArgs> HistoryActivationRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceActivated;
         til::typed_event<TerminalApp::TabStrip, winrt::Windows::Foundation::IInspectable> WorkspaceCreateRequested;
+        til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceRenameRequested;
+        til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceColorChanged;
+        til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceDuplicateRequested;
+        til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripWorkspaceItem> WorkspaceCloseRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripPaneEventArgs> PaneActivationRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripPaneEventArgs> PaneCloseRequested;
         til::typed_event<TerminalApp::TabStrip, TerminalApp::TabStripCloseRequestedEventArgs> TabRenameRequested;

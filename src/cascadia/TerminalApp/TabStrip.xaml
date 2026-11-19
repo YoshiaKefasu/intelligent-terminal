@@ -387,7 +387,8 @@
               Height="44"
               Padding="12,0,8,0"
               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-              BorderThickness="0,1,0,1">
+              BorderThickness="0,1,0,1"
+              Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -904,6 +905,7 @@
                       AutomationProperties.AutomationId="WorkspacesList"
                       Grid.Row="1"
                       Padding="0"
+                      ContainerContentChanging="OnWorkspaceContainerContentChanging"
                       IsItemClickEnabled="True"
                       ItemClick="OnWorkspaceItemClick"
                       SelectionMode="None"
@@ -951,6 +953,17 @@
                                     CornerRadius="2"
                                     IsHitTestVisible="False"
                                     Visibility="{x:Bind IsActive, Mode=OneWay}" />
+                            <!--  Per-workspace color, drawn after the accent marker so a
+                                  colored active workspace shows its own color. Collapsed
+                                  when no color is set.  -->
+                            <Border x:Name="WorkspaceColorIndicator"
+                                    Width="3"
+                                    Margin="0,6"
+                                    HorizontalAlignment="Left"
+                                    Background="{x:Bind IndicatorBrush, Mode=OneWay}"
+                                    CornerRadius="2"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind IndicatorVisibility, Mode=OneWay}" />
                             <StackPanel Grid.Column="1"
                                         VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"

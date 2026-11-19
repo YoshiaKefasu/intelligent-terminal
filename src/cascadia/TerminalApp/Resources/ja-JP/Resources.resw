@@ -929,6 +929,38 @@
     <value>ワークスペースを開く</value>
     <comment>Menu item text for opening a saved workspace</comment>
   </data>
+  <data name="WorkspaceRenameMenuItem" xml:space="preserve">
+    <value>ワークスペース名を変更</value>
+    <comment>Menu item in the right-click context menu of a workspace row in the sidebar</comment>
+  </data>
+  <data name="WorkspaceColorMenuItem" xml:space="preserve">
+    <value>ワークスペースの色の変更</value>
+    <comment>Sub-menu title in the right-click context menu of a workspace row in the sidebar</comment>
+  </data>
+  <data name="WorkspaceColorClearMenuItem" xml:space="preserve">
+    <value>色をクリア</value>
+    <comment>Menu item inside the "change workspace color" sub-menu</comment>
+  </data>
+  <data name="WorkspaceDuplicateMenuItem" xml:space="preserve">
+    <value>ワークスペースを複製する</value>
+    <comment>Menu item in the right-click context menu of a workspace row in the sidebar</comment>
+  </data>
+  <data name="WorkspaceCloseMenuItem" xml:space="preserve">
+    <value>ワークスペースを閉じる</value>
+    <comment>Menu item in the right-click context menu of a workspace row in the sidebar</comment>
+  </data>
+  <data name="RenameWorkspaceDialogTitle" xml:space="preserve">
+    <value>ワークスペース名の変更</value>
+    <comment>Dialog title shown when renaming a workspace from the sidebar</comment>
+  </data>
+  <data name="RenameWorkspacePrimary" xml:space="preserve">
+    <value>保存</value>
+    <comment>Primary button of the rename-workspace dialog</comment>
+  </data>
+  <data name="RenameWorkspaceCancel" xml:space="preserve">
+    <value>キャンセル</value>
+    <comment>Close button of the rename-workspace dialog</comment>
+  </data>
   <data name="ConfirmDeleteWorkspaceTitle" xml:space="preserve">
     <value>"{0}" を削除しますか?</value>
     <comment>{locked="{0}"}{0} is the workspace name. Shown as the title of a confirmation dialog when the user tries to delete a saved workspace.</comment>
