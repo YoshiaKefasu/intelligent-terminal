@@ -348,35 +348,21 @@ namespace winrt::TerminalApp::implementation
             _tabContent.Children().Append(content);
         }
 
-        // Per-tab model: pre-warm a stashed agent pane on every new terminal
-        // tab. The helper conpty child is spawned but the pane is immediately
-        // stashed via `Tab::StashAgentPane`, so the user only sees the
-        // terminal pane. Toggling the agent pane (`Ctrl+Shift+.` /
-        // `Ctrl+Shift+/` / bottom-bar button) is just a stash/restore.
-        // The point of pre-warming is autofix: autofix routes through the
-        // agent helper, and gating it on "user has opened the pane at least
-        // once" silently broke autofix on every fresh tab. With pre-warm,
-        // autofix works on every tab from the moment the tab opens.
+        // DEBLOAT: the agent chat pane is retired, so no helper pane is spawned
+        // here. What remains is the deferred follow-up that reconciles the tab's
+        // leaf count with whatever panes the tab actually ended up with: if a
+        // tab carries more than one leaf (e.g. an agent pane restored by a
+        // session replay), the extra pane is stashed so the user only sees the
+        // terminal pane.
         //
-        // Defer the spawn so tab initialization is not blocked on conpty and
-        // helper startup.
+        // Deferred to a low-priority tick (or to the end of an in-flight content
+        // transfer) so tab initialization is not blocked on conpty and helper
+        // startup.
         if (auto dispatcher = winrt::Windows::System::DispatcherQueue::GetForCurrentThread())
         {
             auto weakSelf = get_weak();
             auto weakTab = make_weak(newTabImpl);
-            // Read now, not in the callback: by the time the low-priority tick
-            // runs, the replay may have finished even though this tab's own
-            // agent pane is still queued behind it.
-            const auto deferPrewarm =
-                _startupActionReplayDepth > 0 || _pendingFreEnsureAgentPaneVisible;
-            if (deferPrewarm)
-            {
-                // Queue synchronously. The low-priority callback below runs
-                // after `_PrewarmAgentPanesAfterStartup` for the last tabs of a
-                // batch, so recording there would miss them entirely.
-                _tabsAwaitingPrewarm.emplace_back(make_weak(newTabImpl));
-            }
-            auto initializeDeferred = [weakSelf, weakTab, deferPrewarm]() {
+            auto initializeDeferred = [weakSelf, weakTab]() {
                 const auto self = weakSelf.get();
                 const auto tabImplCom = weakTab.get();
                 if (!self || !tabImplCom || !self->_GetTabIndex(*tabImplCom))
@@ -388,78 +374,20 @@ namespace winrt::TerminalApp::implementation
                 {
                     return;
                 }
-                const auto newTabId = tabImplCom->StableId();
-                int agentLeavesSeen = 0;
-                rootPane->WalkTree([self, &tabImplCom, &newTabId, &agentLeavesSeen](const std::shared_ptr<Pane>& p) -> void {
+                rootPane->WalkTree([self, &tabImplCom](const std::shared_ptr<Pane>& p) -> void {
                     if (!p)
                     {
                         return;
                     }
                     if (p->GetContent() && p->GetContent().try_as<winrt::TerminalApp::AgentPaneContent>())
                     {
-                        ++agentLeavesSeen;
+                        if (tabImplCom->GetLeafPaneCount() > 1)
+                        {
+                            tabImplCom->StashAgentPane();
+                        }
                     }
-                    if (!p->IsAgentPane())
-                    {
-                        return;
-                    }
-                    const auto content = p->GetContent().try_as<winrt::TerminalApp::AgentPaneContent>();
-                    if (!content)
-                    {
-                        return;
-                    }
-                    self->_WireAgentPaneEvents(content, tabImplCom);
-
-                    const auto impl = winrt::get_self<winrt::TerminalApp::implementation::AgentPaneContent>(content);
-                    if (tabImplCom->GetLeafPaneCount() > 1 && impl->TakeHiddenAfterTransfer())
-                    {
-                        tabImplCom->StashAgentPane();
-                    }
-                    if (const auto sourceProfileGuid = impl->TakePendingAgentSourceProfileGuid())
-                    {
-                        tabImplCom->AgentSourceProfileGuid(*sourceProfileGuid);
-                    }
-
-                    const auto oldTabId = impl->TakePendingRenameFromTabId();
-                    if (oldTabId.empty() || oldTabId == newTabId)
-                    {
-                        return;
-                    }
-
-                    Json::Value params;
-                    params["old_tab_id"] = winrt::to_string(oldTabId);
-                    params["new_tab_id"] = winrt::to_string(newTabId);
-                    params["window_id"] = std::to_string(self->_WindowProperties.WindowId());
-                    _agentPaneLog(
-                        std::string{ "_InitializeTab(deferred): emitting tab_renamed old=" } +
-                        winrt::to_string(oldTabId) + " new=" + winrt::to_string(newTabId));
-                    self->_RaiseProtocolEvent("tab_renamed", params);
                 });
-
-                // Pre-warm a stashed agent pane on this tab so the helper is
-                // running from the start (autofix needs it). A transferred
-                // pane keeps its existing helper and skips this path, and a
-                // tab created while a startup batch is replaying skips it so a
-                // blank pre-warm cannot race the agent pane that batch is
-                // about to restore — `_PrewarmAgentPanesAfterStartup` covers
-                // whatever the replay left without one.
-                if (deferPrewarm)
-                {
-                    _agentPaneLog(
-                        std::string{ "_InitializeTab(deferred): startup replay owns the agent pane for tab " } +
-                        winrt::to_string(newTabId));
-                }
-                else if (agentLeavesSeen == 0 && !tabImplCom->AgentPrewarmSuppressed())
-                {
-                    _agentPaneLog(
-                        std::string{ "_InitializeTab(deferred): pre-warming stashed agent pane on tab " } +
-                        winrt::to_string(newTabId));
-                    self->_AutoCreateHiddenAgentPaneShared(tabImplCom, /*intoSessionsView*/ false, /*autoStash*/ true);
-                }
-                else
-                {
-                    self->_UpdateBottomBarState();
-                }
+                self->_UpdateBottomBarState();
             };
             if (_receivingContentTransfer)
             {

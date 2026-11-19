@@ -686,12 +686,6 @@ namespace winrt::TerminalApp::implementation
         bool _pendingFreEnsureAgentPaneVisible{ false };
         bool _pendingFreAutoInstallCopilot{ false };
         winrt::hstring _freAutoInstallTargetTabId;
-        // Tabs that skipped their own pre-warm because a replay was in flight.
-        // Drained when the outermost replay finishes. Recording the tabs —
-        // rather than re-scanning every tab in the window — is what keeps an
-        // unrelated `wt` handoff from resurrecting an agent pane the user
-        // deliberately closed.
-        std::vector<winrt::weak_ref<Tab>> _tabsAwaitingPrewarm;
         AgentSettingsSnapshot _CaptureAgentSettingsSnapshot() const;
         static AgentSettingsChangeKind _ClassifyAgentSettingsChange(
             const AgentSettingsSnapshot& previous,

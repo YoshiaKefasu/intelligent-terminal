@@ -2737,11 +2737,12 @@ void Pane::HidePane(std::shared_ptr<Pane> hiddenPane)
             visibleBorder.Child(visibleChild->GetRootElement());
             _root.Children().Append(visibleBorder);
 
-            // Give the visible child the full space by collapsing the grid
-            // definitions to a single star-sized track.
+            // Unconditionally clear ColumnDefinitions and RowDefinitions to prevent
+            // stale 50% split tracks from leaving a transparent empty cell when stashed.
+            _root.ColumnDefinitions().Clear();
+            _root.RowDefinitions().Clear();
             if (_splitState == SplitState::Vertical)
             {
-                _root.ColumnDefinitions().Clear();
                 auto colDef = Controls::ColumnDefinition();
                 colDef.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
                 _root.ColumnDefinitions().Append(colDef);
@@ -2749,11 +2750,36 @@ void Pane::HidePane(std::shared_ptr<Pane> hiddenPane)
             }
             else if (_splitState == SplitState::Horizontal)
             {
-                _root.RowDefinitions().Clear();
                 auto rowDef = Controls::RowDefinition();
                 rowDef.Height(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
                 _root.RowDefinitions().Append(rowDef);
                 Controls::Grid::SetRow(visibleBorder, 0);
+            }
+            else
+            {
+                // No usable split state (e.g. SplitState::None): still give the grid a
+                // single Star track so the remaining child fills the whole area.
+                auto colDef = Controls::ColumnDefinition();
+                colDef.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
+                _root.ColumnDefinitions().Append(colDef);
+                Controls::Grid::SetColumn(visibleBorder, 0);
+            }
+
+            // Force reset width/height and alignment on the remaining visible child
+            // and its root content so no fixed sizing or alignment from split/animation remains.
+            auto resetElementLayout = [](const auto& element) {
+                if (element)
+                {
+                    element.Width(NAN);
+                    element.Height(NAN);
+                    element.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    element.VerticalAlignment(VerticalAlignment::Stretch);
+                }
+            };
+            resetElementLayout(visibleChild->_root);
+            if (const auto content = visibleChild->_content)
+            {
+                resetElementLayout(content.GetRoot());
             }
 
             // Update borders so the visible child gets the full border set.

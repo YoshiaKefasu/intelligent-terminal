@@ -21837,9 +21837,10 @@ namespace TerminalAppLocalTests
             VERIFY_IS_TRUE(focusedTab->FindAgentPane() == nullptr);
             VERIFY_ARE_EQUAL(1, focusedTab->GetLeafPaneCount());
             VERIFY_IS_TRUE(focusedTab->AgentPrewarmSuppressed());
-            page->_tabsAwaitingPrewarm.emplace_back(focusedTab->get_weak());
+            // DEBLOAT: startup pre-warm is retired (no background helper pane is
+            // ever spawned), so there is no queued pre-warm to run here. Closing the
+            // only agent pane just leaves the tab with its single terminal leaf.
             page->_PrewarmAgentPanesAfterStartup();
-            VERIFY_IS_TRUE(page->_tabsAwaitingPrewarm.empty());
             VERIFY_IS_TRUE(focusedTab->FindAgentPane() == nullptr);
             VERIFY_IS_TRUE(focusedTab->AgentPrewarmSuppressed());
 

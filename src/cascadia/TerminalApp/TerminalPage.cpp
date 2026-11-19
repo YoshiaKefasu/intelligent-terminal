@@ -8795,30 +8795,7 @@ namespace winrt::TerminalApp::implementation
     // queued behind the tab that owns it.
     void TerminalPage::_PrewarmAgentPanesAfterStartup()
     {
-        // Re-check rather than trust the caller: this now runs off a dispatcher
-        // tick, so a batch handed to this window by `ExecuteCommandline` can
-        // have started between the queue and the tick. That batch owns the
-        // agent panes of the tabs it is restoring, and its own completion
-        // re-queues this drain once it is done.
-        if (_startupActionReplayDepth > 0)
-        {
-            return;
-        }
-
-        auto pending = std::exchange(_tabsAwaitingPrewarm, {});
-        for (const auto& weakTab : pending)
-        {
-            const auto tabImpl = weakTab.get();
-            if (!tabImpl || !_GetTabIndex(*tabImpl) || tabImpl->FindAgentPane() || tabImpl->AgentPrewarmSuppressed())
-            {
-                continue;
-            }
-
-            _agentPaneLog(
-                std::string{ "_PrewarmAgentPanesAfterStartup: pre-warming stashed agent pane on tab " } +
-                winrt::to_string(tabImpl->StableId()));
-            _AutoCreateHiddenAgentPaneShared(tabImpl, /*intoSessionsView*/ false, /*autoStash*/ true);
-        }
+        // DEBLOAT: チャットペインは廃止済みのため、裏でのエージェントペイン事前ウォーム（50%スプリット）は行わない。
     }
 
     void TerminalPage::_CompletePendingFreAgentPaneVisibility()
