@@ -6577,22 +6577,38 @@ namespace winrt::TerminalApp::implementation
             co_return;
         }
 
-        winrt::Windows::UI::Xaml::Controls::TextBox box{};
-        box.Text(workspaceName);
-        box.SelectAll();
-
-        winrt::Windows::UI::Xaml::Controls::ContentDialog dialog{};
-        // Do not set dialog.XamlRoot() before Content is initialized; TerminalWindow::ShowDialog
-        // attaches the dialog to the Xaml island root automatically.
-        dialog.Title(winrt::box_value(RS_(L"RenameWorkspaceDialogTitle")));
-        dialog.Content(winrt::box_value(box));
-        dialog.PrimaryButtonText(RS_(L"RenameWorkspacePrimary"));
-        dialog.CloseButtonText(RS_(L"RenameWorkspaceCancel"));
-        dialog.DefaultButton(winrt::Windows::UI::Xaml::Controls::ContentDialogButton::Primary);
-
-        if (auto presenter{ _dialogPresenter.get() })
+        try
         {
-            try
+            winrt::Windows::UI::Xaml::Controls::TextBox box{};
+            box.Text(workspaceName);
+
+            winrt::Windows::UI::Xaml::Controls::ContentDialog dialog{};
+            // Do not set dialog.XamlRoot() before Content is initialized; TerminalWindow::ShowDialog
+            // attaches the dialog to the Xaml island root automatically.
+            dialog.Title(winrt::box_value(RS_(L"RenameWorkspaceDialogTitle")));
+            dialog.Content(winrt::box_value(box));
+            dialog.PrimaryButtonText(RS_(L"RenameWorkspacePrimary"));
+            dialog.CloseButtonText(RS_(L"RenameWorkspaceCancel"));
+            dialog.DefaultButton(winrt::Windows::UI::Xaml::Controls::ContentDialogButton::Primary);
+
+            std::wstring confirmedText;
+            auto loadedRevoker = box.Loaded(winrt::auto_revoke, [&box](auto&&, auto&&) {
+                try
+                {
+                    box.SelectAll();
+                }
+                CATCH_LOG()
+            });
+            auto primaryClickRevoker = dialog.PrimaryButtonClick(winrt::auto_revoke, [&box, &confirmedText](auto&&, auto&&) {
+                try
+                {
+                    const auto typedText = box.Text();
+                    confirmedText = { typedText.c_str(), typedText.size() };
+                }
+                CATCH_LOG()
+            });
+
+            if (auto presenter{ _dialogPresenter.get() })
             {
                 const auto result = co_await presenter.ShowDialog(dialog);
                 // Allow TerminalWindow::ShowDialog and WinUI popup teardown (including
@@ -6601,15 +6617,14 @@ namespace winrt::TerminalApp::implementation
                 // ShowDialog blocks until the dialog is dismissed, so `this` may be
                 // gone by the time we resume.
                 const auto strong = weak.get();
-                if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary)
+                if (!strong || result != winrt::Windows::UI::Xaml::Controls::ContentDialogResult::Primary || confirmedText.empty())
                 {
                     co_return;
                 }
 
-                const auto typedText = box.Text();
                 // A name is used as a key (`_workspaces`, `Tab::Workspace`, the
                 // sidebar rows), so surrounding whitespace is not silently kept.
-                std::wstring candidate{ typedText.c_str(), typedText.size() };
+                std::wstring candidate = std::move(confirmedText);
                 const auto isSpace = [](wchar_t ch) { return ch == L' ' || ch == L'\t'; };
                 while (!candidate.empty() && isSpace(candidate.back()))
                 {
@@ -6624,10 +6639,10 @@ namespace winrt::TerminalApp::implementation
                     strong->_RenameWorkspace(workspaceName, winrt::hstring{ candidate });
                 }
             }
-            catch (...)
-            {
-                LOG_CAUGHT_EXCEPTION();
-            }
+        }
+        catch (...)
+        {
+            LOG_CAUGHT_EXCEPTION();
         }
     }
 

@@ -2072,6 +2072,21 @@ namespace winrt::TerminalApp::implementation
             auto content = tab.Content();
             content.Opacity(1.0);
             content.IsHitTestVisible(true);
+            // Ensure no fixed pixel width/height or non-stretch alignment remains on the root grid
+            // after pane entrance/split/close animations.
+            content.Width(NAN);
+            content.Height(NAN);
+            content.HorizontalAlignment(HorizontalAlignment::Stretch);
+            content.VerticalAlignment(VerticalAlignment::Stretch);
+            if (auto tabImplForLayout = _GetTabImpl(tab))
+            {
+                if (const auto rootPane = tabImplForLayout->GetRootPane())
+                {
+                    rootPane->WalkTree([](const auto& pane) {
+                        pane->UpdateVisuals();
+                    });
+                }
+            }
             _tabContent.Children().Append(content);
 
             // GH#7409: If the tab switcher is open, then we _don't_ want to

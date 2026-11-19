@@ -1319,11 +1319,7 @@ bool Pane::_HasFocusedChild() const noexcept
 // - <none>
 void Pane::UpdateVisuals()
 {
-    // If we are the focused pane, but not a leaf we should add borders
-    if (!_IsLeaf())
-    {
-        _UpdateBorders();
-    }
+    _UpdateBorders();
     const auto& brush{ _ComputeBorderColor() };
     _borderFirst.BorderBrush(brush);
     _borderSecond.BorderBrush(brush);
@@ -2075,6 +2071,67 @@ void Pane::_CreateRowColDefinitions()
 // - <none>
 void Pane::_UpdateBorders()
 {
+    // Clear any residual pixel Width/Height and Alignment left over from split/close entrance animations.
+    _root.Width(NAN);
+    _root.Height(NAN);
+    _root.HorizontalAlignment(HorizontalAlignment::Stretch);
+    _root.VerticalAlignment(VerticalAlignment::Stretch);
+    if (_borderFirst)
+    {
+        _borderFirst.Width(NAN);
+        _borderFirst.Height(NAN);
+        _borderFirst.HorizontalAlignment(HorizontalAlignment::Stretch);
+        _borderFirst.VerticalAlignment(VerticalAlignment::Stretch);
+    }
+    if (_borderSecond)
+    {
+        _borderSecond.Width(NAN);
+        _borderSecond.Height(NAN);
+        _borderSecond.HorizontalAlignment(HorizontalAlignment::Stretch);
+        _borderSecond.VerticalAlignment(VerticalAlignment::Stretch);
+    }
+    if (const auto& control = _content ? _content.GetRoot() : nullptr)
+    {
+        control.Width(NAN);
+        control.Height(NAN);
+        control.HorizontalAlignment(HorizontalAlignment::Stretch);
+        control.VerticalAlignment(VerticalAlignment::Stretch);
+    }
+    else if (!_IsLeaf())
+    {
+        for (const auto& child : { _firstChild, _secondChild })
+        {
+            if (child)
+            {
+                if (child->_borderFirst)
+                {
+                    child->_borderFirst.Width(NAN);
+                    child->_borderFirst.Height(NAN);
+                    child->_borderFirst.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    child->_borderFirst.VerticalAlignment(VerticalAlignment::Stretch);
+                }
+                if (child->_borderSecond)
+                {
+                    child->_borderSecond.Width(NAN);
+                    child->_borderSecond.Height(NAN);
+                    child->_borderSecond.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    child->_borderSecond.VerticalAlignment(VerticalAlignment::Stretch);
+                }
+                child->_root.Width(NAN);
+                child->_root.Height(NAN);
+                child->_root.HorizontalAlignment(HorizontalAlignment::Stretch);
+                child->_root.VerticalAlignment(VerticalAlignment::Stretch);
+                if (const auto& childControl = child->_content ? child->_content.GetRoot() : nullptr)
+                {
+                    childControl.Width(NAN);
+                    childControl.Height(NAN);
+                    childControl.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    childControl.VerticalAlignment(VerticalAlignment::Stretch);
+                }
+            }
+        }
+    }
+
     double top = 0, bottom = 0, left = 0, right = 0;
 
     Thickness newBorders{ 0 };

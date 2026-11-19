@@ -60,9 +60,8 @@
                         Background="Transparent"
                         BorderThickness="0"
                         CornerRadius="0"
+                        Loaded="OnHorizontalRailToggleLoaded"
                         Click="OnWorkspaceRailToggleClick">
-                    <!--  U+E8A1 is the window frame with top header bar,
-                          left list/dots, and right split-view pane glyph.  -->
                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               FontSize="14"
                               Glyph="&#xE8A1;" />
