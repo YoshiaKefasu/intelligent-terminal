@@ -110,6 +110,21 @@ namespace winrt::TerminalApp::implementation
             {
                 return S_FALSE;
             }
+
+            // A new tab joins the active workspace, so it should land where the
+            // user is working right now instead of snapping back to the profile
+            // default. Inherit the focused tab's live CWD unless the args already
+            // pin a starting directory. Skip non-Windows paths (e.g. a WSL pane's
+            // POSIX cwd) so they can never poison a Windows shell's startup.
+            if (newTerminalArgs.StartingDirectory().empty())
+            {
+                const auto inheritedCwd{ _FocusedTabWorkingDirectory() };
+                if (!inheritedCwd.empty() && ::Microsoft::Console::Utils::IsValidDirectory(inheritedCwd.c_str()))
+                {
+                    newTerminalArgs.StartingDirectory(inheritedCwd);
+                }
+            }
+
             const auto settings{ Settings::TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs) };
 
             // Try to handle auto-elevation

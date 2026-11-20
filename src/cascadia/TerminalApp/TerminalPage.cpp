@@ -14346,6 +14346,14 @@ namespace winrt::TerminalApp::implementation
                                         page->_ReconcileShellPromptAgentExit(richTabControl);
                                     }
                                     page->_AttachOrUpdateRichTabControl(richTabControl);
+                                    // The shell just reported a new CWD (OSC 7 / OSC 9;9).
+                                    // Mirror it into the sidebar workspace rows right away
+                                    // so `cd` is reflected without waiting for a tab or
+                                    // workspace switch.
+                                    if (seqStr.starts_with("osc:7;") || seqStr.starts_with("osc:9;9;"))
+                                    {
+                                        page->_SyncWorkspaceList();
+                                    }
                                     if (seqStr.starts_with("osc:133;D"))
                                     {
                                         page->_NotifyRichTabControl(
