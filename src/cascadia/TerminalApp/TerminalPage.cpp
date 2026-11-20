@@ -6231,6 +6231,60 @@ namespace winrt::TerminalApp::implementation
         return anchor == _workspaceAnchorDirectories.end() ? winrt::hstring{} : anchor->second;
     }
 
+    // The workspace's first tab, in stable creation order. The first tab is the
+    // workspace's reference point: unlike the "representative" (last-focused)
+    // tab, it never moves onto a freshly opened tab that is still sitting on
+    // its pre-seeded starting directory, so the sidebar row and the anchor
+    // cannot be dragged back to the profile default by a brand-new tab.
+    winrt::TerminalApp::Tab TerminalPage::_WorkspaceFirstTab(const winrt::hstring& workspaceName) const
+    {
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() == workspaceName)
+            {
+                return tab;
+            }
+        }
+        return nullptr;
+    }
+
+    // Seeds a new terminal's starting directory from the active workspace's
+    // working path, but only when the caller did not already specify one. The
+    // anchor is authoritative; when it is not set yet, the workspace's first
+    // tab's live CWD and then the focused tab's are consulted. A user-supplied
+    // directory (`wt -d`, a profile action, ...) is always left untouched.
+    void TerminalPage::_ApplyWorkspaceStartingDirectory(const NewTerminalArgs& newTerminalArgs)
+    {
+        if (!newTerminalArgs || !newTerminalArgs.StartingDirectory().empty())
+        {
+            return;
+        }
+
+        winrt::hstring inheritedCwd{ _WorkspaceAnchorDirectory(_activeWorkspace) };
+        if (inheritedCwd.empty())
+        {
+            const auto firstTab{ _WorkspaceFirstTab(_activeWorkspace) };
+            const auto firstTabImpl{ firstTab ? _GetTabImpl(firstTab) : nullptr };
+            if (firstTabImpl)
+            {
+                if (const auto control{ firstTabImpl->GetActiveTerminalControl() })
+                {
+                    inheritedCwd = _ControlWorkingDirectory(control);
+                }
+            }
+        }
+        if (inheritedCwd.empty())
+        {
+            inheritedCwd = _FocusedTabWorkingDirectory();
+        }
+        // Skip non-Windows paths (e.g. a WSL pane's POSIX cwd) so they can
+        // never poison a Windows shell's startup.
+        if (!inheritedCwd.empty() && ::Microsoft::Console::Utils::IsValidDirectory(inheritedCwd.c_str()))
+        {
+            newTerminalArgs.StartingDirectory(inheritedCwd);
+        }
+    }
+
     // Rebuilds the sidebar's workspace rows. Cheap enough to call on tab
     // create/close, but deliberately not on every projection refresh.
     void TerminalPage::_SyncWorkspaceList()
@@ -6259,7 +6313,13 @@ namespace winrt::TerminalApp::implementation
             // The row mirrors a sidebar tab: the tab's own icon plus the folder
             // the workspace is working in. A workspace whose tabs cannot report
             // anything just shows the fallback icon and its remembered folder.
-            const auto representative = _WorkspaceRepresentativeTab(name);
+            // The FIRST tab is the reference point, not the last-focused one: a
+            // freshly opened tab still sits on its pre-seeded starting
+            // directory, so letting it stand for the workspace would repaint
+            // the row (and the anchor every later tab inherits) back to the
+            // profile default. The first tab is stable, and a `cd` inside it
+            // still moves the anchor as soon as its shell reports the new CWD.
+            const auto representative = _WorkspaceFirstTab(name);
             const auto impl = representative ? _GetTabImpl(representative) : nullptr;
             iconPaths.push_back(impl ? impl->Icon() : winrt::hstring{});
 
@@ -10852,6 +10912,14 @@ namespace winrt::TerminalApp::implementation
 
     void TerminalPage::_OpenNewTerminalViaDropdown(const NewTerminalArgs newTerminalArgs)
     {
+        // The "+" button, the vertical tab row's "+", and the profile dropdown
+        // all funnel through here — none of them touch `_OpenNewTab`, so this is
+        // the one place to seed the workspace's working path. Without it a new
+        // tab lands on the profile default (%USERPROFILE%) instead of where the
+        // user is working. A caller-specified directory (`wt -d`, a profile
+        // action) is left untouched.
+        _ApplyWorkspaceStartingDirectory(newTerminalArgs);
+
         // if alt is pressed, open a pane
         const auto window = CoreWindow::GetForCurrentThread();
         const auto rAltState = window.GetKeyState(VirtualKey::RightMenu);

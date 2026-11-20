@@ -1036,7 +1036,9 @@ namespace winrt::TerminalApp::implementation
         uint32_t _CountTabsInWorkspace(const winrt::hstring& workspaceName) const;
         bool _TabIsInActiveWorkspace(const winrt::TerminalApp::Tab& tab) const noexcept;
         winrt::TerminalApp::Tab _WorkspaceRepresentativeTab(const winrt::hstring& workspaceName) const;
+        winrt::TerminalApp::Tab _WorkspaceFirstTab(const winrt::hstring& workspaceName) const;
         winrt::hstring _WorkspaceAnchorDirectory(const winrt::hstring& workspaceName) const;
+        void _ApplyWorkspaceStartingDirectory(const winrt::Microsoft::Terminal::Settings::Model::NewTerminalArgs& newTerminalArgs);
         winrt::TerminalApp::Tab _mostRecentlyUsedTabInActiveWorkspace() const;
         void _PruneEmptyWorkspace(const winrt::hstring& workspaceName);
         void _OnWorkspaceActivated(const winrt::Windows::Foundation::IInspectable& sender,
