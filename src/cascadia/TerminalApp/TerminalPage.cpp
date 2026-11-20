@@ -6270,20 +6270,32 @@ namespace winrt::TerminalApp::implementation
             // right now, keep the remembered anchor so neither the row nor new
             // tabs lose the workspace's working path.
             winrt::hstring rowPath{};
+            bool shellReported = false;
             if (impl)
             {
                 if (const auto control = impl->GetActiveTerminalControl())
                 {
                     rowPath = _ControlWorkingDirectory(control);
+                    shellReported = control.WorkingDirectoryReportedByShell();
                 }
             }
-            if (!rowPath.empty())
+            const auto anchorKey = std::wstring{ name.c_str(), name.size() };
+            const auto existingAnchor = _WorkspaceAnchorDirectory(name);
+            // Only let a tab repaint the workspace's anchor when it can be
+            // trusted: the shell explicitly reported its CWD (OSC 7/9;9), or
+            // the anchor is not set yet (first seeding, incl. a PEB read for
+            // OSC-less shells like cmd.exe). A brand-new tab has not reported
+            // anything, so `_ControlWorkingDirectory` still returns its
+            // pre-seeded starting directory — letting it overwrite the anchor
+            // would snap the row (and every subsequent new tab) back to the
+            // profile default the instant the tab is created.
+            if (!rowPath.empty() && (shellReported || existingAnchor.empty()))
             {
-                _workspaceAnchorDirectories[std::wstring{ name.c_str(), name.size() }] = rowPath;
+                _workspaceAnchorDirectories[anchorKey] = rowPath;
             }
             else
             {
-                rowPath = _WorkspaceAnchorDirectory(name);
+                rowPath = existingAnchor;
             }
             paths.push_back(rowPath);
         }

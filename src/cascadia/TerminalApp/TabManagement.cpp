@@ -129,27 +129,46 @@ namespace winrt::TerminalApp::implementation
 
             // A new tab joins the active workspace, so it should land where the
             // user is working right now instead of snapping back to the profile
-            // default. Prefer the focused tab's live CWD — resolved hybrid
-            // (OSC report, else PEB read) so it tracks the latest `cd` even in
-            // shells that never fire an OSC-driven workspace sync — and fall
-            // back to the workspace's remembered anchor when the focused pane
-            // cannot report, unless the args already pin a starting directory.
+            // default. The workspace's remembered anchor is authoritative —
+            // `_SyncWorkspaceList` keeps it pinned to the representative tab's
+            // live CWD (OSC report, else PEB read) — so it is preferred over
+            // the focused pane, whose report can be transiently empty right at
+            // the moment the "+" button is hit. Fall back to the
+            // representative tab, then the focused tab, and only then give up.
             // Skip non-Windows paths (e.g. a WSL pane's POSIX cwd) so they can
             // never poison a Windows shell's startup.
-            if (newTerminalArgs.StartingDirectory().empty())
+            winrt::hstring inheritedCwd{ _WorkspaceAnchorDirectory(_activeWorkspace) };
+            if (inheritedCwd.empty())
             {
-                auto inheritedCwd{ _FocusedTabWorkingDirectory() };
-                if (inheritedCwd.empty())
+                const auto representative{ _WorkspaceRepresentativeTab(_activeWorkspace) };
+                const auto representativeImpl{ representative ? _GetTabImpl(representative) : nullptr };
+                if (representativeImpl)
                 {
-                    inheritedCwd = _WorkspaceAnchorDirectory(_activeWorkspace);
+                    const auto control{ representativeImpl->GetActiveTerminalControl() };
+                    if (control)
+                    {
+                        inheritedCwd = _ControlWorkingDirectory(control);
+                    }
                 }
-                if (!inheritedCwd.empty() && ::Microsoft::Console::Utils::IsValidDirectory(inheritedCwd.c_str()))
-                {
-                    newTerminalArgs.StartingDirectory(inheritedCwd);
-                }
+            }
+            if (inheritedCwd.empty())
+            {
+                inheritedCwd = _FocusedTabWorkingDirectory();
+            }
+            if (!inheritedCwd.empty() && ::Microsoft::Console::Utils::IsValidDirectory(inheritedCwd.c_str()))
+            {
+                newTerminalArgs.StartingDirectory(inheritedCwd);
             }
 
             const auto settings{ Settings::TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs) };
+
+            // Belt-and-braces: pin the inherited working path onto the resolved
+            // settings too, so a profile's own default starting directory can
+            // never win over the workspace anchor at connection time.
+            if (const auto inherited = newTerminalArgs.StartingDirectory(); !inherited.empty())
+            {
+                settings.DefaultSettings()->StartingDirectory(inherited);
+            }
 
             // Try to handle auto-elevation
             if (!newTerminalArgs.ContentId() && _maybeElevate(newTerminalArgs, settings, profile))
