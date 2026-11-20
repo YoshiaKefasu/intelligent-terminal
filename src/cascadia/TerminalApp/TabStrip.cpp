@@ -1537,6 +1537,52 @@ namespace winrt::TerminalApp::implementation
         PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"IndicatorVisibility" });
     }
 
+    void TabStripWorkspaceItem::Path(winrt::hstring const& value)
+    {
+        if (_path == value)
+        {
+            return;
+        }
+        _path = value;
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"Path" });
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"PathVisibility" });
+    }
+
+    winrt::Windows::UI::Xaml::Visibility TabStripWorkspaceItem::PathVisibility() const noexcept
+    {
+        return _path.empty() ? winrt::Windows::UI::Xaml::Visibility::Collapsed : winrt::Windows::UI::Xaml::Visibility::Visible;
+    }
+
+    winrt::Windows::UI::Xaml::Controls::IconElement TabStripWorkspaceItem::CreateIcon(winrt::Windows::Foundation::IInspectable const& source) const
+    {
+        auto element = ::Microsoft::Terminal::UI::AgentIcons::ElementForIconSource(source.as<MUX::Controls::IconSource>(), _iconPath);
+        element.Width(16);
+        element.Height(16);
+        return element;
+    }
+
+    void TabStripWorkspaceItem::SyncIcon(winrt::hstring const& iconPath)
+    {
+        if (_iconPath == iconPath && _iconSource)
+        {
+            return;
+        }
+        _iconPath = iconPath;
+        if (iconPath.empty())
+        {
+            MUX::Controls::FontIconSource fallback;
+            fallback.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily{ L"Segoe Fluent Icons, Segoe MDL2 Assets" });
+            fallback.FontSize(12);
+            fallback.Glyph(L"\xE756");
+            _iconSource = fallback;
+        }
+        else
+        {
+            _iconSource = ::Microsoft::Terminal::UI::AgentIcons::SourceForIconPath(iconPath, false);
+        }
+        PropertyChanged.raise(*this, winrt::Windows::UI::Xaml::Data::PropertyChangedEventArgs{ L"IconSource" });
+    }
+
     // Presets offered by the "color" sub-menu. Same palette as the tab color
     // picker (ColorPickupFlyout.xaml) so the two surfaces agree.
     struct WorkspaceColorPreset
@@ -1569,8 +1615,9 @@ namespace winrt::TerminalApp::implementation
     }
 
     void TabStrip::SyncWorkspaces(winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& names,
-                                  winrt::Windows::Foundation::Collections::IVector<uint32_t> const& tabCounts,
                                   winrt::Windows::Foundation::Collections::IVector<uint32_t> const& colors,
+                                  winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& iconPaths,
+                                  winrt::Windows::Foundation::Collections::IVector<winrt::hstring> const& paths,
                                   winrt::hstring const& activeName)
     {
         // Names the host still reports. Anything not in here is dropped below,
@@ -1597,9 +1644,10 @@ namespace winrt::TerminalApp::implementation
             }
             live.push_back(name);
 
-            const auto count = index < tabCounts.Size() ? tabCounts.GetAt(index) : 0;
             const auto active = name == activeName;
             const auto color = index < colors.Size() ? colors.GetAt(index) : 0;
+            const auto iconPath = index < iconPaths.Size() ? iconPaths.GetAt(index) : winrt::hstring{};
+            const auto path = index < paths.Size() ? paths.GetAt(index) : winrt::hstring{};
 
             TerminalApp::TabStripWorkspaceItem existing{ nullptr };
             for (const auto& candidate : _workspaceItems)
@@ -1613,16 +1661,18 @@ namespace winrt::TerminalApp::implementation
 
             if (existing)
             {
-                existing.TabCount(count);
                 existing.IsActive(active);
                 existing.Color(color);
+                winrt::get_self<TabStripWorkspaceItem>(existing)->SyncIcon(iconPath);
+                existing.Path(path);
                 continue;
             }
 
             auto item = winrt::make<TabStripWorkspaceItem>(name);
-            item.TabCount(count);
             item.IsActive(active);
             item.Color(color);
+            winrt::get_self<TabStripWorkspaceItem>(item)->SyncIcon(iconPath);
+            item.Path(path);
             _workspaceItems.Append(item);
         }
 
@@ -1686,6 +1736,36 @@ namespace winrt::TerminalApp::implementation
                                           winrt::Windows::UI::Xaml::RoutedEventArgs const& /*e*/)
     {
         WorkspaceCreateRequested.raise(*this, nullptr);
+    }
+
+    // Method Description:
+    // - Fires the close intent for the row whose button was clicked. The host
+    //   owns the workspace list, so the row only names itself.
+    void TabStrip::OnWorkspaceCloseClick(winrt::Windows::Foundation::IInspectable const& sender,
+                                         winrt::Windows::UI::Xaml::RoutedEventArgs const& /*e*/)
+    {
+        if (const auto element = sender.try_as<WUX::FrameworkElement>())
+        {
+            if (const auto item = element.DataContext().try_as<TerminalApp::TabStripWorkspaceItem>())
+            {
+                WorkspaceCloseRequested.raise(*this, item);
+            }
+        }
+    }
+
+    // Method Description:
+    // - Reports a drag-reorder of the workspace rows. The ListView has already
+    //   moved the items inside `_workspaceItems` (the ItemsSource), so the host
+    //   can rebuild its own order from `WorkspaceItems()` instead of being told
+    //   an index pair that would have to be mapped back onto the rows.
+    void TabStrip::OnWorkspaceDragItemsCompleted(winrt::Windows::Foundation::IInspectable const& /*sender*/,
+                                                 winrt::Windows::UI::Xaml::Controls::DragItemsCompletedEventArgs const& e)
+    {
+        if (e.DropResult() != winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation::Move)
+        {
+            return;
+        }
+        WorkspaceReordered.raise(*this, nullptr);
     }
 
     // Method Description:

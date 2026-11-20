@@ -905,10 +905,14 @@
                       AutomationProperties.AutomationId="WorkspacesList"
                       Grid.Row="1"
                       Padding="0"
+                      AllowDrop="True"
+                      CanDragItems="True"
+                      CanReorderItems="True"
                       ContainerContentChanging="OnWorkspaceContainerContentChanging"
+                      DragItemsCompleted="OnWorkspaceDragItemsCompleted"
                       IsItemClickEnabled="True"
                       ItemClick="OnWorkspaceItemClick"
-                      SelectionMode="None"
+                      SelectionMode="Single"
                       ScrollViewer.VerticalScrollMode="Auto"
                       ScrollViewer.VerticalScrollBarVisibility="Auto"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -976,18 +980,36 @@
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
                 <ListView.ItemTemplate>
+                    <!--  Workspace row. Deliberately the sidebar-tab row verbatim:
+                          leading 28px icon slot, title + subtitle pair shaped like
+                          TabHeaderControl, trailing 28px close button. Only the
+                          content is rewired (workspace name / its folder / close
+                          the whole workspace) plus the 3px color indicators the
+                          tab row does not need.  -->
                     <DataTemplate x:DataType="local:TabStripWorkspaceItem">
                         <Grid x:Name="WorkspaceRowGrid"
                               MinHeight="40"
-                              Padding="12,6"
                               Background="Transparent"
-                              ColumnSpacing="10"
                               CornerRadius="{StaticResource SidebarTabCornerRadius}">
+                            <ToolTipService.ToolTip>
+                                <ToolTip AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
+                                         FlowDirection="LeftToRight">
+                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                               TextWrapping="Wrap" />
+                                </ToolTip>
+                            </ToolTipService.ToolTip>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="3" />
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
+                            <Border x:Name="TabSelectionBackground"
+                                    Grid.ColumnSpan="4"
+                                    Background="{ThemeResource ListViewItemBackgroundSelected}"
+                                    CornerRadius="{StaticResource SidebarTabCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind IsActive, Mode=OneWay}" />
                             <Border x:Name="WorkspaceActiveIndicator"
                                     Width="3"
                                     Margin="0,6"
@@ -1007,17 +1029,49 @@
                                     CornerRadius="2"
                                     IsHitTestVisible="False"
                                     Visibility="{x:Bind IndicatorVisibility, Mode=OneWay}" />
-                            <StackPanel Grid.Column="1"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                            <Grid Grid.Column="1"
+                                  Width="28"
+                                  Margin="6,0,10,0"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center">
+                                <ContentPresenter x:Name="TabIconPresenter"
+                                                  Width="16"
+                                                  Height="16"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Content="{x:Bind CreateIcon(IconSource), Mode=OneWay}" />
+                            </Grid>
+                            <Grid Grid.Column="2"
+                                  Margin="0,3"
+                                  VerticalAlignment="Center">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock x:Name="WorkspaceTitleText"
+                                           Text="{x:Bind DisplayName, Mode=OneWay}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="WorkspacePathText"
+                                           Grid.Row="1"
+                                           Margin="0,1,0,0"
+                                           FontSize="10"
+                                           Opacity="0.72"
+                                           Text="{x:Bind Path, Mode=OneWay}"
                                            TextTrimming="CharacterEllipsis"
-                                           TextWrapping="NoWrap" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="2"
-                                       VerticalAlignment="Center"
-                                       FontSize="11"
-                                       Opacity="0.72"
-                                       Text="{x:Bind TabCount, Mode=OneWay}" />
+                                           Visibility="{x:Bind PathVisibility, Mode=OneWay}" />
+                            </Grid>
+                            <Button x:Name="TabCloseButton"
+                                    Grid.Column="3"
+                                    Width="28"
+                                    Height="28"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="OnWorkspaceCloseClick">
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          FontSize="10"
+                                          Glyph="&#xE711;" />
+                            </Button>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>

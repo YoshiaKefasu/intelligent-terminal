@@ -1030,6 +1030,9 @@ namespace winrt::TerminalApp::implementation
         void _SyncWorkspaceList();
         uint32_t _CountTabsInWorkspace(const winrt::hstring& workspaceName) const;
         bool _TabIsInActiveWorkspace(const winrt::TerminalApp::Tab& tab) const noexcept;
+        winrt::TerminalApp::Tab _WorkspaceRepresentativeTab(const winrt::hstring& workspaceName) const;
+        winrt::TerminalApp::Tab _mostRecentlyUsedTabInActiveWorkspace() const;
+        void _PruneEmptyWorkspace(const winrt::hstring& workspaceName);
         void _OnWorkspaceActivated(const winrt::Windows::Foundation::IInspectable& sender,
                                    const winrt::TerminalApp::TabStripWorkspaceItem& item);
         void _OnWorkspaceCreateRequested(const winrt::Windows::Foundation::IInspectable& sender,
@@ -1042,6 +1045,8 @@ namespace winrt::TerminalApp::implementation
                                             const winrt::TerminalApp::TabStripWorkspaceItem& item);
         void _OnWorkspaceCloseRequested(const winrt::Windows::Foundation::IInspectable& sender,
                                         const winrt::TerminalApp::TabStripWorkspaceItem& item);
+        void _OnWorkspaceReordered(const winrt::Windows::Foundation::IInspectable& sender,
+                                   const winrt::Windows::Foundation::IInspectable& args);
         winrt::hstring _MakeUniqueWorkspaceName(const winrt::hstring& prefix) const;
         void _RenameWorkspace(const winrt::hstring& oldName, const winrt::hstring& newName);
         void _OpenWorkspaceRenamer(const winrt::hstring& workspaceName);

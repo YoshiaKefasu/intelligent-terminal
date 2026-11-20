@@ -1076,10 +1076,14 @@ namespace winrt::TerminalApp::implementation
         // to drop the matching TabSession so a future tab that reuses any
         // index slot starts with a clean conversation.
         winrt::hstring closedTabStableId{};
+        winrt::hstring closedWorkspace{};
         std::shared_ptr<Pane> rootPaneForClose{};
         if (const auto tabImpl = _GetTabImpl(tab))
         {
             closedTabStableId = tabImpl->StableId();
+            // Read before `tab.Shutdown()`: the workspace is the key the sidebar
+            // row (and the "0 tabs" cleanup below) is matched on.
+            closedWorkspace = tabImpl->Workspace();
 
             rootPaneForClose = tabImpl->GetRootPane();
         }
@@ -1170,18 +1174,11 @@ namespace winrt::TerminalApp::implementation
         }
         _UpdateTabIndices();
 
-        // 2-tier tabs: the workspace's row count changed. If the closed tab was
-        // the last one in a parked workspace the workspace itself is dropped
-        // from the sidebar — an empty workspace has nothing to switch to.
-        if (const auto impl = _GetTabImpl(tab))
+        // 2-tier tabs: the workspace's row count changed. Drop the "last focused
+        // tab" memo for the tab that just went away too, so a long session
+        // cannot grow the map with the stable ids of tabs that no longer exist.
+        if (!closedTabStableId.empty())
         {
-            const auto closedWorkspace = impl->Workspace();
-            if (closedWorkspace != _activeWorkspace && _CountTabsInWorkspace(closedWorkspace) == 0)
-            {
-                _workspaces.erase(std::remove(_workspaces.begin(), _workspaces.end(), closedWorkspace), _workspaces.end());
-            }
-            // Drop the "last focused tab" memo too, so a long session cannot grow
-            // the map with the stable ids of tabs that no longer exist.
             for (auto entry = _workspaceLastTabId.begin(); entry != _workspaceLastTabId.end();)
             {
                 if (entry->second == closedTabStableId)
@@ -1194,6 +1191,19 @@ namespace winrt::TerminalApp::implementation
                 }
             }
         }
+
+        // A workspace whose last tab just closed has nothing left to switch to,
+        // so the workspace itself goes away instead of sitting in the sidebar at
+        // "0". Only that one workspace is considered — the others keep whatever
+        // tabs they own (and may legitimately be mid-restore). Skipped when the
+        // tab is only parked (`keepAlive` — it is coming back) or handed to
+        // another window (`movingAway` — the reader is still dragging and must
+        // not have the row list yanked mid-gesture).
+        if (!keepAlive && !movingAway)
+        {
+            _PruneEmptyWorkspace(closedWorkspace);
+        }
+
         _ApplyWorkspaceFilter();
 
         // To close the window here, we need to close the hosting window.
@@ -1215,7 +1225,11 @@ namespace winrt::TerminalApp::implementation
             // 2. In fullscreen (GH#5799) and focus (GH#7916) modes the _OnTabItemsChanged is not fired
             // 3. When rearranging tabs (GH#7916) _OnTabItemsChanged is suppressed
 
-            const auto newSelectedTab = _mruTabs.GetAt(0);
+            auto newSelectedTab = _mostRecentlyUsedTabInActiveWorkspace();
+            if (!newSelectedTab)
+            {
+                newSelectedTab = _mruTabs.GetAt(0);
+            }
             _UpdatedSelectedTab(newSelectedTab);
             _selectedTabItem(newSelectedTab.TabViewItem());
 
@@ -2140,6 +2154,11 @@ namespace winrt::TerminalApp::implementation
             // the bar's agent UI authoritative.
             _UpdateBottomBarVisibility();
             _UpdateSidebarHistoryCurrentSession();
+
+            // 2-tier tabs: the sidebar row of this workspace shows the folder of
+            // the tab it was left on, so it has to follow the selection. Cheap:
+            // `SyncWorkspaces` only touches the rows that actually changed.
+            _SyncWorkspaceList();
 
             // Bottom-bar refresh is now driven by wta — fire `tab_changed`
             // so wta re-projects this tab's authoritative agent-pane state

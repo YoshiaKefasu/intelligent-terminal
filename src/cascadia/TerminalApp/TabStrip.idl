@@ -91,7 +91,6 @@ namespace TerminalApp
     {
         String Name { get; };
         String DisplayName { get; };
-        UInt32 TabCount;
         Boolean IsActive;
         // 0 means "no per-workspace color": the row's indicator then falls
         // back to the accent marker. Otherwise the low 32 bits are the ARGB
@@ -99,6 +98,14 @@ namespace TerminalApp
         UInt32 Color;
         Windows.UI.Xaml.Media.Brush IndicatorBrush { get; };
         Windows.UI.Xaml.Visibility IndicatorVisibility { get; };
+        // Row surface. The row is the sidebar-tab row verbatim (same leading
+        // icon slot, same title + subtitle pair, same trailing close button),
+        // so it exposes the same members `TabStripDisplayItem` does rather than
+        // a second, differently-shaped template.
+        Object IconSource { get; };
+        Windows.UI.Xaml.Controls.IconElement CreateIcon(Object source);
+        String Path;
+        Windows.UI.Xaml.Visibility PathVisibility { get; };
     };
 
     [default_interface] runtimeclass TabStripPaneItem : Windows.UI.Xaml.Data.INotifyPropertyChanged
@@ -226,8 +233,9 @@ namespace TerminalApp
         // replaces the whole list, so the host never has to diff rows itself.
         Windows.Foundation.Collections.IObservableVector<TabStripWorkspaceItem> WorkspaceItems { get; };
         void SyncWorkspaces(Windows.Foundation.Collections.IVector<String> names,
-                            Windows.Foundation.Collections.IVector<UInt32> tabCounts,
                             Windows.Foundation.Collections.IVector<UInt32> colors,
+                            Windows.Foundation.Collections.IVector<String> iconPaths,
+                            Windows.Foundation.Collections.IVector<String> paths,
                             String activeName);
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceActivated;
         event Windows.Foundation.TypedEventHandler<TabStrip, Object> WorkspaceCreateRequested;
@@ -239,6 +247,9 @@ namespace TerminalApp
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceColorChanged;
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceDuplicateRequested;
         event Windows.Foundation.TypedEventHandler<TabStrip, TabStripWorkspaceItem> WorkspaceCloseRequested;
+        // Raised after the user dragged the rows into a new order. The vector is
+        // already reordered by the ListView, so the host only has to read it.
+        event Windows.Foundation.TypedEventHandler<TabStrip, Object> WorkspaceReordered;
 
         // Hosts the complete vertical chrome when no titlebar is available.
         Windows.UI.Xaml.UIElement TopChromeContent;

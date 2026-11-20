@@ -938,6 +938,7 @@ namespace winrt::TerminalApp::implementation
         _tabStrip.WorkspaceColorChanged({ this, &TerminalPage::_OnWorkspaceColorChanged });
         _tabStrip.WorkspaceDuplicateRequested({ this, &TerminalPage::_OnWorkspaceDuplicateRequested });
         _tabStrip.WorkspaceCloseRequested({ this, &TerminalPage::_OnWorkspaceCloseRequested });
+        _tabStrip.WorkspaceReordered({ this, &TerminalPage::_OnWorkspaceReordered });
         _EnsureWorkspaceRegistered(_activeWorkspace);
         _SyncWorkspaceList();
         _tabStrip.CompactNewTabRequested([weakThis{ get_weak() }](auto&&, auto&&) {
@@ -6169,6 +6170,59 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
+    // Method Description:
+    // - The most recently used tab that belongs to the workspace the reader is
+    //   looking at. `_mruTabs` spans every workspace (parked ones included), so
+    //   painting `_mruTabs[0]` after the active workspace changed can put a
+    //   parked workspace's terminal on screen — the row says one thing and the
+    //   surface shows another. Null when the workspace owns no tab.
+    winrt::TerminalApp::Tab TerminalPage::_mostRecentlyUsedTabInActiveWorkspace() const
+    {
+        for (const auto& tab : _mruTabs)
+        {
+            if (_TabIsInActiveWorkspace(tab))
+            {
+                return tab;
+            }
+        }
+        return nullptr;
+    }
+
+    // Method Description:
+    // - Picks the tab that stands for a workspace on its sidebar row: the tab the
+    //   workspace was left on when it can be found, else its first tab. Used for
+    //   both the row's icon and its folder line.
+    // Arguments:
+    // - workspaceName: the workspace to look at
+    winrt::TerminalApp::Tab TerminalPage::_WorkspaceRepresentativeTab(const winrt::hstring& workspaceName) const
+    {
+        winrt::TerminalApp::Tab fallback{ nullptr };
+        const auto key = std::wstring{ workspaceName.c_str(), workspaceName.size() };
+        const auto remembered = _workspaceLastTabId.find(key);
+
+        for (const auto& tab : _tabs)
+        {
+            if (tab.Workspace() != workspaceName)
+            {
+                continue;
+            }
+            const auto impl = _GetTabImpl(tab);
+            if (!impl)
+            {
+                continue;
+            }
+            if (!fallback)
+            {
+                fallback = tab;
+            }
+            if (remembered != _workspaceLastTabId.end() && impl->StableId() == remembered->second)
+            {
+                return tab;
+            }
+        }
+        return fallback;
+    }
+
     // Rebuilds the sidebar's workspace rows. Cheap enough to call on tab
     // create/close, but deliberately not on every projection refresh.
     void TerminalPage::_SyncWorkspaceList()
@@ -6183,21 +6237,45 @@ namespace winrt::TerminalApp::implementation
         _EnsureWorkspaceRegistered(_activeWorkspace);
         std::vector<winrt::hstring> names{ _workspaces.begin(), _workspaces.end() };
 
-        std::vector<uint32_t> counts;
-        counts.reserve(names.size());
         std::vector<uint32_t> colors;
         colors.reserve(names.size());
+        std::vector<winrt::hstring> iconPaths;
+        iconPaths.reserve(names.size());
+        std::vector<winrt::hstring> paths;
+        paths.reserve(names.size());
         for (const auto& name : names)
         {
-            counts.push_back(_CountTabsInWorkspace(name));
             const auto color = _workspaceColors.find(std::wstring{ name.c_str(), name.size() });
             colors.push_back(color == _workspaceColors.end() ? 0 : color->second);
+
+            // The row mirrors a sidebar tab: the tab's own icon plus the folder
+            // the workspace is working in. A workspace whose tabs cannot report
+            // anything just shows the fallback icon and no folder line.
+            const auto representative = _WorkspaceRepresentativeTab(name);
+            const auto impl = representative ? _GetTabImpl(representative) : nullptr;
+            iconPaths.push_back(impl ? impl->Icon() : winrt::hstring{});
+            if (impl)
+            {
+                if (const auto control = impl->GetActiveTerminalControl())
+                {
+                    paths.push_back(control.WorkingDirectory());
+                }
+                else
+                {
+                    paths.push_back({});
+                }
+            }
+            else
+            {
+                paths.push_back({});
+            }
         }
 
         winrt::get_self<implementation::TabStrip>(_tabStrip)->SyncWorkspaces(
             winrt::single_threaded_vector<winrt::hstring>(std::move(names)),
-            winrt::single_threaded_vector<uint32_t>(std::move(counts)),
             winrt::single_threaded_vector<uint32_t>(std::move(colors)),
+            winrt::single_threaded_vector<winrt::hstring>(std::move(iconPaths)),
+            winrt::single_threaded_vector<winrt::hstring>(std::move(paths)),
             _activeWorkspace);
     }
 
@@ -6470,6 +6548,73 @@ namespace winrt::TerminalApp::implementation
             return;
         }
         _CloseWorkspace(item.Name());
+    }
+
+    // Method Description:
+    // - Adopts the row order the user dragged the sidebar into. The rail has
+    //   already moved the items of its own collection, so this only has to copy
+    //   that order back into `_workspaces` (the list the projection filters on
+    //   and the one `WindowLayout::WorkspaceNames` persists).
+    void TerminalPage::_OnWorkspaceReordered(const winrt::Windows::Foundation::IInspectable& /*sender*/,
+                                             const winrt::Windows::Foundation::IInspectable& /*args*/)
+    {
+        std::vector<winrt::hstring> order;
+        if (_tabStrip)
+        {
+            for (const auto& item : _tabStrip.WorkspaceItems())
+            {
+                order.push_back(item.Name());
+            }
+        }
+        if (order.empty())
+        {
+            return;
+        }
+
+        _workspaces = std::move(order);
+        _EnsureWorkspaceRegistered(_activeWorkspace);
+        // The rows already show the new order; re-syncing only keeps the rail's
+        // own bookkeeping (and the accent marker) aligned with it.
+        _SyncWorkspaceList();
+
+        // Named windows persist their layout, and `WorkspaceNames` is saved in
+        // `_workspaces` order — so the new row order is what comes back on the
+        // next launch. Unnamed windows have nothing to persist.
+        try
+        {
+            _SaveWorkspaceIfNeeded();
+        }
+        CATCH_LOG()
+    }
+
+    // Method Description:
+    // - Drops a workspace that lost its last tab, and — when it was the one the
+    //   reader was looking at — moves to a workspace that still has tabs. A row
+    //   that sits at "0" has nothing to switch to, so it must not survive its
+    //   last tab.
+    // Arguments:
+    // - workspaceName: the workspace that just lost a tab
+    void TerminalPage::_PruneEmptyWorkspace(const winrt::hstring& workspaceName)
+    {
+        if (workspaceName.empty() || _CountTabsInWorkspace(workspaceName) != 0)
+        {
+            return;
+        }
+
+        const auto key = std::wstring{ workspaceName.c_str(), workspaceName.size() };
+        const auto wasActive = workspaceName == _activeWorkspace;
+
+        _workspaces.erase(std::remove(_workspaces.begin(), _workspaces.end(), workspaceName), _workspaces.end());
+        _workspaceColors.erase(key);
+        _workspaceLastTabId.erase(key);
+
+        // Every workspace left owns at least one tab, so `_SwitchToWorkspace`
+        // finds one to focus and never has to invent a tab. When nothing is left
+        // there are no tabs either, and the window closes below.
+        if (wasActive && !_workspaces.empty())
+        {
+            _SwitchToWorkspace(_workspaces.front());
+        }
     }
 
     // Method Description:
