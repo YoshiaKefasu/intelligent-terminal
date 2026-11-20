@@ -444,6 +444,30 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
         return _commandline;
     }
 
+    winrt::hstring ConptyConnection::ProcessCurrentDirectory() const
+    {
+        if (!_piClient.hProcess)
+        {
+            return {};
+        }
+        try
+        {
+            auto path = _currentDirectoryFromProcess(_piClient.hProcess);
+            // The PEB keeps a trailing backslash ("C:\Windows\"); OSC reports
+            // have none. Normalize so both sources read the same downstream —
+            // but never strip a root's separator ("C:\" and "\\?\C:\" must
+            // stay absolute).
+            const auto size = path.size();
+            if (size > 3 && path[size - 1] == L'\\' && path[size - 2] != L':')
+            {
+                path = winrt::hstring{ std::wstring_view{ path.c_str(), size - 1 } };
+            }
+            return path;
+        }
+        CATCH_LOG()
+        return {};
+    }
+
     winrt::hstring ConptyConnection::StartingTitle() const
     {
         return _startupInfo.title;
@@ -789,6 +813,116 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
         winrt::impl::hstring_builder commandline{ params.CommandLine.Length / 2u };
         THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, params.CommandLine.Buffer, commandline.data(), params.CommandLine.Length, nullptr));
         return commandline.to_hstring();
+    }
+
+    // Returns the live current directory of the given process, read straight
+    // from its PEB. Unlike the command line (frozen at launch), this tracks
+    // `cd` even in shells that emit no OSC 7/9;9 shell integration (cmd.exe).
+    // Requires PROCESS_QUERY_INFORMATION | PROCESS_VM_READ privileges.
+    winrt::hstring ConptyConnection::_currentDirectoryFromProcess(HANDLE process)
+    {
+        struct PROCESS_BASIC_INFORMATION
+        {
+            NTSTATUS ExitStatus;
+            PPEB PebBaseAddress;
+            ULONG_PTR AffinityMask;
+            KPRIORITY BasePriority;
+            ULONG_PTR UniqueProcessId;
+            ULONG_PTR InheritedFromUniqueProcessId;
+        } info;
+        THROW_IF_NTSTATUS_FAILED(NtQueryInformationProcess(process, ProcessBasicInformation, &info, sizeof(info), nullptr));
+
+        // winternl.h's RTL_USER_PROCESS_PARAMETERS hides everything before
+        // ImagePathName behind reserved bytes, so CurrentDirectory is not
+        // reachable through it. Mirror the real layout down to the field we
+        // need; these offsets have been stable since NT4 (phnt documents the
+        // full structure). The prefix compiles correctly for both 64-bit and
+        // 32-bit targets.
+        struct PROCESS_PARAMETERS_PREFIX
+        {
+            ULONG MaximumLength;
+            ULONG Length;
+            ULONG Flags;
+            ULONG DebugFlags;
+            HANDLE ConsoleHandle;
+            ULONG ConsoleFlags;
+            HANDLE StandardInput;
+            HANDLE StandardOutput;
+            HANDLE StandardError;
+            struct
+            {
+                UNICODE_STRING DosPath;
+                HANDLE Handle;
+            } CurrentDirectory;
+        };
+
+        // A WOW64 client (32-bit shell under a 64-bit terminal) keeps its live
+        // CWD in the 32-bit PEB; the 64-bit PEB only holds a secondary shadow
+        // copy that is not guaranteed to track `cd`. Follow the 32-bit PEB
+        // whenever the kernel reports one: ProcessWow64Information returns its
+        // address for WOW64 clients and 0 for native processes.
+        ULONG_PTR wow64PebAddress = 0;
+        if (NT_SUCCESS(NtQueryInformationProcess(process, ProcessWow64Information, &wow64PebAddress, sizeof(wow64PebAddress), nullptr)) &&
+            wow64PebAddress != 0)
+        {
+            struct PEB32
+            {
+                ULONG Reserved[4];
+                ULONG ProcessParameters;
+            } peb32;
+#pragma warning(suppress : 26490) // Don't use reinterpret_cast (type.1) — the remote PEB address is an integer, not a local pointer.
+            THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, reinterpret_cast<LPCVOID>(wow64PebAddress), &peb32, sizeof(peb32), nullptr));
+
+            struct PROCESS_PARAMETERS_PREFIX32
+            {
+                ULONG MaximumLength;
+                ULONG Length;
+                ULONG Flags;
+                ULONG DebugFlags;
+                ULONG ConsoleHandle;
+                ULONG ConsoleFlags;
+                ULONG StandardInput;
+                ULONG StandardOutput;
+                ULONG StandardError;
+                struct
+                {
+                    struct
+                    {
+                        USHORT Length;
+                        USHORT MaximumLength;
+                        ULONG Buffer;
+                    } DosPath;
+                    ULONG Handle;
+                } CurrentDirectory;
+            } params32;
+#pragma warning(suppress : 26490)
+            THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, reinterpret_cast<LPCVOID>(static_cast<ULONG_PTR>(peb32.ProcessParameters)), &params32, sizeof(params32), nullptr));
+
+            const auto& dosPath32 = params32.CurrentDirectory.DosPath;
+            if (dosPath32.Length == 0 || dosPath32.Length % 2 != 0 || dosPath32.Buffer == 0)
+            {
+                return {};
+            }
+            winrt::impl::hstring_builder directory{ dosPath32.Length / 2u };
+#pragma warning(suppress : 26490)
+            THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, reinterpret_cast<LPCVOID>(static_cast<ULONG_PTR>(dosPath32.Buffer)), directory.data(), dosPath32.Length, nullptr));
+            return directory.to_hstring();
+        }
+
+        PEB peb;
+        THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, info.PebBaseAddress, &peb, sizeof(peb), nullptr));
+
+        PROCESS_PARAMETERS_PREFIX params;
+        THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, peb.ProcessParameters, &params, sizeof(params), nullptr));
+
+        const auto& dosPath = params.CurrentDirectory.DosPath;
+        if (dosPath.Length == 0 || dosPath.Length % 2 != 0 || dosPath.Buffer == nullptr)
+        {
+            return {};
+        }
+        winrt::impl::hstring_builder directory{ dosPath.Length / 2u };
+        THROW_IF_WIN32_BOOL_FALSE(ReadProcessMemory(process, dosPath.Buffer, directory.data(), dosPath.Length, nullptr));
+        return directory.to_hstring();
     }
 
     DWORD ConptyConnection::_OutputThread()

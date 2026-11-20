@@ -23,6 +23,8 @@ namespace Microsoft.Terminal.TerminalConnection
 
         UInt64 RootProcessHandle();
 
+        String ProcessCurrentDirectory();
+
         static event NewConnectionHandler NewConnection;
         static void StartInboundListener();
 

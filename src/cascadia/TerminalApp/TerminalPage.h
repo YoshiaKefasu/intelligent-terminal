@@ -1233,6 +1233,11 @@ namespace winrt::TerminalApp::implementation
         // not running, says nothing, or names a pane it does not list.
         static winrt::hstring _ExtractHerdrFocusedCwd(const std::optional<std::string>& output);
         winrt::hstring _FocusedTabWorkingDirectory() const;
+        // Hybrid CWD resolution for a control: the shell's own OSC 7/9;9
+        // report when it has sent one, else the root process's PEB current
+        // directory (cmd.exe & friends never report), else the pre-seeded
+        // starting directory.
+        winrt::hstring _ControlWorkingDirectory(const Microsoft::Terminal::Control::TermControl& control) const;
         // Mirrors the effective ToggleSidebar / ToggleGitSidebar chords onto the
         // rail and tab-row tooltips. Runs in both layouts.
         void _UpdateRailToggleKeyChordHints();

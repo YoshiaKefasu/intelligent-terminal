@@ -6264,16 +6264,17 @@ namespace winrt::TerminalApp::implementation
             iconPaths.push_back(impl ? impl->Icon() : winrt::hstring{});
 
             // Refresh the workspace's anchor directory from the representative
-            // tab's live CWD (pre-seeded with the starting directory, then kept
-            // current by OSC 7/9;9). When the tab cannot report right now, keep
-            // the remembered anchor so neither the row nor new tabs lose the
-            // workspace's working path.
+            // tab's live CWD: OSC 7/9;9 when the shell reports it, else the
+            // shell process's PEB current directory (cmd.exe & friends), else
+            // the pre-seeded starting directory. When the tab cannot report
+            // right now, keep the remembered anchor so neither the row nor new
+            // tabs lose the workspace's working path.
             winrt::hstring rowPath{};
             if (impl)
             {
                 if (const auto control = impl->GetActiveTerminalControl())
                 {
-                    rowPath = control.WorkingDirectory();
+                    rowPath = _ControlWorkingDirectory(control);
                 }
             }
             if (!rowPath.empty())
@@ -8016,7 +8017,7 @@ namespace winrt::TerminalApp::implementation
         const auto sourcePane = _YaziSourcePane(activeTab);
         const auto rootPid = _PaneRootProcessId(sourcePane);
         const auto sourceControl = sourcePane ? sourcePane->GetTerminalControl() : nullptr;
-        const auto fallbackDirectory = sourceControl ? sourceControl.WorkingDirectory() : _FocusedTabWorkingDirectory();
+        const auto fallbackDirectory = sourceControl ? _ControlWorkingDirectory(sourceControl) : _FocusedTabWorkingDirectory();
         const auto weakThis = get_weak();
         const auto weakTab = activeTab->get_weak();
         const auto dispatcher = Dispatcher();
@@ -8503,13 +8504,45 @@ namespace winrt::TerminalApp::implementation
         strip->SetCurrentHistoryItem(current, tabItem);
     }
 
+    // The freshest CWD a control can offer. A shell that reports OSC 7/9;9
+    // (pwsh via its profile, ...) is authoritative: its report is the shell's
+    // own notion of the working directory. A shell that never reports
+    // (cmd.exe, ...) would otherwise leave the pre-seeded starting directory
+    // masquerading as the live CWD forever, so for those we read the root
+    // process's PEB current directory, which tracks every `cd`. When the
+    // process cannot be read (exited, non-ConPTY connection, ...) we keep
+    // whatever the control already holds.
+    winrt::hstring TerminalPage::_ControlWorkingDirectory(const TermControl& control) const
+    {
+        if (!control)
+        {
+            return {};
+        }
+        const auto reportedCwd = control.WorkingDirectory();
+        if (!reportedCwd.empty() && control.WorkingDirectoryReportedByShell())
+        {
+            return reportedCwd;
+        }
+        if (const auto conn = control.Connection())
+        {
+            if (const auto conpty = conn.try_as<ConptyConnection>())
+            {
+                if (auto pebCwd = conpty.ProcessCurrentDirectory(); !pebCwd.empty())
+                {
+                    return pebCwd;
+                }
+            }
+        }
+        return reportedCwd;
+    }
+
     winrt::hstring TerminalPage::_FocusedTabWorkingDirectory() const
     {
         if (const auto tab = _GetFocusedTabImpl())
         {
             if (const auto control = tab->GetActiveTerminalControl())
             {
-                return control.WorkingDirectory();
+                return _ControlWorkingDirectory(control);
             }
         }
         return {};
