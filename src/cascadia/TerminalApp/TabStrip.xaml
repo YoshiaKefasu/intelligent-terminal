@@ -925,6 +925,49 @@
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="BorderThickness" Value="0" />
                         <Setter Property="CornerRadius" Value="{StaticResource SidebarTabCornerRadius}" />
+                        <Setter Property="UseSystemFocusVisuals" Value="True" />
+                        <!--  Mirror ItemsList: on Acrylic the default presenter's opaque
+                              ListViewItemBackgroundPointerOver bakes a gray block into the
+                              composited surface, so paint the tab-row hover brushes
+                              (translucent) instead and keep selection unpainted.  -->
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <ListViewItemPresenter CheckBoxBrush="{ThemeResource ListViewItemCheckBoxBrush}"
+                                                           CheckBrush="{ThemeResource ListViewItemCheckBrush}"
+                                                           CheckMode="{ThemeResource ListViewItemCheckMode}"
+                                                           Content="{TemplateBinding Content}"
+                                                           ContentMargin="{TemplateBinding Padding}"
+                                                           ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                           ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                           Control.IsTemplateFocusTarget="True"
+                                                           CornerRadius="{TemplateBinding CornerRadius}"
+                                                           DisabledOpacity="{ThemeResource ListViewItemDisabledThemeOpacity}"
+                                                           DragBackground="{ThemeResource ListViewItemDragBackground}"
+                                                           DragForeground="{ThemeResource ListViewItemDragForeground}"
+                                                           DragOpacity="{ThemeResource ListViewItemDragThemeOpacity}"
+                                                           FocusBorderBrush="{ThemeResource ListViewItemFocusBorderBrush}"
+                                                           FocusSecondaryBorderBrush="{ThemeResource ListViewItemFocusSecondaryBorderBrush}"
+                                                           FocusVisualMargin="{TemplateBinding FocusVisualMargin}"
+                                                           FocusVisualPrimaryBrush="{ThemeResource ListViewItemFocusBorderBrush}"
+                                                           FocusVisualPrimaryThickness="{TemplateBinding FocusVisualPrimaryThickness}"
+                                                           FocusVisualSecondaryBrush="{ThemeResource ListViewItemFocusSecondaryBorderBrush}"
+                                                           FocusVisualSecondaryThickness="{TemplateBinding FocusVisualSecondaryThickness}"
+                                                           HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                           PlaceholderBackground="{ThemeResource ListViewItemPlaceholderBackground}"
+                                                           PointerOverBackground="{ThemeResource TabViewButtonBackgroundPointerOver}"
+                                                           PointerOverForeground="{ThemeResource ListViewItemForegroundPointerOver}"
+                                                           PressedBackground="{ThemeResource TabViewButtonBackgroundPressed}"
+                                                           ReorderHintOffset="{ThemeResource ListViewItemReorderHintThemeOffset}"
+                                                           SelectedBackground="Transparent"
+                                                           SelectedForeground="{ThemeResource ListViewItemForegroundSelected}"
+                                                           SelectedPointerOverBackground="Transparent"
+                                                           SelectedPressedBackground="Transparent"
+                                                           SelectionCheckMarkVisualEnabled="{ThemeResource ListViewItemSelectionCheckMarkVisualEnabled}"
+                                                           VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>

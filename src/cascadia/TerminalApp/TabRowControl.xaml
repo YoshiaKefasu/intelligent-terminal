@@ -46,6 +46,35 @@
         <mux:TabView.TabStripHeader>
             <StackPanel x:Name="HorizontalChromeHeader"
                         Orientation="Horizontal">
+                <StackPanel.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <!--  Same mapping as HorizontalChromeFooter: the rail toggle
+                                  sits in the tab row, so its hover/pressed fill must be
+                                  the translucent TabViewButton* brushes. The default
+                                  opaque ButtonBackgroundPointerOver bakes a gray block
+                                  into the Acrylic surface.  -->
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Dark">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver"
+                                                ResourceKey="TabViewButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="ButtonBackgroundPressed"
+                                                ResourceKey="TabViewButtonBackgroundPressed" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </StackPanel.Resources>
                 <!--  Left-hand sidebar toggle. The sidebar is the workspace
                       switcher, so this is the only control that shows/hides it
                       in the horizontal chrome; it raises the same
@@ -59,7 +88,7 @@
                         VerticalAlignment="Stretch"
                         Background="Transparent"
                         BorderThickness="0"
-                        CornerRadius="0"
+                        CornerRadius="4"
                         Loaded="OnHorizontalRailToggleLoaded"
                         Click="OnWorkspaceRailToggleClick">
                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
