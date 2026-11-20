@@ -20,7 +20,7 @@
   <Identity
     Name="IntelligentTerminal"
     Publisher="CN=Intelligent Terminal Dev"
-    Version="0.8.0.31" />
+    Version="0.8.0.32" />
 
   <Properties>
     <DisplayName>ms-resource:AppStoreNameDev</DisplayName>
