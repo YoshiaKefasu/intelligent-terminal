@@ -431,6 +431,11 @@ namespace winrt::TerminalApp::implementation
         // Keyed by workspace name so it survives the sidebar's row recycling and
         // a rename (which migrates the entry).
         std::unordered_map<std::wstring, uint32_t> _workspaceColors;
+        // Per-workspace anchor directory: the working path a new tab in that
+        // workspace inherits, and the folder its sidebar row shows. Refreshed
+        // from the representative tab's CWD in `_SyncWorkspaceList`; keyed by
+        // workspace name like `_workspaceColors` (a rename migrates the entry).
+        std::unordered_map<std::wstring, winrt::hstring> _workspaceAnchorDirectories;
         // Startup workspace state to restore when replaying persisted window layouts.
         winrt::hstring _startupActiveWorkspace;
         // Canonical workspace order as persisted in `WindowLayout::WorkspaceNames`.
@@ -1031,6 +1036,7 @@ namespace winrt::TerminalApp::implementation
         uint32_t _CountTabsInWorkspace(const winrt::hstring& workspaceName) const;
         bool _TabIsInActiveWorkspace(const winrt::TerminalApp::Tab& tab) const noexcept;
         winrt::TerminalApp::Tab _WorkspaceRepresentativeTab(const winrt::hstring& workspaceName) const;
+        winrt::hstring _WorkspaceAnchorDirectory(const winrt::hstring& workspaceName) const;
         winrt::TerminalApp::Tab _mostRecentlyUsedTabInActiveWorkspace() const;
         void _PruneEmptyWorkspace(const winrt::hstring& workspaceName);
         void _OnWorkspaceActivated(const winrt::Windows::Foundation::IInspectable& sender,

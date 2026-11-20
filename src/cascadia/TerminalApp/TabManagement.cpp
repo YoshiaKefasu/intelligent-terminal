@@ -101,7 +101,23 @@ namespace winrt::TerminalApp::implementation
     HRESULT TerminalPage::_OpenNewTab(const INewContentArgs& newContentArgs, bool openInBackground)
     try
     {
-        if (const auto& newTerminalArgs{ newContentArgs.try_as<NewTerminalArgs>() })
+        auto contentArgs{ newContentArgs };
+        auto newTerminalArgs{ contentArgs.try_as<NewTerminalArgs>() };
+
+        // The tab row's "+" button (and a brand-new workspace's first tab)
+        // arrives with no args at all. Synthesize terminal args so the anchor
+        // inheritance below runs for those tabs too — otherwise every new tab
+        // would snap back to the profile default (%USERPROFILE%) instead of
+        // the workspace's working path. `_MakePane` routes null/empty-type
+        // args to a terminal pane, so this only covers what already meant
+        // "new terminal".
+        if (!newTerminalArgs && (!contentArgs || contentArgs.Type().empty()))
+        {
+            newTerminalArgs = NewTerminalArgs{};
+            contentArgs = newTerminalArgs;
+        }
+
+        if (newTerminalArgs)
         {
             const auto profile{ _settings.GetProfileForArgs(newTerminalArgs) };
             // GH#11114: GetProfileForArgs can return null if the index is higher
@@ -113,12 +129,18 @@ namespace winrt::TerminalApp::implementation
 
             // A new tab joins the active workspace, so it should land where the
             // user is working right now instead of snapping back to the profile
-            // default. Inherit the focused tab's live CWD unless the args already
-            // pin a starting directory. Skip non-Windows paths (e.g. a WSL pane's
-            // POSIX cwd) so they can never poison a Windows shell's startup.
+            // default. Prefer the workspace's anchor directory (its remembered
+            // working path), falling back to the focused tab's live CWD, unless
+            // the args already pin a starting directory. Skip non-Windows paths
+            // (e.g. a WSL pane's POSIX cwd) so they can never poison a Windows
+            // shell's startup.
             if (newTerminalArgs.StartingDirectory().empty())
             {
-                const auto inheritedCwd{ _FocusedTabWorkingDirectory() };
+                auto inheritedCwd{ _WorkspaceAnchorDirectory(_activeWorkspace) };
+                if (inheritedCwd.empty())
+                {
+                    inheritedCwd = _FocusedTabWorkingDirectory();
+                }
                 if (!inheritedCwd.empty() && ::Microsoft::Console::Utils::IsValidDirectory(inheritedCwd.c_str()))
                 {
                     newTerminalArgs.StartingDirectory(inheritedCwd);
@@ -139,7 +161,7 @@ namespace winrt::TerminalApp::implementation
 
         // This call to _MakePane won't return nullptr, we already checked that
         // case above with the _maybeElevate call.
-        return _CreateNewTabFromPane(_MakePane(newContentArgs, nullptr), -1, openInBackground) ? S_OK : S_FALSE;
+        return _CreateNewTabFromPane(_MakePane(contentArgs, nullptr), -1, openInBackground) ? S_OK : S_FALSE;
     }
     CATCH_RETURN();
 

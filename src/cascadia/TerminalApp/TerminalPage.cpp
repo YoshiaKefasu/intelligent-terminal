@@ -6223,6 +6223,14 @@ namespace winrt::TerminalApp::implementation
         return fallback;
     }
 
+    // The workspace's anchor directory: the working path its new tabs inherit
+    // and its sidebar row shows. Empty when the workspace never reported one.
+    winrt::hstring TerminalPage::_WorkspaceAnchorDirectory(const winrt::hstring& workspaceName) const
+    {
+        const auto anchor = _workspaceAnchorDirectories.find(std::wstring{ workspaceName.c_str(), workspaceName.size() });
+        return anchor == _workspaceAnchorDirectories.end() ? winrt::hstring{} : anchor->second;
+    }
+
     // Rebuilds the sidebar's workspace rows. Cheap enough to call on tab
     // create/close, but deliberately not on every projection refresh.
     void TerminalPage::_SyncWorkspaceList()
@@ -6250,25 +6258,33 @@ namespace winrt::TerminalApp::implementation
 
             // The row mirrors a sidebar tab: the tab's own icon plus the folder
             // the workspace is working in. A workspace whose tabs cannot report
-            // anything just shows the fallback icon and no folder line.
+            // anything just shows the fallback icon and its remembered folder.
             const auto representative = _WorkspaceRepresentativeTab(name);
             const auto impl = representative ? _GetTabImpl(representative) : nullptr;
             iconPaths.push_back(impl ? impl->Icon() : winrt::hstring{});
+
+            // Refresh the workspace's anchor directory from the representative
+            // tab's live CWD (pre-seeded with the starting directory, then kept
+            // current by OSC 7/9;9). When the tab cannot report right now, keep
+            // the remembered anchor so neither the row nor new tabs lose the
+            // workspace's working path.
+            winrt::hstring rowPath{};
             if (impl)
             {
                 if (const auto control = impl->GetActiveTerminalControl())
                 {
-                    paths.push_back(control.WorkingDirectory());
+                    rowPath = control.WorkingDirectory();
                 }
-                else
-                {
-                    paths.push_back({});
-                }
+            }
+            if (!rowPath.empty())
+            {
+                _workspaceAnchorDirectories[std::wstring{ name.c_str(), name.size() }] = rowPath;
             }
             else
             {
-                paths.push_back({});
+                rowPath = _WorkspaceAnchorDirectory(name);
             }
+            paths.push_back(rowPath);
         }
 
         winrt::get_self<implementation::TabStrip>(_tabStrip)->SyncWorkspaces(
@@ -6607,6 +6623,7 @@ namespace winrt::TerminalApp::implementation
         _workspaces.erase(std::remove(_workspaces.begin(), _workspaces.end(), workspaceName), _workspaces.end());
         _workspaceColors.erase(key);
         _workspaceLastTabId.erase(key);
+        _workspaceAnchorDirectories.erase(key);
 
         // Land on a workspace that still owns a tab. Picking
         // `_workspaces.front()` blindly can hit a row that is itself empty (mid-
@@ -6718,6 +6735,16 @@ namespace winrt::TerminalApp::implementation
             const auto value = color->second;
             _workspaceColors.erase(color);
             _workspaceColors[std::wstring{ newName.c_str(), newName.size() }] = value;
+        }
+
+        // The anchor directory is keyed by workspace name too; move it so the
+        // renamed workspace keeps its working path for new tabs and the row.
+        const auto anchor = _workspaceAnchorDirectories.find(key);
+        if (anchor != _workspaceAnchorDirectories.end())
+        {
+            const auto value = anchor->second;
+            _workspaceAnchorDirectories.erase(anchor);
+            _workspaceAnchorDirectories[std::wstring{ newName.c_str(), newName.size() }] = value;
         }
 
         try
@@ -6993,6 +7020,7 @@ namespace winrt::TerminalApp::implementation
                                   strong->_workspaces.end());
         strong->_workspaceLastTabId.erase(std::wstring{ workspaceName.c_str(), workspaceName.size() });
         strong->_workspaceColors.erase(std::wstring{ workspaceName.c_str(), workspaceName.size() });
+        strong->_workspaceAnchorDirectories.erase(std::wstring{ workspaceName.c_str(), workspaceName.size() });
 
         if (strong->_workspaces.empty())
         {
