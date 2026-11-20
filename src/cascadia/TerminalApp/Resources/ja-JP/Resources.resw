@@ -949,6 +949,10 @@
     <value>ワークスペースを閉じる</value>
     <comment>Menu item in the right-click context menu of a workspace row in the sidebar</comment>
   </data>
+  <data name="WorkspaceRowCloseButton" xml:space="preserve">
+    <value>ワークスペースを閉じる</value>
+    <comment>Tooltip and accessible name of the "x" button on a workspace row in the sidebar. Closes the workspace together with every tab it owns.</comment>
+  </data>
   <data name="RenameWorkspaceDialogTitle" xml:space="preserve">
     <value>ワークスペース名の変更</value>
     <comment>Dialog title shown when renaming a workspace from the sidebar</comment>

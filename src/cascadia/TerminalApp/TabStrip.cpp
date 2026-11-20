@@ -1351,6 +1351,28 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
+    void TabStrip::OnWorkspaceRowLoaded(IInspectable const& sender, RoutedEventArgs const&)
+    {
+        const auto root = sender.try_as<WUX::FrameworkElement>();
+        if (!root)
+        {
+            return;
+        }
+
+        // The close button lives inside the row's DataTemplate, so its tooltip
+        // and accessible name are applied here, like `OnTabHeaderLoaded` does
+        // for the sidebar tab row, instead of through `x:Uid`: a uid on a
+        // template element is not re-applied on every recycle pass, which would
+        // leave recycled rows with a bare "button" and no tooltip. Loaded fires
+        // once per realization and setting the same localized text again is
+        // idempotent.
+        if (const auto close = root.FindName(L"WorkspaceRowCloseButton").try_as<WUX::Controls::Control>())
+        {
+            WUX::Automation::AutomationProperties::SetName(close, RS_(L"WorkspaceRowCloseButton"));
+            ToolTipService::SetToolTip(close, box_value(RS_(L"WorkspaceRowCloseButton")));
+        }
+    }
+
     void TabStrip::OnSidebarRowSizeChanged(IInspectable const& sender, SizeChangedEventArgs const&)
     {
         if (const auto root = sender.try_as<FrameworkElement>())

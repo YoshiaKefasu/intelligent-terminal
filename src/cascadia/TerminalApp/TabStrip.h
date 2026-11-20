@@ -573,6 +573,8 @@ namespace winrt::TerminalApp::implementation
                                         winrt::Windows::UI::Xaml::Controls::ContainerContentChangingEventArgs const& e);
         void OnTabHeaderLoaded(winrt::Windows::Foundation::IInspectable const& sender,
                                winrt::Windows::UI::Xaml::RoutedEventArgs const& e);
+        void OnWorkspaceRowLoaded(winrt::Windows::Foundation::IInspectable const& sender,
+                                  winrt::Windows::UI::Xaml::RoutedEventArgs const& e);
         void OnSidebarRowSizeChanged(winrt::Windows::Foundation::IInspectable const& sender,
                                     winrt::Windows::UI::Xaml::SizeChangedEventArgs const& e);
         void OnSidebarRowPointerEntered(winrt::Windows::Foundation::IInspectable const& sender,

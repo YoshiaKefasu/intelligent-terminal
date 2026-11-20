@@ -6608,13 +6608,47 @@ namespace winrt::TerminalApp::implementation
         _workspaceColors.erase(key);
         _workspaceLastTabId.erase(key);
 
-        // Every workspace left owns at least one tab, so `_SwitchToWorkspace`
-        // finds one to focus and never has to invent a tab. When nothing is left
-        // there are no tabs either, and the window closes below.
-        if (wasActive && !_workspaces.empty())
+        // Land on a workspace that still owns a tab. Picking
+        // `_workspaces.front()` blindly can hit a row that is itself empty (mid-
+        // restore, or pruned a moment ago), and `_SwitchToWorkspace` would then
+        // invent a fresh default-profile tab just to fill it. When no workspace
+        // is left there are no tabs either, and the window closes below.
+        if (wasActive)
         {
-            _SwitchToWorkspace(_workspaces.front());
+            winrt::hstring target;
+            for (const auto& candidate : _workspaces)
+            {
+                if (_CountTabsInWorkspace(candidate) > 0)
+                {
+                    target = candidate;
+                    break;
+                }
+            }
+
+            // A tab whose workspace name was never registered leaves every row at
+            // "0"; fall back to the first registered row so `_activeWorkspace`
+            // never names a workspace that no longer exists — `_ApplyWorkspaceFilter`
+            // only matches rows that are, and a dangling name would blank the tab
+            // list.
+            if (target.empty() && !_workspaces.empty())
+            {
+                target = _workspaces.front();
+            }
+
+            if (!target.empty())
+            {
+                _SwitchToWorkspace(target);
+            }
         }
+
+        // Persist the removal right away. Without this the row we just dropped
+        // is still in `state.json`, so the next launch resurrects it (together
+        // with its stale last-tab memo) as a "0" workspace in the sidebar.
+        try
+        {
+            _SaveWorkspaceIfNeeded();
+        }
+        CATCH_LOG()
     }
 
     // Method Description:

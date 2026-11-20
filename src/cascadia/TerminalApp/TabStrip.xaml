@@ -990,6 +990,7 @@
                         <Grid x:Name="WorkspaceRowGrid"
                               MinHeight="40"
                               Background="Transparent"
+                              Loaded="OnWorkspaceRowLoaded"
                               CornerRadius="{StaticResource SidebarTabCornerRadius}">
                             <ToolTipService.ToolTip>
                                 <ToolTip AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
@@ -1060,7 +1061,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            Visibility="{x:Bind PathVisibility, Mode=OneWay}" />
                             </Grid>
-                            <Button x:Name="TabCloseButton"
+                            <Button x:Name="WorkspaceRowCloseButton"
                                     Grid.Column="3"
                                     Width="28"
                                     Height="28"

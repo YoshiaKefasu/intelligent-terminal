@@ -1150,6 +1150,10 @@ In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), n
     <value>Close workspace</value>
     <comment>Menu item in the right-click context menu of a workspace row in the sidebar</comment>
   </data>
+  <data name="WorkspaceRowCloseButton" xml:space="preserve">
+    <value>Close workspace</value>
+    <comment>Tooltip and accessible name of the "x" button on a workspace row in the sidebar. Closes the workspace together with every tab it owns.</comment>
+  </data>
   <data name="RenameWorkspaceDialogTitle" xml:space="preserve">
     <value>Rename workspace</value>
     <comment>Dialog title shown when renaming a workspace from the sidebar</comment>
