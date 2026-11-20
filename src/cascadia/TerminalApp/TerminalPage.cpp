@@ -19311,7 +19311,13 @@ namespace winrt::TerminalApp::implementation
             TitlebarBrush(backgroundSolidBrush);
         }
 
-        _tabStrip.Background(TitlebarBrush());
+        // Paint the vertical sidebar with the terminal's own background brush
+        // (the focused tab's color-scheme background) rather than the acrylic
+        // `TitlebarBrush`. The acrylic/host-backdrop tint lets the desktop
+        // wallpaper bleed through, producing mottled artifacts that clash with
+        // the terminal surface. Falling back to the titlebar brush only when
+        // no terminal content is focused (e.g. settings tab).
+        _tabStrip.Background(terminalBrush ? terminalBrush : TitlebarBrush());
 
         if (!_hasTitlebarHost)
         {
