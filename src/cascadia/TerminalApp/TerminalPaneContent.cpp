@@ -314,10 +314,18 @@ namespace winrt::TerminalApp::implementation
                         }
                         if (_bellPlayer)
                         {
-                            const auto source{ winrt::Windows::Media::Core::MediaSource::CreateFromUri(winrt::Windows::Foundation::Uri{ soundPath }) };
-                            const auto playbackItem{ winrt::Windows::Media::Playback::MediaPlaybackItem(source) };
-                            _bellPlayer.Source(playbackItem);
-                            _bellPlayer.Play();
+                            try
+                            {
+                                const auto source{ winrt::Windows::Media::Core::MediaSource::CreateFromUri(winrt::Windows::Foundation::Uri{ soundPath }) };
+                                const auto playbackItem{ winrt::Windows::Media::Playback::MediaPlaybackItem(source) };
+                                _bellPlayer.Source(playbackItem);
+                                _bellPlayer.Play();
+                            }
+                            catch (...)
+                            {
+                                LOG_CAUGHT_EXCEPTION();
+                                PlaySoundW(soundPath.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_SENTRY | SND_NODEFAULT);
+                            }
                         }
                         else
                         {
