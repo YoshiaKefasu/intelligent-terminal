@@ -2906,27 +2906,63 @@ namespace winrt::TerminalApp::implementation
         auto& from{ _rearrangeFrom };
         auto& to{ _rearrangeTo };
 
+        // `from`/`to` are indices into the *visible* row (`_tabItems()`), which
+        // only holds the active workspace's tabs, while `_tabs` also holds parked
+        // tabs from other workspaces. A visible index is therefore not a `_tabs`
+        // index. Note that the control has already reordered the visible row by
+        // the time this runs, so `_tabItems().GetAt(*from)` is *not* the dragged
+        // tab any more; the drag itself is only described by its index pair.
+        // Translate that pair onto the `_tabs` slots the active workspace owns.
+        std::vector<uint32_t> slots;
+        std::vector<winrt::TerminalApp::Tab> visibleTabs;
+        slots.reserve(_tabs.Size());
+        visibleTabs.reserve(_tabs.Size());
+        for (uint32_t index = 0; index < _tabs.Size(); ++index)
+        {
+            if (const auto tab = _tabs.GetAt(index); _TabIsInActiveWorkspace(tab))
+            {
+                slots.push_back(index);
+                visibleTabs.emplace_back(tab);
+            }
+        }
+
+        const auto visibleCount = gsl::narrow_cast<int32_t>(visibleTabs.size());
         const auto validIndices = from.has_value() && to.has_value() &&
                                   *from >= 0 && *to >= 0 &&
-                                  *from < gsl::narrow_cast<int32_t>(_tabs.Size()) &&
-                                  *to < gsl::narrow_cast<int32_t>(_tabs.Size());
+                                  *from < visibleCount && *to < visibleCount;
         const auto canCommitReorder = _tabDragReorderAuthorized && validIndices &&
-                                      _GetTabImpl(_tabs.GetAt(*from))->IsPinned() ==
-                                          _GetTabImpl(_tabs.GetAt(*to))->IsPinned();
+                                      _GetTabImpl(visibleTabs[*from])->IsPinned() ==
+                                          _GetTabImpl(visibleTabs[*to])->IsPinned();
 
-        if (canCommitReorder && from.has_value() && to.has_value() && to != from)
+        if (canCommitReorder && *from != *to)
         {
             try
             {
-                auto& tabs{ _tabs };
-                auto tab = tabs.GetAt(from.value());
-                tabs.RemoveAt(from.value());
-                tabs.InsertAt(to.value(), tab);
+                // Apply the same remove/insert to the visible subsequence, then
+                // write it back into the exact slots it came from. That keeps
+                // parked tabs of other workspaces untouched where they were.
+                const auto moved = visibleTabs[*from];
+                visibleTabs.erase(visibleTabs.begin() + *from);
+                visibleTabs.insert(visibleTabs.begin() + *to, moved);
+
+                _mutatingTabCollections = true;
+                auto endMutation = wil::scope_exit([&]() noexcept {
+                    _mutatingTabCollections = false;
+                });
+                for (size_t slot = 0; slot < slots.size(); ++slot)
+                {
+                    if (winrt::get_abi(_tabs.GetAt(slots[slot])) != winrt::get_abi(visibleTabs[slot]))
+                    {
+                        _tabs.SetAt(slots[slot], visibleTabs[slot]);
+                    }
+                }
                 _UpdateTabIndices();
+                _mutatingTabCollections = false;
+                endMutation.release();
             }
             CATCH_LOG();
         }
-        else if (from.has_value() && to.has_value() && to != from)
+        else if (validIndices && *from != *to)
         {
             _mutatingTabCollections = true;
             auto endMutation = wil::scope_exit([&]() noexcept {
@@ -2962,11 +2998,9 @@ namespace winrt::TerminalApp::implementation
         _rearranging = false;
 
         if (canCommitReorder &&
-            to.has_value() &&
-            *to >= 0 &&
-            *to < gsl::narrow_cast<int32_t>(_tabs.Size()))
+            validIndices)
         {
-            _selectedTabItem(_tabs.GetAt(gsl::narrow_cast<uint32_t>(*to)).TabViewItem());
+            _selectedTabItem(visibleTabs[*to].TabViewItem());
         }
 
         from = std::nullopt;

@@ -1800,16 +1800,41 @@ namespace winrt::TerminalApp::implementation
     // - item: the workspace row the menu acts on
     // Return Value:
     // - the menu, ready to be attached as the row's ContextFlyout
-    winrt::Windows::UI::Xaml::Controls::MenuFlyout TabStrip::_BuildWorkspaceContextMenu(TerminalApp::TabStripWorkspaceItem const& item)
+    winrt::Windows::UI::Xaml::Controls::MenuFlyout TabStrip::_BuildWorkspaceContextMenu(winrt::Windows::UI::Xaml::Controls::ListViewItem const& container)
     {
         const auto weak = get_weak();
+        // Containers are recycled by the ListView, so we must not capture the
+        // workspace item at menu-build time: a menu cached on a stale row would
+        // otherwise fire rename/close against an item that no longer exists in
+        // the collection (GH: workspace rename silently failing on 2nd+ edit).
+        // Instead, every handler resolves the CURRENT item from the container's
+        // DataContext at the moment the click happens.
+        const auto weakContainer = winrt::make_weak(container);
+        const auto currentItem = [weakContainer]() -> TerminalApp::TabStripWorkspaceItem {
+            if (const auto c = weakContainer.get())
+            {
+                if (const auto item = c.DataContext().try_as<TerminalApp::TabStripWorkspaceItem>())
+                {
+                    return item;
+                }
+                // A ListViewItem built from an ItemsSource also keeps the item in
+                // Content; use it if the DataContext is not populated.
+                return c.Content().try_as<TerminalApp::TabStripWorkspaceItem>();
+            }
+            return nullptr;
+        };
 
         winrt::Windows::UI::Xaml::Controls::MenuFlyout menu{};
 
         winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem rename{};
         rename.Text(RS_(L"WorkspaceRenameMenuItem"));
         rename.Icon(_workspaceMenuIcon(L"\uE8AC")); // Rename
-        rename.Click([weak, item](auto&&, auto&&) {
+        rename.Click([weak, currentItem](auto&&, auto&&) {
+            const auto item = currentItem();
+            if (!item)
+            {
+                return;
+            }
             if (const auto self = weak.get())
             {
                 self->WorkspaceRenameRequested.raise(*self, item);
@@ -1840,7 +1865,12 @@ namespace winrt::TerminalApp::implementation
             swatch.Icon(glyph);
 
             const auto color = preset.color;
-            swatch.Click([weak, item, color](auto&&, auto&&) mutable {
+            swatch.Click([weak, currentItem, color](auto&&, auto&&) mutable {
+                const auto item = currentItem();
+                if (!item)
+                {
+                    return;
+                }
                 if (const auto self = weak.get())
                 {
                     item.Color(color);
@@ -1853,7 +1883,12 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem clearColor{};
         clearColor.Text(RS_(L"WorkspaceColorClearMenuItem"));
         clearColor.Icon(_workspaceMenuIcon(L"\uE74D")); // Delete
-        clearColor.Click([weak, item](auto&&, auto&&) mutable {
+        clearColor.Click([weak, currentItem](auto&&, auto&&) mutable {
+            const auto item = currentItem();
+            if (!item)
+            {
+                return;
+            }
             if (const auto self = weak.get())
             {
                 item.Color(0);
@@ -1866,7 +1901,12 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem duplicate{};
         duplicate.Text(RS_(L"WorkspaceDuplicateMenuItem"));
         duplicate.Icon(_workspaceMenuIcon(L"\uE8C8")); // Copy
-        duplicate.Click([weak, item](auto&&, auto&&) {
+        duplicate.Click([weak, currentItem](auto&&, auto&&) {
+            const auto item = currentItem();
+            if (!item)
+            {
+                return;
+            }
             if (const auto self = weak.get())
             {
                 self->WorkspaceDuplicateRequested.raise(*self, item);
@@ -1879,7 +1919,12 @@ namespace winrt::TerminalApp::implementation
         winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem close{};
         close.Text(RS_(L"WorkspaceCloseMenuItem"));
         close.Icon(_workspaceMenuIcon(L"\uE711")); // ChromeClose
-        close.Click([weak, item](auto&&, auto&&) {
+        close.Click([weak, currentItem](auto&&, auto&&) {
+            const auto item = currentItem();
+            if (!item)
+            {
+                return;
+            }
             if (const auto self = weak.get())
             {
                 self->WorkspaceCloseRequested.raise(*self, item);
@@ -1909,7 +1954,7 @@ namespace winrt::TerminalApp::implementation
         {
             return;
         }
-        container.ContextFlyout(_BuildWorkspaceContextMenu(item));
+        container.ContextFlyout(_BuildWorkspaceContextMenu(container));
     }
     void TabStrip::IsRailCollapsed(bool value)
     {

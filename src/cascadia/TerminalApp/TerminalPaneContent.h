@@ -98,6 +98,9 @@ namespace winrt::TerminalApp::implementation
         void _setupControlEvents();
         void _removeControlEvents();
 
+        winrt::Windows::Media::Playback::MediaPlayer _bellPlayer{ nullptr };
+        bool _bellPlayerCreated{ false };
+
         safe_void_coroutine _controlConnectionStateChangedHandler(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::Foundation::IInspectable& /*args*/);
         void _controlWarningBellHandler(const winrt::Windows::Foundation::IInspectable& sender,
                                         const winrt::Windows::Foundation::IInspectable& e);

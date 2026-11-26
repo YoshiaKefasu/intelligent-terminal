@@ -515,7 +515,7 @@ namespace winrt::TerminalApp::implementation
                                            winrt::Windows::UI::Xaml::Controls::DragItemsCompletedEventArgs const& e);
         void OnWorkspaceContainerContentChanging(winrt::Windows::UI::Xaml::Controls::ListViewBase const& sender,
                                                  winrt::Windows::UI::Xaml::Controls::ContainerContentChangingEventArgs const& e);
-        winrt::Windows::UI::Xaml::Controls::MenuFlyout _BuildWorkspaceContextMenu(TerminalApp::TabStripWorkspaceItem const& item);
+        winrt::Windows::UI::Xaml::Controls::MenuFlyout _BuildWorkspaceContextMenu(winrt::Windows::UI::Xaml::Controls::ListViewItem const& container);
         void OnDragItemsStarting(winrt::Windows::Foundation::IInspectable const& sender,
                                   winrt::Windows::UI::Xaml::Controls::DragItemsStartingEventArgs const& e);
         void OnDragItemsCompleted(winrt::Windows::UI::Xaml::Controls::ListViewBase const& sender,

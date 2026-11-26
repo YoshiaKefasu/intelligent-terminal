@@ -295,8 +295,34 @@ namespace winrt::TerminalApp::implementation
                     {
                         // Sound paths are resolved and validated by CascadiaSettings
                         // before we reach this point.
-                        auto soundPath{ sounds.GetAt(rand() % sounds.Size()).Resolved() };
-                        PlaySoundW(soundPath.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_SENTRY | SND_NODEFAULT);
+                        const winrt::hstring soundPath{ sounds.GetAt(rand() % sounds.Size()).Resolved() };
+                        // Use a MediaPlayer instead of PlaySoundW so that non-WAV
+                        // formats (mp3, flac, ...) set as the bell sound actually play
+                        // instead of silently falling back to the system beep.
+                        if (!_bellPlayerCreated)
+                        {
+                            // The MediaPlayer might not exist on Windows N SKU.
+                            try
+                            {
+                                _bellPlayerCreated = true;
+                                _bellPlayer = winrt::Windows::Media::Playback::MediaPlayer();
+                                // GH#12258: The media keys (like play/pause) should have
+                                // no effect on our bell sound.
+                                _bellPlayer.CommandManager().IsEnabled(false);
+                            }
+                            CATCH_LOG();
+                        }
+                        if (_bellPlayer)
+                        {
+                            const auto source{ winrt::Windows::Media::Core::MediaSource::CreateFromUri(winrt::Windows::Foundation::Uri{ soundPath }) };
+                            const auto playbackItem{ winrt::Windows::Media::Playback::MediaPlaybackItem(source) };
+                            _bellPlayer.Source(playbackItem);
+                            _bellPlayer.Play();
+                        }
+                        else
+                        {
+                            PlaySoundW(soundPath.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_SENTRY | SND_NODEFAULT);
+                        }
                     }
                     else
                     {
