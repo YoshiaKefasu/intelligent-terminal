@@ -478,6 +478,10 @@ namespace winrt::TerminalApp::implementation
             pane->UpdateSettings(settings);
             return false;
         });
+
+        // Recalculate and apply the tab color so that all existing tabs that have not
+        // been overridden by a runtime color picker instantly update to the new profile / default tab color!
+        _RecalculateAndApplyTabColor();
     }
 
     // Method Description:
